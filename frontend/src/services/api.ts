@@ -30,6 +30,7 @@ api.interceptors.response.use(
   (error) => {
     const status = error?.response?.status
     const message = error?.response?.data?.message || '请求失败'
+    const silent = Boolean((error?.config as any)?.silent)
 
     if (status === 401) {
       localStorage.removeItem('token')
@@ -38,7 +39,9 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    window.alert(message)
+    if (!silent) {
+      window.alert(message)
+    }
     return Promise.reject(error)
   }
 )

@@ -49,7 +49,7 @@ export function TasksPage() {
 
     const [taskRes, userRes, projectRes] = await Promise.all([
       api.get(`/tasks?${query.toString()}`),
-      api.get('/users?page=1&pageSize=100'),
+      api.get('/users?page=1&pageSize=100', { silent: true } as any).catch(() => ({ data: { list: [] } })),
       api.get('/projects?page=1&pageSize=100')
     ])
 

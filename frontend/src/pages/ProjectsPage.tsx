@@ -34,9 +34,9 @@ export function ProjectsPage() {
     const list = Array.isArray(rawList) ? rawList : []
     setProjects(list)
     if (list.length > 0 && !selected) setSelected(list[0].id)
-    const userRes = await api.get('/users?page=1&pageSize=100')
+    const userRes = await api.get('/users?page=1&pageSize=100', { silent: true } as any).catch(() => ({ data: { list: [] } }))
     setUsers(Array.isArray(userRes.data?.list) ? userRes.data.list : [])
-    const departmentRes = await api.get('/departments?page=1&pageSize=100')
+    const departmentRes = await api.get('/departments?page=1&pageSize=100', { silent: true } as any).catch(() => ({ data: { list: [] } }))
     setDepartments(Array.isArray(departmentRes.data?.list) ? departmentRes.data.list : [])
   }
 
