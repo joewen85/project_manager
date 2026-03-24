@@ -21,7 +21,20 @@ export function DashboardPage() {
 
   useEffect(() => {
     void api.get('/stats/dashboard').then((res) => setStats(res.data))
-    void api.get('/tasks/progress-list').then((res) => setProgress(res.data))
+    void api.get('/tasks/progress-list').then((res) => {
+      const raw = Array.isArray(res.data) ? res.data : res.data?.list
+      if (!Array.isArray(raw)) {
+        setProgress([])
+        return
+      }
+      const sanitized = raw
+        .filter((item) => item && typeof item === 'object')
+        .map((item) => ({
+          status: String(item.status ?? 'unknown'),
+          count: Number(item.count ?? 0)
+        }))
+      setProgress(sanitized)
+    })
   }, [])
 
   return (
