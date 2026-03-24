@@ -13,6 +13,8 @@ h1, h2, h3 { font-family: 'Poppins', sans-serif; margin: 0 0 12px; }
 .nav-item { display: flex; gap: 10px; align-items: center; color: #e2e8f0; text-decoration: none; padding: 10px 12px; border-radius: 10px; margin-bottom: 6px; cursor: pointer; transition: background-color 200ms; }
 .nav-item:hover, .nav-item:focus-visible { background: #1e293b; outline: none; }
 .content { padding: 20px; display: grid; gap: 16px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.topbar p { margin: 4px 0 0; color: #475569; font-size: 13px; }
 
 .cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04); }

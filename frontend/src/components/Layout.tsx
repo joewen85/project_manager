@@ -1,6 +1,8 @@
 import { BarChart3, Building2, FolderKanban, ListChecks, NotebookTabs, Shield, UserCircle2, Users } from 'lucide-react'
 import { Link, Outlet } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { getPermissions } from '../services/api'
+import { api } from '../services/api'
 
 const menus = [
   { to: '/', label: '统计分析', icon: BarChart3, permission: 'stats.read' },
@@ -14,8 +16,25 @@ const menus = [
 ]
 
 export function Layout() {
+  const [profile, setProfile] = useState<{ name?: string; username?: string; email?: string }>({})
   const permissions = getPermissions()
   const visibleMenus = menus.filter((item) => permissions.includes(item.permission))
+
+  useEffect(() => {
+    void api.get('/auth/profile').then((res) => {
+      setProfile({
+        name: res.data?.name,
+        username: res.data?.username,
+        email: res.data?.email
+      })
+    })
+  }, [])
+
+  const logout = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('permissions')
+    window.location.href = '/login'
+  }
 
   return (
     <div className="app-shell">
@@ -32,6 +51,13 @@ export function Layout() {
         })}
       </aside>
       <main className="content" aria-live="polite">
+        <header className="topbar card">
+          <div>
+            <strong>{profile.name || '当前用户'}</strong>
+            <p>{profile.username || '-'} / {profile.email || '-'}</p>
+          </div>
+          <button className="btn danger" onClick={logout}>退出登录</button>
+        </header>
         <Outlet />
       </main>
     </div>
