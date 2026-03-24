@@ -40,6 +40,12 @@ input:focus, select:focus { outline: 2px solid #93c5fd; }
 .error { color: #dc2626; }
 .form-grid { display: grid; gap: 8px; }
 .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.toolbar-grid { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 8px; align-items: end; }
+.pagination-row { display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+
+.modal-mask { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); display: grid; place-items: center; z-index: 1000; padding: 16px; }
+.modal-card { width: min(760px, 96vw); max-height: 90vh; overflow: auto; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 
 .gantt-row { display: grid; grid-template-columns: 280px 1fr; gap: 10px; align-items: center; margin: 8px 0; font-size: 13px; }
 .gantt-track { background: #eff6ff; border-radius: 8px; height: 16px; overflow: hidden; border: 1px solid #dbeafe; }
@@ -50,4 +56,5 @@ input:focus, select:focus { outline: 2px solid #93c5fd; }
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; }
   .gantt-row { grid-template-columns: 1fr; }
+  .toolbar-grid { grid-template-columns: 1fr; }
 }
