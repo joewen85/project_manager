@@ -39,6 +39,9 @@
 ```bash
 cp .env.template .env
 ```
+如前后端端口不是默认值，记得在 `.env` 配置：
+- `VITE_API_BASE_URL`
+- `CORS_ALLOW_ORIGINS`
 
 ```bash
 docker compose up -d --build

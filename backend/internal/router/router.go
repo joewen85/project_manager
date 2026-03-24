@@ -1,15 +1,39 @@
 package router
 
 import (
+	"strings"
+	"time"
+
 	"project-manager/backend/internal/config"
 	"project-manager/backend/internal/handler"
 	"project-manager/backend/internal/middleware"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 	r := gin.Default()
+	corsOrigins := strings.TrimSpace(cfg.CORSAllowOrigins)
+	if corsOrigins == "" {
+		corsOrigins = "http://localhost:5173"
+	}
+	parts := strings.Split(corsOrigins, ",")
+	allowedOrigins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		origin := strings.TrimSpace(part)
+		if origin != "" {
+			allowedOrigins = append(allowedOrigins, origin)
+		}
+	}
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     allowedOrigins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
 
 	api := r.Group("/api/v1")
