@@ -33,7 +33,11 @@ input:focus, select:focus { outline: 2px solid #93c5fd; }
 .btn:hover { background: #1d4ed8; }
 .btn.danger { margin-top: 0; padding: 6px 10px; background: #dc2626; }
 .btn.danger:hover { background: #b91c1c; }
+.btn.secondary { margin-top: 0; background: #475569; padding: 6px 10px; }
+.btn.secondary:hover { background: #334155; }
 .error { color: #dc2626; }
+.form-grid { display: grid; gap: 8px; }
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 
 .gantt-row { display: grid; grid-template-columns: 280px 1fr; gap: 10px; align-items: center; margin: 8px 0; font-size: 13px; }
 .gantt-track { background: #eff6ff; border-radius: 8px; height: 16px; overflow: hidden; border: 1px solid #dbeafe; }

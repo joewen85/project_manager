@@ -3,14 +3,28 @@ import { api } from '../services/api'
 
 export function AuditPage() {
   const [items, setItems] = useState<any[]>([])
+  const [module, setModule] = useState('')
+  const [action, setAction] = useState('')
+
+  const load = () => {
+    const query = new URLSearchParams({ page: '1', pageSize: '100' })
+    if (module) query.set('module', module)
+    if (action) query.set('action', action)
+    void api.get(`/audit/logs?${query.toString()}`).then((res) => setItems(res.data.list ?? []))
+  }
 
   useEffect(() => {
-    void api.get('/audit/logs?page=1&pageSize=100').then((res) => setItems(res.data.list ?? []))
+    load()
   }, [])
 
   return (
     <section>
       <h2>操作审计日志</h2>
+      <div className="card form-grid">
+        <input placeholder="模块，如 tasks" value={module} onChange={(e) => setModule(e.target.value)} />
+        <input placeholder="动作，如 update" value={action} onChange={(e) => setAction(e.target.value)} />
+        <div className="row-actions"><button className="btn" onClick={load}>查询</button></div>
+      </div>
       <div className="card">
         <table>
           <thead>

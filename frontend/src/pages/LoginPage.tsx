@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, setToken } from '../services/api'
+import { api, setPermissions, setToken } from '../services/api'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -13,6 +13,7 @@ export function LoginPage() {
     try {
       const res = await api.post('/auth/login', { username, password })
       setToken(res.data.token)
+      setPermissions(res.data.permissions || [])
       navigate('/')
     } catch {
       setError('登录失败，请检查用户名和密码')
