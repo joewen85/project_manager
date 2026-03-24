@@ -29,11 +29,11 @@ func (h *Handler) ListProjects(c *gin.Context) {
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_PROJECTS_FAILED", err.Error())
 		return
 	}
 	if err := query.Preload("Users").Preload("Departments").Offset((page - 1) * pageSize).Limit(pageSize).Find(&projects).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_PROJECTS_FAILED", err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, pageResult[model.Project]{List: projects, Total: total, Page: page, PageSize: pageSize})

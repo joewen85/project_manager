@@ -23,7 +23,7 @@ type permissionRequest struct {
 func (h *Handler) ListPermissions(c *gin.Context) {
 	var items []model.Permission
 	if err := h.DB.Find(&items).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_PERMISSIONS_FAILED", err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, items)
@@ -32,7 +32,7 @@ func (h *Handler) ListPermissions(c *gin.Context) {
 func (h *Handler) ListRoles(c *gin.Context) {
 	var items []model.Role
 	if err := h.DB.Preload("Permissions").Find(&items).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_ROLES_FAILED", err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, items)

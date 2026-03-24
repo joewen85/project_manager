@@ -53,11 +53,11 @@ func (h *Handler) ListTasks(c *gin.Context) {
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_TASKS_FAILED", err.Error())
 		return
 	}
 	if err := query.Order("id desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&tasks).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_TASKS_FAILED", err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, pageResult[model.Task]{List: tasks, Total: total, Page: page, PageSize: pageSize})
@@ -182,21 +182,21 @@ func (h *Handler) DeleteTask(c *gin.Context) {
 }
 
 func (h *Handler) TaskTree(c *gin.Context) {
-	projectID := c.Param("projectId")
+	projectID := c.Param("id")
 	var roots []model.Task
 	if err := h.DB.
 		Preload("Children.Children.Children").
 		Preload("Assignees").
 		Where("project_id = ? AND parent_id IS NULL", projectID).
 		Find(&roots).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_TASK_TREE_FAILED", err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, roots)
 }
 
 func (h *Handler) Gantt(c *gin.Context) {
-	projectID := c.Param("projectId")
+	projectID := c.Param("id")
 	type ganttItem struct {
 		ID       uint       `json:"id"`
 		TaskNo   string     `json:"taskNo"`
@@ -209,7 +209,7 @@ func (h *Handler) Gantt(c *gin.Context) {
 	}
 	var result []ganttItem
 	if err := h.DB.Model(&model.Task{}).Select("id, task_no, title, start_at, end_at, progress, parent_id, status").Where("project_id = ?", projectID).Scan(&result).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_GANTT_FAILED", err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, result)

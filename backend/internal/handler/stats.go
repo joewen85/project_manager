@@ -15,7 +15,7 @@ func (h *Handler) ProgressList(c *gin.Context) {
 	}
 	var items []progressItem
 	if err := h.DB.Model(&model.Task{}).Select("status, count(*) as count").Group("status").Scan(&items).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_PROGRESS_FAILED", err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, items)

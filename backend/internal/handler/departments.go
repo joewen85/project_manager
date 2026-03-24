@@ -25,11 +25,11 @@ func (h *Handler) ListDepartments(c *gin.Context) {
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_DEPARTMENTS_FAILED", err.Error())
 		return
 	}
 	if err := query.Preload("Users").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_DEPARTMENTS_FAILED", err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, pageResult[model.Department]{List: items, Total: total, Page: page, PageSize: pageSize})

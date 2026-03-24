@@ -38,11 +38,11 @@ func (h *Handler) ListUsers(c *gin.Context) {
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_USERS_FAILED", err.Error())
 		return
 	}
 	if err := query.Preload("Roles").Preload("Departments").Offset((page - 1) * pageSize).Limit(pageSize).Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "QUERY_USERS_FAILED", err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, pageResult[model.User]{List: users, Total: total, Page: page, PageSize: pageSize})

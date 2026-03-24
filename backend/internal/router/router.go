@@ -57,12 +57,12 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		projects.Use(middleware.RequirePermission("projects.read"))
 		{
 			projects.GET("", h.ListProjects)
-			projects.GET("/:id", h.ProjectDetail)
 			projects.POST("", middleware.RequirePermission("projects.write"), h.CreateProject)
 			projects.PUT("/:id", middleware.RequirePermission("projects.write"), h.UpdateProject)
 			projects.DELETE("/:id", middleware.RequirePermission("projects.write"), h.DeleteProject)
-			projects.GET("/:projectId/gantt", h.Gantt)
-			projects.GET("/:projectId/task-tree", h.TaskTree)
+			projects.GET("/:id/gantt", h.Gantt)
+			projects.GET("/:id/task-tree", h.TaskTree)
+			projects.GET("/:id", h.ProjectDetail)
 		}
 
 		tasks := authGroup.Group("/tasks")
