@@ -38,13 +38,13 @@ func (h *Handler) ListDepartments(c *gin.Context) {
 func (h *Handler) CreateDepartment(c *gin.Context) {
 	var req departmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
 	item := model.Department{Name: req.Name, Description: req.Description}
 	if err := h.DB.Create(&item).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "CREATE_DEPARTMENT_FAILED", err.Error())
 		return
 	}
 	if len(req.UserIDs) > 0 {
@@ -60,19 +60,19 @@ func (h *Handler) CreateDepartment(c *gin.Context) {
 func (h *Handler) UpdateDepartment(c *gin.Context) {
 	var req departmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
 	var item model.Department
 	if err := h.DB.First(&item, c.Param("id")).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "部门不存在"})
+		respondError(c, http.StatusNotFound, "DEPARTMENT_NOT_FOUND", "部门不存在")
 		return
 	}
 	item.Name = req.Name
 	item.Description = req.Description
 	if err := h.DB.Save(&item).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "UPDATE_DEPARTMENT_FAILED", err.Error())
 		return
 	}
 
@@ -89,21 +89,21 @@ func (h *Handler) UpdateDepartment(c *gin.Context) {
 func (h *Handler) DeleteDepartment(c *gin.Context) {
 	var item model.Department
 	if err := h.DB.First(&item, c.Param("id")).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "部门不存在"})
+		respondError(c, http.StatusNotFound, "DEPARTMENT_NOT_FOUND", "部门不存在")
 		return
 	}
 	if err := h.DB.Model(&item).Association("Users").Clear(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "CLEAR_DEPARTMENT_USERS_FAILED", err.Error())
 		return
 	}
 	if err := h.DB.Model(&item).Association("Projects").Clear(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "CLEAR_DEPARTMENT_PROJECTS_FAILED", err.Error())
 		return
 	}
 	if err := h.DB.Delete(&item).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "DELETE_DEPARTMENT_FAILED", err.Error())
 		return
 	}
 	h.writeAudit(c, "departments", "delete", item.ID, true, "删除部门")
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	respondMessage(c, http.StatusOK, "DEPARTMENT_DELETED", "删除成功")
 }

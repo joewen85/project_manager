@@ -26,6 +26,9 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		rbac.Use(middleware.RequirePermission("rbac.manage"))
 		{
 			rbac.GET("/permissions", h.ListPermissions)
+			rbac.POST("/permissions", h.CreatePermission)
+			rbac.PUT("/permissions/:id", h.UpdatePermission)
+			rbac.DELETE("/permissions/:id", h.DeletePermission)
 			rbac.GET("/roles", h.ListRoles)
 			rbac.POST("/roles", h.CreateRole)
 			rbac.PUT("/roles/:id", h.UpdateRole)

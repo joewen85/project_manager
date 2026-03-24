@@ -2,6 +2,8 @@ package handler
 
 import (
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,4 +34,16 @@ func parsePage(c *gin.Context) (page int, pageSize int) {
 	}
 
 	return page, pageSize
+}
+
+func parseRFC3339(value string) (*time.Time, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, trimmed)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
 }

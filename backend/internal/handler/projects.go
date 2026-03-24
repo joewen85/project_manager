@@ -3,7 +3,6 @@ package handler
 import (
 	"net/http"
 	"strings"
-	"time"
 
 	"project-manager/backend/internal/model"
 
@@ -18,17 +17,6 @@ type projectRequest struct {
 	EndAt         string `json:"endAt"`
 	UserIDs       []uint `json:"userIds"`
 	DepartmentIDs []uint `json:"departmentIds"`
-}
-
-func parseTimeOrNil(value string) *time.Time {
-	if value == "" {
-		return nil
-	}
-	t, err := time.Parse(time.RFC3339, value)
-	if err != nil {
-		return nil
-	}
-	return &t
 }
 
 func (h *Handler) ListProjects(c *gin.Context) {
@@ -54,7 +42,17 @@ func (h *Handler) ListProjects(c *gin.Context) {
 func (h *Handler) CreateProject(c *gin.Context) {
 	var req projectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	startAt, err := parseRFC3339(req.StartAt)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_START_AT", "startAt 必须是 RFC3339 时间格式")
+		return
+	}
+	endAt, err := parseRFC3339(req.EndAt)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_END_AT", "endAt 必须是 RFC3339 时间格式")
 		return
 	}
 
@@ -62,11 +60,11 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		Code:        req.Code,
 		Name:        req.Name,
 		Description: req.Description,
-		StartAt:     parseTimeOrNil(req.StartAt),
-		EndAt:       parseTimeOrNil(req.EndAt),
+		StartAt:     startAt,
+		EndAt:       endAt,
 	}
 	if err := h.DB.Create(&item).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "CREATE_PROJECT_FAILED", err.Error())
 		return
 	}
 
@@ -89,23 +87,33 @@ func (h *Handler) CreateProject(c *gin.Context) {
 func (h *Handler) UpdateProject(c *gin.Context) {
 	var req projectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
 	var item model.Project
 	if err := h.DB.First(&item, c.Param("id")).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "项目不存在"})
+		respondError(c, http.StatusNotFound, "PROJECT_NOT_FOUND", "项目不存在")
+		return
+	}
+	startAt, err := parseRFC3339(req.StartAt)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_START_AT", "startAt 必须是 RFC3339 时间格式")
+		return
+	}
+	endAt, err := parseRFC3339(req.EndAt)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_END_AT", "endAt 必须是 RFC3339 时间格式")
 		return
 	}
 
 	item.Code = req.Code
 	item.Name = req.Name
 	item.Description = req.Description
-	item.StartAt = parseTimeOrNil(req.StartAt)
-	item.EndAt = parseTimeOrNil(req.EndAt)
+	item.StartAt = startAt
+	item.EndAt = endAt
 	if err := h.DB.Save(&item).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "UPDATE_PROJECT_FAILED", err.Error())
 		return
 	}
 
@@ -129,29 +137,29 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 func (h *Handler) DeleteProject(c *gin.Context) {
 	var item model.Project
 	if err := h.DB.First(&item, c.Param("id")).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "项目不存在"})
+		respondError(c, http.StatusNotFound, "PROJECT_NOT_FOUND", "项目不存在")
 		return
 	}
 	var taskCount int64
 	h.DB.Model(&model.Task{}).Where("project_id = ?", item.ID).Count(&taskCount)
 	if taskCount > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "请先删除或迁移项目下任务"})
+		respondError(c, http.StatusBadRequest, "PROJECT_HAS_TASKS", "请先删除或迁移项目下任务")
 		return
 	}
 	if err := h.DB.Model(&item).Association("Users").Clear(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "CLEAR_PROJECT_USERS_FAILED", err.Error())
 		return
 	}
 	if err := h.DB.Model(&item).Association("Departments").Clear(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "CLEAR_PROJECT_DEPARTMENTS_FAILED", err.Error())
 		return
 	}
 	if err := h.DB.Delete(&item).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "DELETE_PROJECT_FAILED", err.Error())
 		return
 	}
 	h.writeAudit(c, "projects", "delete", item.ID, true, "删除项目")
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	respondMessage(c, http.StatusOK, "PROJECT_DELETED", "删除成功")
 }
 
 func (h *Handler) ProjectDetail(c *gin.Context) {
@@ -162,7 +170,7 @@ func (h *Handler) ProjectDetail(c *gin.Context) {
 		Preload("Tasks.Assignees").
 		Where("id = ?", c.Param("id")).
 		First(&project).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "项目不存在"})
+		respondError(c, http.StatusNotFound, "PROJECT_NOT_FOUND", "项目不存在")
 		return
 	}
 	c.JSON(http.StatusOK, project)

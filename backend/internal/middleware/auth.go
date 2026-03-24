@@ -13,14 +13,14 @@ func JWT(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "missing or invalid authorization header"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "missing or invalid authorization header"})
 			return
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		claims, err := auth.ParseToken(secret, tokenString)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "invalid token"})
 			return
 		}
 
@@ -34,13 +34,13 @@ func RequirePermission(permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		value, exists := c.Get("claims")
 		if !exists {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "unauthorized"})
 			return
 		}
 
 		claims, ok := value.(*auth.Claims)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "unauthorized"})
 			return
 		}
 
@@ -51,6 +51,6 @@ func RequirePermission(permission string) gin.HandlerFunc {
 			}
 		}
 
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": "forbidden"})
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "forbidden"})
 	}
 }

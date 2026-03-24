@@ -51,13 +51,13 @@ func (h *Handler) ListUsers(c *gin.Context) {
 func (h *Handler) CreateUser(c *gin.Context) {
 	var req createUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
 	hash, err := util.HashPassword(req.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "密码加密失败"})
+		respondError(c, http.StatusInternalServerError, "PASSWORD_HASH_FAILED", "密码加密失败")
 		return
 	}
 
@@ -69,7 +69,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		IsActive: true,
 	}
 	if err := h.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "CREATE_USER_FAILED", err.Error())
 		return
 	}
 
@@ -92,13 +92,13 @@ func (h *Handler) CreateUser(c *gin.Context) {
 func (h *Handler) UpdateUser(c *gin.Context) {
 	var req updateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
 	var user model.User
 	if err := h.DB.First(&user, c.Param("id")).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "用户不存在"})
+		respondError(c, http.StatusNotFound, "USER_NOT_FOUND", "用户不存在")
 		return
 	}
 
@@ -110,14 +110,14 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	if req.Password != "" {
 		hash, err := util.HashPassword(req.Password)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"message": "密码加密失败"})
+			respondError(c, http.StatusInternalServerError, "PASSWORD_HASH_FAILED", "密码加密失败")
 			return
 		}
 		user.Password = hash
 	}
 
 	if err := h.DB.Save(&user).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "UPDATE_USER_FAILED", err.Error())
 		return
 	}
 
@@ -141,21 +141,21 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 func (h *Handler) DeleteUser(c *gin.Context) {
 	var user model.User
 	if err := h.DB.First(&user, c.Param("id")).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "用户不存在"})
+		respondError(c, http.StatusNotFound, "USER_NOT_FOUND", "用户不存在")
 		return
 	}
 	if err := h.DB.Model(&user).Association("Roles").Clear(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "CLEAR_USER_ROLES_FAILED", err.Error())
 		return
 	}
 	if err := h.DB.Model(&user).Association("Departments").Clear(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "CLEAR_USER_DEPARTMENTS_FAILED", err.Error())
 		return
 	}
 	if err := h.DB.Delete(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "DELETE_USER_FAILED", err.Error())
 		return
 	}
 	h.writeAudit(c, "users", "delete", user.ID, true, "删除用户")
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	respondMessage(c, http.StatusOK, "USER_DELETED", "删除成功")
 }

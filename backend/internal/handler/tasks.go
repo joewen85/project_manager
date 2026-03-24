@@ -66,7 +66,17 @@ func (h *Handler) ListTasks(c *gin.Context) {
 func (h *Handler) CreateTask(c *gin.Context) {
 	var req taskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	startAt, err := parseRFC3339(req.StartAt)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_START_AT", "startAt 必须是 RFC3339 时间格式")
+		return
+	}
+	endAt, err := parseRFC3339(req.EndAt)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_END_AT", "endAt 必须是 RFC3339 时间格式")
 		return
 	}
 
@@ -82,14 +92,14 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		Description: req.Description,
 		Status:      normalizeStatus(req.Status),
 		Progress:    req.Progress,
-		StartAt:     parseTimeOrNil(req.StartAt),
-		EndAt:       parseTimeOrNil(req.EndAt),
+		StartAt:     startAt,
+		EndAt:       endAt,
 		CreatorID:   creatorID,
 		ProjectID:   req.ProjectID,
 		ParentID:    req.ParentID,
 	}
 	if err := h.DB.Create(&item).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "CREATE_TASK_FAILED", err.Error())
 		return
 	}
 
@@ -107,13 +117,23 @@ func (h *Handler) CreateTask(c *gin.Context) {
 func (h *Handler) UpdateTask(c *gin.Context) {
 	var req taskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
 	var item model.Task
 	if err := h.DB.First(&item, c.Param("id")).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "任务不存在"})
+		respondError(c, http.StatusNotFound, "TASK_NOT_FOUND", "任务不存在")
+		return
+	}
+	startAt, err := parseRFC3339(req.StartAt)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_START_AT", "startAt 必须是 RFC3339 时间格式")
+		return
+	}
+	endAt, err := parseRFC3339(req.EndAt)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_END_AT", "endAt 必须是 RFC3339 时间格式")
 		return
 	}
 
@@ -124,13 +144,13 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	item.Description = req.Description
 	item.Status = normalizeStatus(req.Status)
 	item.Progress = req.Progress
-	item.StartAt = parseTimeOrNil(req.StartAt)
-	item.EndAt = parseTimeOrNil(req.EndAt)
+	item.StartAt = startAt
+	item.EndAt = endAt
 	item.ProjectID = req.ProjectID
 	item.ParentID = req.ParentID
 
 	if err := h.DB.Save(&item).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "UPDATE_TASK_FAILED", err.Error())
 		return
 	}
 	var users []model.User
@@ -146,19 +166,19 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 func (h *Handler) DeleteTask(c *gin.Context) {
 	var item model.Task
 	if err := h.DB.First(&item, c.Param("id")).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "任务不存在"})
+		respondError(c, http.StatusNotFound, "TASK_NOT_FOUND", "任务不存在")
 		return
 	}
 	if err := h.DB.Model(&item).Association("Assignees").Clear(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "CLEAR_TASK_ASSIGNEES_FAILED", err.Error())
 		return
 	}
 	if err := h.DB.Delete(&item).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		respondError(c, http.StatusInternalServerError, "DELETE_TASK_FAILED", err.Error())
 		return
 	}
 	h.writeAudit(c, "tasks", "delete", item.ID, true, "删除任务")
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	respondMessage(c, http.StatusOK, "TASK_DELETED", "删除成功")
 }
 
 func (h *Handler) TaskTree(c *gin.Context) {

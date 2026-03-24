@@ -18,18 +18,18 @@ type loginRequest struct {
 func (h *Handler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
 	var user model.User
 	if err := h.DB.Preload("Roles.Permissions").Where("username = ?", req.Username).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "用户名或密码错误"})
+		respondError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "用户名或密码错误")
 		return
 	}
 
 	if !util.VerifyPassword(user.Password, req.Password) {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "用户名或密码错误"})
+		respondError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "用户名或密码错误")
 		return
 	}
 
@@ -47,7 +47,7 @@ func (h *Handler) Login(c *gin.Context) {
 
 	token, err := auth.GenerateToken(h.Cfg.JWTSecret, user.ID, user.Username, permissions)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "token 生成失败"})
+		respondError(c, http.StatusInternalServerError, "TOKEN_GENERATE_FAILED", "token 生成失败")
 		return
 	}
 
@@ -62,7 +62,7 @@ func (h *Handler) Profile(c *gin.Context) {
 	uid := c.GetUint("userId")
 	var user model.User
 	if err := h.DB.Preload("Roles.Permissions").Preload("Departments").Where("id = ?", uid).First(&user).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "用户不存在"})
+		respondError(c, http.StatusNotFound, "USER_NOT_FOUND", "用户不存在")
 		return
 	}
 	c.JSON(http.StatusOK, user)
