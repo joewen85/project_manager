@@ -1,6 +1,7 @@
 # 项目管理系统 API 文档
 
 Base URL: `http://localhost:8080/api/v1`
+统一错误返回: `{ "code": "...", "message": "..." }`
 
 ## 认证
 ### POST `/auth/login`
@@ -12,6 +13,9 @@ Base URL: `http://localhost:8080/api/v1`
 
 ## RBAC
 ### GET `/rbac/permissions`
+### POST `/rbac/permissions`
+### PUT `/rbac/permissions/:id`
+### DELETE `/rbac/permissions/:id`
 ### GET `/rbac/roles`
 ### POST `/rbac/roles`
 - 请求体: `{ name, description, permissionIds: number[] }`

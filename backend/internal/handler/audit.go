@@ -43,13 +43,13 @@ func (h *Handler) ListAuditLogs(c *gin.Context) {
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		c.JSON(500, gin.H{"message": err.Error()})
+		respondError(c, 500, "QUERY_AUDIT_FAILED", err.Error())
 		return
 	}
 
 	var items []model.AuditLog
 	if err := query.Order("id desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error; err != nil {
-		c.JSON(500, gin.H{"message": err.Error()})
+		respondError(c, 500, "QUERY_AUDIT_FAILED", err.Error())
 		return
 	}
 

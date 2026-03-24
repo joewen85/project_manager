@@ -20,6 +20,42 @@ paths:
                 password: { type: string }
       responses:
         '200': { description: OK }
+  /rbac/permissions:
+    get:
+      summary: 权限列表
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+    post:
+      summary: 创建权限
+      security: [{ bearerAuth: [] }]
+      responses: { '201': { description: Created } }
+  /rbac/permissions/{id}:
+    put:
+      summary: 更新权限
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+    delete:
+      summary: 删除权限
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+  /rbac/roles:
+    get:
+      summary: 角色列表
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+    post:
+      summary: 创建角色
+      security: [{ bearerAuth: [] }]
+      responses: { '201': { description: Created } }
+  /rbac/roles/{id}:
+    put:
+      summary: 更新角色
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+    delete:
+      summary: 删除角色
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
   /users:
     get:
       summary: 用户列表
