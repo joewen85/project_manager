@@ -47,7 +47,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		authGroup.GET("/auth/profile", h.Profile)
 
 		rbac := authGroup.Group("/rbac")
-		rbac.Use(middleware.RequirePermission("rbac.manage"))
+		rbac.Use(middleware.RequirePermission(h.DB, "rbac.manage"))
 		{
 			rbac.GET("/permissions", h.ListPermissions)
 			rbac.POST("/permissions", h.CreatePermission)
@@ -60,54 +60,54 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		}
 
 		users := authGroup.Group("/users")
-		users.Use(middleware.RequirePermission("users.read"))
+		users.Use(middleware.RequirePermission(h.DB, "users.read"))
 		{
 			users.GET("", h.ListUsers)
-			users.POST("", middleware.RequirePermission("users.write"), h.CreateUser)
-			users.PUT("/:id", middleware.RequirePermission("users.write"), h.UpdateUser)
-			users.DELETE("/:id", middleware.RequirePermission("users.write"), h.DeleteUser)
+			users.POST("", middleware.RequirePermission(h.DB, "users.write"), h.CreateUser)
+			users.PUT("/:id", middleware.RequirePermission(h.DB, "users.write"), h.UpdateUser)
+			users.DELETE("/:id", middleware.RequirePermission(h.DB, "users.write"), h.DeleteUser)
 		}
 
 		departments := authGroup.Group("/departments")
-		departments.Use(middleware.RequirePermission("departments.read"))
+		departments.Use(middleware.RequirePermission(h.DB, "departments.read"))
 		{
 			departments.GET("", h.ListDepartments)
-			departments.POST("", middleware.RequirePermission("departments.write"), h.CreateDepartment)
-			departments.PUT("/:id", middleware.RequirePermission("departments.write"), h.UpdateDepartment)
-			departments.DELETE("/:id", middleware.RequirePermission("departments.write"), h.DeleteDepartment)
+			departments.POST("", middleware.RequirePermission(h.DB, "departments.write"), h.CreateDepartment)
+			departments.PUT("/:id", middleware.RequirePermission(h.DB, "departments.write"), h.UpdateDepartment)
+			departments.DELETE("/:id", middleware.RequirePermission(h.DB, "departments.write"), h.DeleteDepartment)
 		}
 
 		projects := authGroup.Group("/projects")
-		projects.Use(middleware.RequirePermission("projects.read"))
+		projects.Use(middleware.RequirePermission(h.DB, "projects.read"))
 		{
 			projects.GET("", h.ListProjects)
-			projects.POST("", middleware.RequirePermission("projects.write"), h.CreateProject)
-			projects.PUT("/:id", middleware.RequirePermission("projects.write"), h.UpdateProject)
-			projects.DELETE("/:id", middleware.RequirePermission("projects.write"), h.DeleteProject)
+			projects.POST("", middleware.RequirePermission(h.DB, "projects.write"), h.CreateProject)
+			projects.PUT("/:id", middleware.RequirePermission(h.DB, "projects.write"), h.UpdateProject)
+			projects.DELETE("/:id", middleware.RequirePermission(h.DB, "projects.write"), h.DeleteProject)
 			projects.GET("/:id/gantt", h.Gantt)
 			projects.GET("/:id/task-tree", h.TaskTree)
 			projects.GET("/:id", h.ProjectDetail)
 		}
 
 		tasks := authGroup.Group("/tasks")
-		tasks.Use(middleware.RequirePermission("tasks.read"))
+		tasks.Use(middleware.RequirePermission(h.DB, "tasks.read"))
 		{
 			tasks.GET("", h.ListTasks)
-			tasks.POST("", middleware.RequirePermission("tasks.write"), h.CreateTask)
-			tasks.PUT("/:id", middleware.RequirePermission("tasks.write"), h.UpdateTask)
-			tasks.DELETE("/:id", middleware.RequirePermission("tasks.write"), h.DeleteTask)
+			tasks.POST("", middleware.RequirePermission(h.DB, "tasks.write"), h.CreateTask)
+			tasks.PUT("/:id", middleware.RequirePermission(h.DB, "tasks.write"), h.UpdateTask)
+			tasks.DELETE("/:id", middleware.RequirePermission(h.DB, "tasks.write"), h.DeleteTask)
 			tasks.GET("/progress-list", h.ProgressList)
 			tasks.GET("/me", h.MyTasks)
 		}
 
 		stats := authGroup.Group("/stats")
-		stats.Use(middleware.RequirePermission("stats.read"))
+		stats.Use(middleware.RequirePermission(h.DB, "stats.read"))
 		{
 			stats.GET("/dashboard", h.DashboardStats)
 		}
 
 		audit := authGroup.Group("/audit")
-		audit.Use(middleware.RequirePermission("audit.read"))
+		audit.Use(middleware.RequirePermission(h.DB, "audit.read"))
 		{
 			audit.GET("/logs", h.ListAuditLogs)
 		}

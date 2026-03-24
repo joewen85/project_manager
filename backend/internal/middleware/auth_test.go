@@ -32,7 +32,7 @@ func TestJWTAndPermission(t *testing.T) {
 	}
 
 	r := gin.New()
-	r.GET("/tasks", JWT("secret"), RequirePermission("tasks.read"), func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+	r.GET("/tasks", JWT("secret"), RequirePermission(nil, "tasks.read"), func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 
 	req := httptest.NewRequest(http.MethodGet, "/tasks", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -52,7 +52,7 @@ func TestPermissionForbidden(t *testing.T) {
 	}
 
 	r := gin.New()
-	r.GET("/tasks", JWT("secret"), RequirePermission("tasks.read"), func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+	r.GET("/tasks", JWT("secret"), RequirePermission(nil, "tasks.read"), func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 
 	req := httptest.NewRequest(http.MethodGet, "/tasks", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -72,7 +72,7 @@ func TestWritePermissionImpliesRead(t *testing.T) {
 	}
 
 	r := gin.New()
-	r.GET("/projects", JWT("secret"), RequirePermission("projects.read"), func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+	r.GET("/projects", JWT("secret"), RequirePermission(nil, "projects.read"), func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 
 	req := httptest.NewRequest(http.MethodGet, "/projects", nil)
 	req.Header.Set("Authorization", "Bearer "+token)

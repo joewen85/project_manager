@@ -5,8 +5,10 @@ import (
 	"strings"
 
 	"project-manager/backend/internal/auth"
+	"project-manager/backend/internal/model"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func hasPermission(granted []string, required string) bool {
@@ -47,7 +49,28 @@ func JWT(secret string) gin.HandlerFunc {
 	}
 }
 
-func RequirePermission(permission string) gin.HandlerFunc {
+func loadUserPermissions(db *gorm.DB, userID uint) ([]string, error) {
+	if db == nil {
+		return nil, nil
+	}
+	var user model.User
+	if err := db.Preload("Roles.Permissions").Where("id = ?", userID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	permissionSet := map[string]struct{}{}
+	for _, role := range user.Roles {
+		for _, permission := range role.Permissions {
+			permissionSet[permission.Code] = struct{}{}
+		}
+	}
+	permissions := make([]string, 0, len(permissionSet))
+	for code := range permissionSet {
+		permissions = append(permissions, code)
+	}
+	return permissions, nil
+}
+
+func RequirePermission(db *gorm.DB, permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		value, exists := c.Get("claims")
 		if !exists {
@@ -61,7 +84,19 @@ func RequirePermission(permission string) gin.HandlerFunc {
 			return
 		}
 
-		if hasPermission(claims.Permissions, permission) {
+		effectivePermissions := claims.Permissions
+		if db != nil {
+			permissions, err := loadUserPermissions(db, claims.UserID)
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "user not found"})
+				return
+			}
+			if permissions != nil {
+				effectivePermissions = permissions
+			}
+		}
+
+		if hasPermission(effectivePermissions, permission) {
 			c.Next()
 			return
 		}

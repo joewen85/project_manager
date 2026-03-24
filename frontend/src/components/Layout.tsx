@@ -1,7 +1,7 @@
 import { BarChart3, Building2, FolderKanban, ListChecks, NotebookTabs, Shield, UserCircle2, Users } from 'lucide-react'
 import { Link, Outlet } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { getPermissions } from '../services/api'
+import { getPermissions, setPermissions } from '../services/api'
 import { api } from '../services/api'
 
 const menus = [
@@ -17,17 +17,40 @@ const menus = [
 
 export function Layout() {
   const [profile, setProfile] = useState<{ name?: string; username?: string; email?: string }>({})
-  const permissions = getPermissions()
+  const [permissions, setPermissionState] = useState<string[]>(getPermissions())
   const visibleMenus = menus.filter((item) => permissions.includes(item.permission))
 
   useEffect(() => {
-    void api.get('/auth/profile').then((res) => {
+    const expandPermissions = (codes: string[]) => {
+      const next = new Set(codes)
+      for (const code of codes) {
+        if (code.endsWith('.write')) {
+          next.add(code.replace(/\\.write$/, '.read'))
+        }
+      }
+      return Array.from(next)
+    }
+
+    const refreshProfile = async () => {
+      const res = await api.get('/auth/profile')
       setProfile({
         name: res.data?.name,
         username: res.data?.username,
         email: res.data?.email
       })
-    })
+      const rolePermissions = (res.data?.roles || []).flatMap((role: any) =>
+        (role.permissions || []).map((permission: any) => String(permission.code))
+      )
+      const merged = expandPermissions(rolePermissions)
+      setPermissionState(merged)
+      setPermissions(merged)
+    }
+
+    void refreshProfile()
+    const timer = window.setInterval(() => {
+      void refreshProfile()
+    }, 15000)
+    return () => window.clearInterval(timer)
   }, [])
 
   const logout = () => {
