@@ -59,6 +59,10 @@ npm install
 npm run dev
 ```
 
+## 项目计划与进度
+- 计划：`PLAN.md`
+- 进度：`PROGRESS.md`
+
 ## API 文档
 - 简版文档：`docs/API.md`
 - OpenAPI：`backend/docs/openapi.yaml`
@@ -66,4 +70,9 @@ npm run dev
 ## Helm 部署
 ```bash
 helm upgrade --install project-manager ./deploy/helm/project-manager
+```
+
+## 一键验收
+```bash
+bash scripts/verify-deploy.sh
 ```
