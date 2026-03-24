@@ -54,6 +54,7 @@
 - [x] Helm 部署模板
 - [ ] 真机部署验收（compose/k8s 一次启动验收）
 - [x] 本地自动验收脚本（`scripts/verify-deploy.sh`）
+- [x] Compose 启动回退脚本（`scripts/compose-up.sh`，自动选择可用 MySQL 镜像）
 
 ## 后续优化（下一迭代）
 - [ ] 统一前端组件抽象（表单/列表/分页）

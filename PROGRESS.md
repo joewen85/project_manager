@@ -19,6 +19,7 @@
    - 在 k8s 环境执行 `helm upgrade --install project-manager ./deploy/helm/project-manager`
    - 验证 `/health`、登录、核心 CRUD 链路
    - 可先执行自动验收：`bash scripts/verify-deploy.sh`
+   - 若拉取 MySQL 镜像失败：`bash scripts/compose-up.sh`（自动回退镜像）
 
 2. **测试完善**
    - 扩展后端权限边界测试、链路测试

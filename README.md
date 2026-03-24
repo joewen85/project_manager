@@ -45,6 +45,15 @@ docker compose up -d --build
 默认管理员：
 - `admin / admin123`
 
+若遇到 MySQL 镜像拉取失败（网络/TLS/EOF），可使用自动回退脚本：
+```bash
+bash scripts/compose-up.sh
+```
+或手动指定镜像：
+```bash
+MYSQL_IMAGE=mysql:8.0 docker compose up -d --build
+```
+
 ## 本地开发
 ### 后端
 ```bash
