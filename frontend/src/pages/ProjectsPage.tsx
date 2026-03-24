@@ -30,13 +30,14 @@ export function ProjectsPage() {
   const load = async () => {
     const query = keyword ? `&keyword=${encodeURIComponent(keyword)}` : ''
     const projectRes = await api.get(`/projects?page=1&pageSize=50${query}`)
-    const list = projectRes.data.list ?? projectRes.data
+    const rawList = projectRes.data?.list ?? projectRes.data
+    const list = Array.isArray(rawList) ? rawList : []
     setProjects(list)
     if (list.length > 0 && !selected) setSelected(list[0].id)
     const userRes = await api.get('/users?page=1&pageSize=100')
-    setUsers(userRes.data.list ?? [])
+    setUsers(Array.isArray(userRes.data?.list) ? userRes.data.list : [])
     const departmentRes = await api.get('/departments?page=1&pageSize=100')
-    setDepartments(departmentRes.data.list ?? [])
+    setDepartments(Array.isArray(departmentRes.data?.list) ? departmentRes.data.list : [])
   }
 
   useEffect(() => {
@@ -45,8 +46,12 @@ export function ProjectsPage() {
 
   useEffect(() => {
     if (!selected) return
-    void api.get(`/projects/${selected}/gantt`).then((res) => setGantt(res.data))
-    void api.get(`/projects/${selected}/task-tree`).then((res) => setTree(res.data))
+    void api.get(`/projects/${selected}/gantt`).then((res) => {
+      setGantt(Array.isArray(res.data) ? res.data : [])
+    })
+    void api.get(`/projects/${selected}/task-tree`).then((res) => {
+      setTree(Array.isArray(res.data) ? res.data : [])
+    })
   }, [selected])
 
   const submit = async (event: FormEvent) => {

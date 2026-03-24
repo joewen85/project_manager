@@ -2,13 +2,14 @@ import dayjs from 'dayjs'
 import { Task } from '../types'
 
 interface Props {
-  tasks: Task[]
+  tasks?: Task[] | null
 }
 
 export function GanttChart({ tasks }: Props) {
-  if (!tasks.length) return <div className="card">暂无甘特图数据</div>
+  const safeTasks = Array.isArray(tasks) ? tasks : []
+  if (!safeTasks.length) return <div className="card">暂无甘特图数据</div>
 
-  const validTasks = tasks.filter((t) => t.startAt && t.endAt)
+  const validTasks = safeTasks.filter((t) => t && t.startAt && t.endAt)
   if (!validTasks.length) return <div className="card">请为任务设置开始与结束时间</div>
 
   const minDate = dayjs(Math.min(...validTasks.map((t) => dayjs(t.startAt).valueOf())))

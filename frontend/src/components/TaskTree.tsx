@@ -2,7 +2,7 @@ import { ReactElement } from 'react'
 import { Task } from '../types'
 
 interface Props {
-  tasks: Task[]
+  tasks?: Task[] | null
 }
 
 const renderNode = (task: Task, level = 0): ReactElement => (
@@ -15,10 +15,11 @@ const renderNode = (task: Task, level = 0): ReactElement => (
 )
 
 export function TaskTree({ tasks }: Props) {
+  const safeTasks = Array.isArray(tasks) ? tasks : []
   return (
     <div className="card">
       <h3>项目分解树结构</h3>
-      <ul className="tree">{tasks.map((task) => renderNode(task))}</ul>
+      <ul className="tree">{safeTasks.map((task) => renderNode(task))}</ul>
     </div>
   )
 }
