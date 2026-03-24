@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pm-backend
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels: { app: pm-backend }
+  template:
+    metadata:
+      labels: { app: pm-backend }
+    spec:
+      containers:
+        - name: backend
+          image: {{ .Values.backend.image }}
+          env:
+            - name: APP_PORT
+              value: "8080"
+            - name: JWT_SECRET
+              value: {{ .Values.backend.jwtSecret | quote }}
+            - name: DB_HOST
+              value: pm-mysql
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_USER
+              value: root
+            - name: DB_PASSWORD
+              value: {{ .Values.mysql.rootPassword | quote }}
+            - name: DB_NAME
+              value: {{ .Values.mysql.database | quote }}
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pm-backend
+spec:
+  selector: { app: pm-backend }
+  ports:
+    - port: {{ .Values.backend.servicePort }}
+      targetPort: 8080

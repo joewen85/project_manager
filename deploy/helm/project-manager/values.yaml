@@ -1,0 +1,15 @@
+mysql:
+  image: mysql:8.4
+  rootPassword: root
+  database: project_management
+
+backend:
+  image: project-manager/backend:latest
+  replicaCount: 1
+  servicePort: 8080
+  jwtSecret: change-me
+
+frontend:
+  image: project-manager/frontend:latest
+  replicaCount: 1
+  servicePort: 80

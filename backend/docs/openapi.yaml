@@ -1,0 +1,61 @@
+openapi: 3.0.3
+info:
+  title: Project Management API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080/api/v1
+paths:
+  /auth/login:
+    post:
+      summary: 用户登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200': { description: OK }
+  /users:
+    get:
+      summary: 用户列表
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+    post:
+      summary: 创建用户
+      security: [{ bearerAuth: [] }]
+      responses: { '201': { description: Created } }
+  /departments:
+    get:
+      summary: 部门列表
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+  /projects:
+    get:
+      summary: 项目列表
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+  /tasks:
+    get:
+      summary: 任务列表
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+    post:
+      summary: 创建任务
+      security: [{ bearerAuth: [] }]
+      responses: { '201': { description: Created } }
+  /stats/dashboard:
+    get:
+      summary: 仪表盘统计
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

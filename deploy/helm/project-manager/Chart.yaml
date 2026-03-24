@@ -1,0 +1,6 @@
+apiVersion: v2
+name: project-manager
+description: Project management system (Go + React + MySQL)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

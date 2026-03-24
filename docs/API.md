@@ -1,0 +1,67 @@
+# 项目管理系统 API 文档
+
+Base URL: `http://localhost:8080/api/v1`
+
+## 认证
+### POST `/auth/login`
+- 请求体: `{ "username": "admin", "password": "admin123" }`
+- 响应: `{ token, user, permissions }`
+
+### GET `/auth/profile`
+- Header: `Authorization: Bearer <token>`
+
+## RBAC
+### GET `/rbac/permissions`
+### GET `/rbac/roles`
+### POST `/rbac/roles`
+- 请求体: `{ name, description, permissionIds: number[] }`
+
+## 用户管理
+### GET `/users`
+### POST `/users`
+- 请求体: `{ username, name, email, password, roleIds, departmentIds }`
+
+## 部门管理
+### GET `/departments`
+### POST `/departments`
+- 请求体: `{ name, description, userIds }`
+
+## 项目管理
+### GET `/projects`
+### GET `/projects/:id`
+### POST `/projects`
+- 请求体: `{ code, name, description, startAt, endAt, userIds, departmentIds }`
+
+### GET `/projects/:projectId/gantt`
+- 甘特图任务数据
+
+### GET `/projects/:projectId/task-tree`
+- 项目分解树结构（任务树）
+
+## 任务管理
+### GET `/tasks`
+- Query: `projectId` `status`
+
+### POST `/tasks`
+- 请求体: `{ taskNo?, title, description, status, progress, startAt, endAt, projectId, parentId, assigneeIds }`
+- 约束:
+  - `creatorId` 默认使用当前登录用户
+  - `taskNo` 唯一（为空自动生成）
+  - `status` 支持 `pending|queued|processing|completed`
+
+### GET `/tasks/progress-list`
+- 进度列表统计
+
+### GET `/tasks/me`
+- 个人工作:
+  - `myTasks`
+  - `myCreated`
+  - `myParticipate`
+
+## 统计分析
+### GET `/stats/dashboard`
+- 响应: 用户数、项目数、任务数、完成率
+
+## 默认种子账号
+- 用户名: `admin`
+- 密码: `admin123`
