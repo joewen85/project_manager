@@ -35,6 +35,11 @@
 6. 联调与完善（分页、搜索、审计日志、通知）
 
 ## 快速启动（Docker Compose）
+先创建环境变量文件：
+```bash
+cp .env.template .env
+```
+
 ```bash
 docker compose up -d --build
 ```
@@ -59,6 +64,11 @@ MYSQL_PORT=3307 BACKEND_PORT=8081 FRONTEND_PORT=5174 docker compose up -d --buil
 ```
 
 ## 本地开发
+在项目根目录先准备环境文件：
+```bash
+cp .env.template .env
+```
+
 ### 后端
 ```bash
 cd backend

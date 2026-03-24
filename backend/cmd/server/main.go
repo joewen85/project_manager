@@ -8,9 +8,14 @@ import (
 	"project-manager/backend/internal/handler"
 	"project-manager/backend/internal/router"
 	"project-manager/backend/internal/seed"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	_ = godotenv.Load(".env")
+	_ = godotenv.Load("../.env")
+
 	cfg := config.Load()
 	db, err := database.Connect(cfg)
 	if err != nil {

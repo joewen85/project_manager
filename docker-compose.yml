@@ -3,8 +3,8 @@ services:
     image: ${MYSQL_IMAGE:-mysql:8.4}
     container_name: pm-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: project_management
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-project_management}
     ports:
       - '${MYSQL_PORT:-3306}:3306'
     volumes:
@@ -22,15 +22,15 @@ services:
       mysql:
         condition: service_healthy
     environment:
-      APP_PORT: 8080
-      JWT_SECRET: change-me
+      APP_PORT: ${APP_PORT:-8080}
+      JWT_SECRET: ${JWT_SECRET:-change-me}
       DB_HOST: mysql
-      DB_PORT: 3306
-      DB_USER: root
-      DB_PASSWORD: root
-      DB_NAME: project_management
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      DB_NAME: ${DB_NAME:-project_management}
     ports:
-      - '${BACKEND_PORT:-8080}:8080'
+      - '${BACKEND_PORT:-8080}:${APP_PORT:-8080}'
 
   frontend:
     build: ./frontend
