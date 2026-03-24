@@ -18,6 +18,7 @@ const menus = [
 export function Layout() {
   const [profile, setProfile] = useState<{ name?: string; username?: string; email?: string }>({})
   const [permissions, setPermissionState] = useState<string[]>(getPermissions())
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const visibleMenus = menus.filter((item) => permissions.includes(item.permission))
 
   useEffect(() => {
@@ -59,6 +60,8 @@ export function Layout() {
     window.location.href = '/login'
   }
 
+  const initials = (profile.name || profile.username || 'U').slice(0, 2).toUpperCase()
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -75,11 +78,23 @@ export function Layout() {
       </aside>
       <main className="content" aria-live="polite">
         <header className="topbar card">
-          <div>
-            <strong>{profile.name || '当前用户'}</strong>
-            <p>{profile.username || '-'} / {profile.email || '-'}</p>
+          <div className="user-anchor">
+            <button className="avatar-btn" onClick={() => setUserMenuOpen((prev) => !prev)} aria-label="用户菜单">
+              {initials}
+            </button>
+            {userMenuOpen && (
+              <div className="user-menu card">
+                <div className="user-menu-profile">
+                  <div className="avatar-btn small">{initials}</div>
+                  <div>
+                    <strong>{profile.username || profile.name || '当前用户'}</strong>
+                    <p>{profile.email || '-'}</p>
+                  </div>
+                </div>
+                <button className="logout-item" onClick={logout}>↪ 退出登录</button>
+              </div>
+            )}
           </div>
-          <button className="btn danger" onClick={logout}>退出登录</button>
         </header>
         <Outlet />
       </main>
