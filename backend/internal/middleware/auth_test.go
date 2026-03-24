@@ -63,3 +63,23 @@ func TestPermissionForbidden(t *testing.T) {
 		t.Fatalf("expected 403, got %d", w.Code)
 	}
 }
+
+func TestWritePermissionImpliesRead(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	token, err := auth.GenerateToken("secret", 1, "user", []string{"projects.write"})
+	if err != nil {
+		t.Fatalf("generate token failed: %v", err)
+	}
+
+	r := gin.New()
+	r.GET("/projects", JWT("secret"), RequirePermission("projects.read"), func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+
+	req := httptest.NewRequest(http.MethodGet, "/projects", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+}

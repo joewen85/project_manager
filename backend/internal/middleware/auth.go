@@ -9,6 +9,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func hasPermission(granted []string, required string) bool {
+	for _, item := range granted {
+		if item == required {
+			return true
+		}
+	}
+	if strings.HasSuffix(required, ".read") {
+		writePerm := strings.TrimSuffix(required, ".read") + ".write"
+		for _, item := range granted {
+			if item == writePerm {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func JWT(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -44,11 +61,9 @@ func RequirePermission(permission string) gin.HandlerFunc {
 			return
 		}
 
-		for _, item := range claims.Permissions {
-			if item == permission {
-				c.Next()
-				return
-			}
+		if hasPermission(claims.Permissions, permission) {
+			c.Next()
+			return
 		}
 
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "forbidden"})
