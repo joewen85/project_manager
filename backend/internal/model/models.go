@@ -81,3 +81,17 @@ type Task struct {
 	Children    []Task      `gorm:"foreignKey:ParentID" json:"children,omitempty"`
 	Assignees   []User      `gorm:"many2many:task_users;" json:"assignees,omitempty"`
 }
+
+type AuditLog struct {
+	BaseModel
+	UserID    uint   `gorm:"index" json:"userId"`
+	Module    string `gorm:"size:50;index;not null" json:"module"`
+	Action    string `gorm:"size:50;not null" json:"action"`
+	TargetID  uint   `gorm:"index" json:"targetId"`
+	Method    string `gorm:"size:10;not null" json:"method"`
+	Path      string `gorm:"size:255;not null" json:"path"`
+	Success   bool   `gorm:"default:true" json:"success"`
+	Detail    string `gorm:"type:text" json:"detail"`
+	ClientIP  string `gorm:"size:50" json:"clientIp"`
+	UserAgent string `gorm:"size:255" json:"userAgent"`
+}

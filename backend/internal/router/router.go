@@ -28,6 +28,8 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			rbac.GET("/permissions", h.ListPermissions)
 			rbac.GET("/roles", h.ListRoles)
 			rbac.POST("/roles", h.CreateRole)
+			rbac.PUT("/roles/:id", h.UpdateRole)
+			rbac.DELETE("/roles/:id", h.DeleteRole)
 		}
 
 		users := authGroup.Group("/users")
@@ -35,6 +37,8 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		{
 			users.GET("", h.ListUsers)
 			users.POST("", middleware.RequirePermission("users.write"), h.CreateUser)
+			users.PUT("/:id", middleware.RequirePermission("users.write"), h.UpdateUser)
+			users.DELETE("/:id", middleware.RequirePermission("users.write"), h.DeleteUser)
 		}
 
 		departments := authGroup.Group("/departments")
@@ -42,6 +46,8 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		{
 			departments.GET("", h.ListDepartments)
 			departments.POST("", middleware.RequirePermission("departments.write"), h.CreateDepartment)
+			departments.PUT("/:id", middleware.RequirePermission("departments.write"), h.UpdateDepartment)
+			departments.DELETE("/:id", middleware.RequirePermission("departments.write"), h.DeleteDepartment)
 		}
 
 		projects := authGroup.Group("/projects")
@@ -50,6 +56,8 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			projects.GET("", h.ListProjects)
 			projects.GET("/:id", h.ProjectDetail)
 			projects.POST("", middleware.RequirePermission("projects.write"), h.CreateProject)
+			projects.PUT("/:id", middleware.RequirePermission("projects.write"), h.UpdateProject)
+			projects.DELETE("/:id", middleware.RequirePermission("projects.write"), h.DeleteProject)
 			projects.GET("/:projectId/gantt", h.Gantt)
 			projects.GET("/:projectId/task-tree", h.TaskTree)
 		}
@@ -59,6 +67,8 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		{
 			tasks.GET("", h.ListTasks)
 			tasks.POST("", middleware.RequirePermission("tasks.write"), h.CreateTask)
+			tasks.PUT("/:id", middleware.RequirePermission("tasks.write"), h.UpdateTask)
+			tasks.DELETE("/:id", middleware.RequirePermission("tasks.write"), h.DeleteTask)
 			tasks.GET("/progress-list", h.ProgressList)
 			tasks.GET("/me", h.MyTasks)
 		}
@@ -67,6 +77,12 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		stats.Use(middleware.RequirePermission("stats.read"))
 		{
 			stats.GET("/dashboard", h.DashboardStats)
+		}
+
+		audit := authGroup.Group("/audit")
+		audit.Use(middleware.RequirePermission("audit.read"))
+		{
+			audit.GET("/logs", h.ListAuditLogs)
 		}
 	}
 

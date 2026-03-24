@@ -15,22 +15,33 @@ Base URL: `http://localhost:8080/api/v1`
 ### GET `/rbac/roles`
 ### POST `/rbac/roles`
 - 请求体: `{ name, description, permissionIds: number[] }`
+### PUT `/rbac/roles/:id`
+### DELETE `/rbac/roles/:id`
 
 ## 用户管理
 ### GET `/users`
+- Query: `page` `pageSize` `keyword`
 ### POST `/users`
 - 请求体: `{ username, name, email, password, roleIds, departmentIds }`
+### PUT `/users/:id`
+### DELETE `/users/:id`
 
 ## 部门管理
 ### GET `/departments`
+- Query: `page` `pageSize` `keyword`
 ### POST `/departments`
 - 请求体: `{ name, description, userIds }`
+### PUT `/departments/:id`
+### DELETE `/departments/:id`
 
 ## 项目管理
 ### GET `/projects`
+- Query: `page` `pageSize` `keyword`
 ### GET `/projects/:id`
 ### POST `/projects`
 - 请求体: `{ code, name, description, startAt, endAt, userIds, departmentIds }`
+### PUT `/projects/:id`
+### DELETE `/projects/:id`
 
 ### GET `/projects/:projectId/gantt`
 - 甘特图任务数据
@@ -40,7 +51,7 @@ Base URL: `http://localhost:8080/api/v1`
 
 ## 任务管理
 ### GET `/tasks`
-- Query: `projectId` `status`
+- Query: `projectId` `status` `page` `pageSize` `keyword`
 
 ### POST `/tasks`
 - 请求体: `{ taskNo?, title, description, status, progress, startAt, endAt, projectId, parentId, assigneeIds }`
@@ -57,10 +68,16 @@ Base URL: `http://localhost:8080/api/v1`
   - `myTasks`
   - `myCreated`
   - `myParticipate`
+### PUT `/tasks/:id`
+### DELETE `/tasks/:id`
 
 ## 统计分析
 ### GET `/stats/dashboard`
 - 响应: 用户数、项目数、任务数、完成率
+
+## 审计日志
+### GET `/audit/logs`
+- Query: `page` `pageSize` `module` `action`
 
 ## 默认种子账号
 - 用户名: `admin`

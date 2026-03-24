@@ -31,6 +31,8 @@ input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-ra
 input:focus, select:focus { outline: 2px solid #93c5fd; }
 .btn { margin-top: 10px; background: #2563eb; color: #fff; border: none; border-radius: 10px; padding: 10px 12px; cursor: pointer; transition: background-color 200ms; }
 .btn:hover { background: #1d4ed8; }
+.btn.danger { margin-top: 0; padding: 6px 10px; background: #dc2626; }
+.btn.danger:hover { background: #b91c1c; }
 .error { color: #dc2626; }
 
 .gantt-row { display: grid; grid-template-columns: 280px 1fr; gap: 10px; align-items: center; margin: 8px 0; font-size: 13px; }

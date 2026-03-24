@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage'
 import { MyWorkPage } from './pages/MyWorkPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { RbacPage } from './pages/RbacPage'
+import { AuditPage } from './pages/AuditPage'
 import { TasksPage } from './pages/TasksPage'
 import { UsersPage } from './pages/UsersPage'
 
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="departments" element={<DepartmentsPage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="tasks" element={<TasksPage />} />
+        <Route path="audit" element={<AuditPage />} />
         <Route path="me" element={<MyWorkPage />} />
       </Route>
     </Routes>

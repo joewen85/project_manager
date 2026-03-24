@@ -29,6 +29,15 @@ paths:
       summary: 创建用户
       security: [{ bearerAuth: [] }]
       responses: { '201': { description: Created } }
+  /users/{id}:
+    put:
+      summary: 更新用户
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+    delete:
+      summary: 删除用户
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
   /departments:
     get:
       summary: 部门列表
@@ -48,6 +57,20 @@ paths:
       summary: 创建任务
       security: [{ bearerAuth: [] }]
       responses: { '201': { description: Created } }
+  /tasks/{id}:
+    put:
+      summary: 更新任务
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+    delete:
+      summary: 删除任务
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+  /audit/logs:
+    get:
+      summary: 审计日志列表
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
   /stats/dashboard:
     get:
       summary: 仪表盘统计

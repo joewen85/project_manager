@@ -1,4 +1,4 @@
-import { BarChart3, Building2, FolderKanban, ListChecks, Shield, UserCircle2, Users } from 'lucide-react'
+import { BarChart3, Building2, FolderKanban, ListChecks, NotebookTabs, Shield, UserCircle2, Users } from 'lucide-react'
 import { Link, Outlet } from 'react-router-dom'
 
 const menus = [
@@ -8,6 +8,7 @@ const menus = [
   { to: '/departments', label: '部门管理', icon: Building2 },
   { to: '/projects', label: '项目列表', icon: FolderKanban },
   { to: '/tasks', label: '任务列表', icon: ListChecks },
+  { to: '/audit', label: '审计日志', icon: NotebookTabs },
   { to: '/me', label: '个人工作', icon: UserCircle2 }
 ]
 

@@ -11,9 +11,10 @@ export function ProjectsPage() {
   const [tree, setTree] = useState<Task[]>([])
 
   useEffect(() => {
-    void api.get('/projects').then((res) => {
-      setProjects(res.data)
-      if (res.data.length > 0) setSelected(res.data[0].id)
+    void api.get('/projects?page=1&pageSize=50').then((res) => {
+      const list = res.data.list ?? res.data
+      setProjects(list)
+      if (list.length > 0) setSelected(list[0].id)
     })
   }, [])
 
@@ -22,6 +23,15 @@ export function ProjectsPage() {
     void api.get(`/projects/${selected}/gantt`).then((res) => setGantt(res.data))
     void api.get(`/projects/${selected}/task-tree`).then((res) => setTree(res.data))
   }, [selected])
+
+  const onDelete = async (id: number) => {
+    if (!confirm('确认删除该项目？')) return
+    await api.delete(`/projects/${id}`)
+    const res = await api.get('/projects?page=1&pageSize=50')
+    const list = res.data.list ?? res.data
+    setProjects(list)
+    setSelected(list[0]?.id)
+  }
 
   return (
     <section>
@@ -33,8 +43,8 @@ export function ProjectsPage() {
         </select>
       </div>
       <div className="card">
-        <table><thead><tr><th>编码</th><th>名称</th><th>描述</th></tr></thead><tbody>
-          {projects.map((p) => <tr key={p.id}><td>{p.code}</td><td>{p.name}</td><td>{p.description}</td></tr>)}
+        <table><thead><tr><th>编码</th><th>名称</th><th>描述</th><th>操作</th></tr></thead><tbody>
+          {projects.map((p) => <tr key={p.id}><td>{p.code}</td><td>{p.name}</td><td>{p.description}</td><td><button className="btn danger" onClick={() => onDelete(p.id)}>删除</button></td></tr>)}
         </tbody></table>
       </div>
       <GanttChart tasks={gantt} />

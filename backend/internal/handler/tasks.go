@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"project-manager/backend/internal/model"
@@ -37,19 +38,29 @@ func generateTaskNo() string {
 }
 
 func (h *Handler) ListTasks(c *gin.Context) {
+	page, pageSize := parsePage(c)
 	var tasks []model.Task
-	query := h.DB.Preload("Assignees").Preload("Creator")
+	query := h.DB.Model(&model.Task{}).Preload("Assignees").Preload("Creator")
 	if projectID := c.Query("projectId"); projectID != "" {
 		query = query.Where("project_id = ?", projectID)
 	}
 	if status := c.Query("status"); status != "" {
 		query = query.Where("status = ?", status)
 	}
-	if err := query.Find(&tasks).Error; err != nil {
+	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
+		like := "%" + keyword + "%"
+		query = query.Where("task_no LIKE ? OR title LIKE ? OR description LIKE ?", like, like, like)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, tasks)
+	if err := query.Order("id desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&tasks).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, pageResult[model.Task]{List: tasks, Total: total, Page: page, PageSize: pageSize})
 }
 
 func (h *Handler) CreateTask(c *gin.Context) {
@@ -89,7 +100,65 @@ func (h *Handler) CreateTask(c *gin.Context) {
 	}
 
 	h.DB.Preload("Assignees").Preload("Creator").First(&item, item.ID)
+	h.writeAudit(c, "tasks", "create", item.ID, true, "创建任务")
 	c.JSON(http.StatusCreated, item)
+}
+
+func (h *Handler) UpdateTask(c *gin.Context) {
+	var req taskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	var item model.Task
+	if err := h.DB.First(&item, c.Param("id")).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "任务不存在"})
+		return
+	}
+
+	if req.TaskNo != "" {
+		item.TaskNo = req.TaskNo
+	}
+	item.Title = req.Title
+	item.Description = req.Description
+	item.Status = normalizeStatus(req.Status)
+	item.Progress = req.Progress
+	item.StartAt = parseTimeOrNil(req.StartAt)
+	item.EndAt = parseTimeOrNil(req.EndAt)
+	item.ProjectID = req.ProjectID
+	item.ParentID = req.ParentID
+
+	if err := h.DB.Save(&item).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	var users []model.User
+	if len(req.AssigneeIDs) > 0 {
+		h.DB.Where("id IN ?", req.AssigneeIDs).Find(&users)
+	}
+	h.DB.Model(&item).Association("Assignees").Replace(&users)
+	h.DB.Preload("Assignees").Preload("Creator").First(&item, item.ID)
+	h.writeAudit(c, "tasks", "update", item.ID, true, "更新任务")
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *Handler) DeleteTask(c *gin.Context) {
+	var item model.Task
+	if err := h.DB.First(&item, c.Param("id")).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "任务不存在"})
+		return
+	}
+	if err := h.DB.Model(&item).Association("Assignees").Clear(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+	if err := h.DB.Delete(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+	h.writeAudit(c, "tasks", "delete", item.ID, true, "删除任务")
+	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
 func (h *Handler) TaskTree(c *gin.Context) {

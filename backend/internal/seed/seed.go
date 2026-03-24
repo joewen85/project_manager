@@ -14,6 +14,7 @@ var permissionCodes = []string{
 	"projects.read", "projects.write",
 	"tasks.read", "tasks.write",
 	"stats.read",
+	"audit.read",
 }
 
 func Run(db *gorm.DB) error {
