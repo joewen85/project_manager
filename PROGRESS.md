@@ -1,7 +1,7 @@
 # Project Progress Status
 
 ## 当前状态（截至本次）
-- 总体进度：**约 95%（功能实现与自动验收完成，真机部署验收待执行）**
+- 总体进度：**约 97%（功能完成，compose 真机验收完成，k8s 真机验收待执行）**
 - 分支：`main`
 - 最近提交：
   - `f4f7908` feat(backend): standardize errors and complete rbac/task workflows
@@ -12,14 +12,14 @@
 - RBAC、用户、部门、项目、任务、进度统计、个人工作、甘特图、任务树、审计日志
 - API 文档更新与 OpenAPI 同步
 - Docker Compose / Helm 交付
+- Compose 真机启动验收通过（健康检查 + 登录接口验证）
+- 前端路由懒加载已完成（主包体积显著下降）
 
 ## 待完成事项（关键）
-1. **部署验收**
-   - 在目标环境执行 `docker compose up -d --build`
-   - 在 k8s 环境执行 `helm upgrade --install project-manager ./deploy/helm/project-manager`
+1. **k8s 真机部署验收**
+   - 在目标 k8s 环境执行 `helm upgrade --install project-manager ./deploy/helm/project-manager`
    - 验证 `/health`、登录、核心 CRUD 链路
-   - 可先执行自动验收：`bash scripts/verify-deploy.sh`
-   - 若拉取 MySQL 镜像失败：`bash scripts/compose-up.sh`（自动回退镜像）
+   - 若 compose 启动场景，使用：`bash scripts/compose-up.sh`
 
 2. **测试完善**
    - 扩展后端权限边界测试、链路测试

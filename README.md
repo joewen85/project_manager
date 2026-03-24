@@ -53,6 +53,10 @@ bash scripts/compose-up.sh
 ```bash
 MYSQL_IMAGE=mysql:8.0 docker compose up -d --build
 ```
+如本机端口冲突，可指定主机端口：
+```bash
+MYSQL_PORT=3307 BACKEND_PORT=8081 FRONTEND_PORT=5174 docker compose up -d --build
+```
 
 ## 本地开发
 ### 后端

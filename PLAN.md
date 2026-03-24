@@ -52,7 +52,8 @@
 - [x] API 文档维护（`docs/API.md` + `backend/docs/openapi.yaml`）
 - [x] Docker Compose 部署
 - [x] Helm 部署模板
-- [ ] 真机部署验收（compose/k8s 一次启动验收）
+- [x] 真机部署验收（compose 一次启动 + 健康检查 + 登录验证）
+- [ ] k8s 真机部署验收（helm install 到真实集群）
 - [x] 本地自动验收脚本（`scripts/verify-deploy.sh`）
 - [x] Compose 启动回退脚本（`scripts/compose-up.sh`，自动选择可用 MySQL 镜像）
 
