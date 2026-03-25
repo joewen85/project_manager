@@ -1,8 +1,10 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../services/api'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
+import { formatDateTime } from '../utils/datetime'
 
 const statusLabel: Record<string, string> = {
   pending: '待处理',
@@ -40,8 +42,10 @@ const initialForm: TaskForm = {
 type SortKey = 'taskNo' | 'title' | 'status' | 'progress' | 'startAt' | 'endAt'
 type SortOrder = 'asc' | 'desc'
 const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
+const noParentLabel = '不关联父任务'
 
 export function TasksPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [tasks, setTasks] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
@@ -54,12 +58,21 @@ export function TasksPage() {
   const [pageSize, setPageSize] = useState(10)
   const [form, setForm] = useState<TaskForm>(initialForm)
   const [modalOpen, setModalOpen] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailTask, setDetailTask] = useState<any | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
   const [assigneeKeyword, setAssigneeKeyword] = useState('')
+  const [parentTaskInput, setParentTaskInput] = useState(noParentLabel)
+  const [parentDropdownOpen, setParentDropdownOpen] = useState(false)
+  const [parentHighlightIndex, setParentHighlightIndex] = useState(0)
+  const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null)
+  const [pendingOpenTaskId, setPendingOpenTaskId] = useState<number | null>(null)
+  const [pendingViewTaskId, setPendingViewTaskId] = useState<number | null>(null)
+  const parentTaskWrapRef = useRef<HTMLDivElement | null>(null)
 
   const load = async () => {
     try {
@@ -90,6 +103,19 @@ export function TasksPage() {
   }, [])
 
   useEffect(() => {
+    const taskId = Number(searchParams.get('taskId') || 0)
+    if (!Number.isFinite(taskId) || taskId <= 0) return
+    setFocusedTaskId(taskId)
+    if (searchParams.get('view') === '1') {
+      setPendingViewTaskId(taskId)
+    }
+    if (searchParams.get('open') === '1') {
+      setPendingOpenTaskId(taskId)
+    }
+    setSearchParams({}, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  useEffect(() => {
     if (!modalOpen) return
     const timer = window.setTimeout(() => {
       const query = assigneeKeyword.trim() ? `&keyword=${encodeURIComponent(assigneeKeyword.trim())}` : ''
@@ -105,6 +131,7 @@ export function TasksPage() {
     setFormError('')
     setFormSuccess('')
     setAssigneeKeyword('')
+    setParentTaskInput(noParentLabel)
     setModalOpen(true)
   }
 
@@ -154,6 +181,8 @@ export function TasksPage() {
     setFormError('')
     setFormSuccess('')
     setAssigneeKeyword('')
+    const parent = tasks.find((task) => task.id === item.parentId)
+    setParentTaskInput(parent ? `${parent.taskNo}｜${parent.title}` : noParentLabel)
     setModalOpen(true)
   }
 
@@ -161,6 +190,11 @@ export function TasksPage() {
     if (!confirm('确认删除该任务？')) return
     await api.delete(`/tasks/${id}`)
     await load()
+  }
+
+  const viewDetail = (item: any) => {
+    setDetailTask(item)
+    setDetailOpen(true)
   }
 
   const processedTasks = useMemo(() => {
@@ -188,10 +222,98 @@ export function TasksPage() {
     return result
   }, [tasks, keyword, status, projectFilter, sortKey, sortOrder])
 
+  const parentTaskOptions = useMemo(() => {
+    return tasks.filter((task) => {
+      if (task.projectId !== form.projectId) return false
+      if (form.id && task.id === form.id) return false
+      return true
+    })
+  }, [tasks, form.projectId, form.id])
+
+  const parentTaskLabelToId = useMemo(() => {
+    const map = new Map<string, number>()
+    parentTaskOptions.forEach((task) => {
+      map.set(`${task.taskNo}｜${task.title}`, task.id)
+      map.set(task.taskNo, task.id)
+    })
+    return map
+  }, [parentTaskOptions])
+
+  const filteredParentTaskOptions = useMemo(() => {
+    const raw = parentTaskInput.trim()
+    const query = raw === noParentLabel ? '' : raw.toLowerCase()
+    if (!query) return parentTaskOptions
+    return parentTaskOptions.filter((task) =>
+      [task.taskNo, task.title, task.description].some((value) => String(value || '').toLowerCase().includes(query))
+    )
+  }, [parentTaskOptions, parentTaskInput])
+
+  const selectNoParent = () => {
+    setForm((prev) => ({ ...prev, parentId: undefined }))
+    setParentTaskInput(noParentLabel)
+    setParentDropdownOpen(false)
+  }
+
+  const selectParentTask = (task: any) => {
+    const label = `${task.taskNo}｜${task.title}`
+    setForm((prev) => ({ ...prev, parentId: task.id }))
+    setParentTaskInput(label)
+    setParentDropdownOpen(false)
+  }
+
+  useEffect(() => {
+    if (!parentDropdownOpen) return
+    const handleOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (!parentTaskWrapRef.current?.contains(target)) {
+        setParentDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [parentDropdownOpen])
+
+  useEffect(() => {
+    if (!parentDropdownOpen) return
+    setParentHighlightIndex(0)
+  }, [parentDropdownOpen, parentTaskInput, form.projectId])
+
   const total = processedTasks.length
   const totalPages = Math.max(Math.ceil(total / pageSize), 1)
   const currentPage = Math.min(page, totalPages)
   const pagedTasks = processedTasks.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  useEffect(() => {
+    if (!focusedTaskId) return
+    const index = processedTasks.findIndex((task) => task.id === focusedTaskId)
+    if (index < 0) return
+    const targetPage = Math.floor(index / pageSize) + 1
+    if (targetPage !== page) {
+      setPage(targetPage)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(`task-row-${focusedTaskId}`)
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [focusedTaskId, processedTasks, pageSize, page])
+
+  useEffect(() => {
+    if (!pendingOpenTaskId) return
+    const task = tasks.find((item) => item.id === pendingOpenTaskId)
+    if (!task) return
+    edit(task)
+    setPendingOpenTaskId(null)
+  }, [pendingOpenTaskId, tasks])
+
+  useEffect(() => {
+    if (!pendingViewTaskId) return
+    const task = tasks.find((item) => item.id === pendingViewTaskId)
+    if (!task) return
+    viewDetail(task)
+    setPendingViewTaskId(null)
+  }, [pendingViewTaskId, tasks])
 
   return (
     <section className="page-section">
@@ -223,14 +345,19 @@ export function TasksPage() {
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && pagedTasks.length === 0} emptyText="暂无匹配的任务" onRetry={() => { void load() }} />
         {!loading && !error && pagedTasks.length > 0 && (
-          <table><thead><tr><th>任务编号</th><th>标题</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
+          <table><thead><tr><th>任务编号</th><th>标题</th><th>描述</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
             {pagedTasks.map((task) => (
-              <tr key={task.id}>
-                <td>{task.taskNo}</td><td>{task.title}</td><td>{statusLabel[task.status]}</td><td>{task.progress}%</td>
-                <td>{task.startAt ? new Date(task.startAt).toLocaleString() : '-'}</td>
-                <td>{task.endAt ? new Date(task.endAt).toLocaleString() : '-'}</td>
+              <tr key={task.id} id={`task-row-${task.id}`} className={focusedTaskId === task.id ? 'task-row-focused' : ''}>
+                <td>{task.taskNo}</td>
+                <td>{task.title}</td>
+                <td><span className="cell-ellipsis" title={task.description || '-'}>{task.description || '-'}</span></td>
+                <td>{statusLabel[task.status]}</td>
+                <td>{task.progress}%</td>
+                <td>{formatDateTime(task.startAt)}</td>
+                <td>{formatDateTime(task.endAt)}</td>
                 <td>{(task.assignees || []).length}</td>
                 <td>
+                  <button className="btn secondary" onClick={() => viewDetail(task)}>查看详情</button>
                   <button className="btn secondary" onClick={() => edit(task)}>编辑</button>
                   <button className="btn danger" onClick={() => onDelete(task.id)}>删除</button>
                 </td>
@@ -242,6 +369,42 @@ export function TasksPage() {
 
       {!loading && !error && total > 0 && <Pagination total={total} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />}
 
+      <Modal open={detailOpen} title="任务详情" onClose={() => setDetailOpen(false)}>
+        {detailTask && (
+          <div className="detail-grid">
+            <section className="detail-section">
+              <h4>基础信息</h4>
+              <div className="detail-columns">
+                <div><strong>任务ID：</strong>{detailTask.id}</div>
+                <div><strong>任务编号：</strong>{detailTask.taskNo || '-'}</div>
+                <div><strong>标题：</strong>{detailTask.title || '-'}</div>
+              </div>
+              <div className="detail-description-card">
+                <strong>描述</strong>
+                <p>{detailTask.description || '-'}</p>
+              </div>
+            </section>
+            <section className="detail-section">
+              <h4>状态与进度</h4>
+              <div className="detail-columns">
+                <div><strong>状态：</strong>{statusLabel[detailTask.status] || detailTask.status || '-'}</div>
+                <div><strong>进度：</strong>{Number(detailTask.progress || 0)}%</div>
+                <div><strong>项目ID：</strong>{detailTask.projectId || '-'}</div>
+                <div><strong>父任务ID：</strong>{detailTask.parentId || '-'}</div>
+              </div>
+            </section>
+            <section className="detail-section">
+              <h4>人员与时间</h4>
+              <div className="detail-columns">
+                <div><strong>创建人ID：</strong>{detailTask.creatorId || '-'}</div>
+                <div><strong>执行人：</strong>{(detailTask.assignees || []).map((u: any) => `${u.name}(${u.username})`).join('，') || '-'}</div>
+                <div className="detail-time-line"><strong>任务周期：</strong>{formatDateTime(detailTask.startAt)} - {formatDateTime(detailTask.endAt)}</div>
+              </div>
+            </section>
+          </div>
+        )}
+      </Modal>
+
       <Modal open={modalOpen} title={form.id ? '编辑任务' : '新增任务'} onClose={() => setModalOpen(false)}>
         <form className="form-grid" onSubmit={submit}>
           <label htmlFor="task-no">任务编号（可空自动生成）</label>
@@ -249,13 +412,96 @@ export function TasksPage() {
           <label className="required-label" htmlFor="task-title">标题</label>
           <input id="task-title" value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} required />
           <label htmlFor="task-description">描述</label>
-          <input id="task-description" value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} />
+          <textarea id="task-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} />
           <label className="required-label" htmlFor="task-project">项目</label>
-          <select id="task-project" value={form.projectId} onChange={(e) => setForm((prev) => ({ ...prev, projectId: Number(e.target.value) }))} required>
+          <select
+            id="task-project"
+            value={form.projectId}
+            onChange={(e) => {
+              setForm((prev) => ({ ...prev, projectId: Number(e.target.value), parentId: undefined }))
+              setParentTaskInput(noParentLabel)
+            }}
+            required
+          >
             {projects.map((project) => <option key={project.id} value={project.id}>{project.code} - {project.name}</option>)}
           </select>
-          <label htmlFor="task-parent">父任务ID（可选）</label>
-          <input id="task-parent" type="number" value={form.parentId ?? ''} onChange={(e) => setForm((prev) => ({ ...prev, parentId: e.target.value ? Number(e.target.value) : undefined }))} />
+          <label htmlFor="task-parent">父任务（同项目，可选）</label>
+          <div className="combo-wrap" ref={parentTaskWrapRef}>
+            <input
+              id="task-parent"
+              aria-label="搜索父任务"
+              placeholder="搜索父任务：任务编号/标题/描述"
+              value={parentTaskInput}
+              onFocus={() => setParentDropdownOpen(true)}
+              onKeyDown={(event) => {
+                if (!parentDropdownOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                  setParentDropdownOpen(true)
+                  event.preventDefault()
+                  return
+                }
+                if (!parentDropdownOpen) return
+                const maxIndex = filteredParentTaskOptions.length
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault()
+                  setParentHighlightIndex((prev) => Math.min(prev + 1, maxIndex))
+                  return
+                }
+                if (event.key === 'ArrowUp') {
+                  event.preventDefault()
+                  setParentHighlightIndex((prev) => Math.max(prev - 1, 0))
+                  return
+                }
+                if (event.key === 'Escape') {
+                  setParentDropdownOpen(false)
+                  return
+                }
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  if (parentHighlightIndex === 0) {
+                    selectNoParent()
+                    return
+                  }
+                  const target = filteredParentTaskOptions[parentHighlightIndex - 1]
+                  if (target) selectParentTask(target)
+                }
+              }}
+              onChange={(e) => {
+                const value = e.target.value
+                setParentTaskInput(value)
+                setParentDropdownOpen(true)
+                setForm((prev) => ({ ...prev, parentId: value && value !== noParentLabel ? parentTaskLabelToId.get(value) : undefined }))
+              }}
+            />
+            {parentDropdownOpen && (
+              <div className="combo-menu">
+                <button
+                  type="button"
+                  className={`combo-option${parentHighlightIndex === 0 ? ' active' : ''}`}
+                  onMouseEnter={() => setParentHighlightIndex(0)}
+                  onClick={selectNoParent}
+                >
+                    {noParentLabel}
+                  </button>
+                {filteredParentTaskOptions.map((task, index) => {
+                  const label = `${task.taskNo}｜${task.title}`
+                  return (
+                    <button
+                      type="button"
+                      key={task.id}
+                      className={`combo-option${form.parentId === task.id || parentHighlightIndex === index + 1 ? ' active' : ''}`}
+                      onMouseEnter={() => setParentHighlightIndex(index + 1)}
+                      onClick={() => selectParentTask(task)}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+                {filteredParentTaskOptions.length === 0 && (
+                  <div className="combo-empty">没有匹配的父任务</div>
+                )}
+              </div>
+            )}
+          </div>
           <label htmlFor="task-status">状态</label>
           <select id="task-status" value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}>
             {Object.keys(statusLabel).map((key) => <option key={key} value={key}>{statusLabel[key]}</option>)}

@@ -81,6 +81,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		projects.Use(middleware.RequirePermission(h.DB, "projects.read"))
 		{
 			projects.GET("", h.ListProjects)
+			projects.GET("/export", h.ExportProjectsCSV)
 			projects.GET("/editor-options", h.ProjectEditorOptions)
 			projects.POST("", middleware.RequirePermission(h.DB, "projects.write"), h.CreateProject)
 			projects.PUT("/:id", middleware.RequirePermission(h.DB, "projects.write"), h.UpdateProject)
@@ -94,6 +95,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		tasks.Use(middleware.RequirePermission(h.DB, "tasks.read"))
 		{
 			tasks.GET("", h.ListTasks)
+			tasks.GET("/export", h.ExportTasksCSV)
 			tasks.GET("/assignee-options", h.TaskAssigneeOptions)
 			tasks.POST("", middleware.RequirePermission(h.DB, "tasks.write"), h.CreateTask)
 			tasks.PUT("/:id", middleware.RequirePermission(h.DB, "tasks.write"), h.UpdateTask)
@@ -106,6 +108,15 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		stats.Use(middleware.RequirePermission(h.DB, "stats.read"))
 		{
 			stats.GET("/dashboard", h.DashboardStats)
+		}
+
+		notifications := authGroup.Group("/notifications")
+		notifications.Use(middleware.RequirePermission(h.DB, "notifications.read"))
+		{
+			notifications.GET("", h.ListNotifications)
+			notifications.GET("/unread-count", h.UnreadNotificationCount)
+			notifications.PATCH("/:id/read", h.MarkNotificationRead)
+			notifications.PATCH("/read-all", h.MarkAllNotificationsRead)
 		}
 
 		audit := authGroup.Group("/audit")

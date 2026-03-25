@@ -15,6 +15,7 @@
 - 进度列表
 - 统计分析
 - 个人工作（我的任务 / 我的创建 / 我的参与）
+- 站内通知（未读计数 / 已读管理）
 - 甘特图
 - 项目分解树结构（任务树）
 - 操作审计日志
@@ -92,6 +93,7 @@ npm run dev
 ## API 文档
 - 简版文档：`docs/API.md`
 - OpenAPI：`backend/docs/openapi.yaml`
+- RBAC 权限清单：`docs/RBAC_PERMISSIONS.md`
 - 前端 UI 规范：`docs/FRONTEND_UI_GUIDE.md`
 - 前端 UI 验收清单：`docs/UI_QA_CHECKLIST.md`
 

@@ -13,6 +13,7 @@ var permissionCodes = []string{
 	"departments.read", "departments.write",
 	"projects.read", "projects.write",
 	"tasks.read", "tasks.write",
+	"notifications.read", "notifications.write",
 	"stats.read",
 	"audit.read",
 }
@@ -40,6 +41,13 @@ func Run(db *gorm.DB) error {
 
 	memberRole := model.Role{Name: "member", Description: "普通成员"}
 	if err := db.Where("name = ?", memberRole.Name).FirstOrCreate(&memberRole).Error; err != nil {
+		return err
+	}
+	var notificationRead model.Permission
+	if err := db.Where("code = ?", "notifications.read").First(&notificationRead).Error; err != nil {
+		return err
+	}
+	if err := db.Model(&memberRole).Association("Permissions").Append(&notificationRead); err != nil {
 		return err
 	}
 

@@ -84,6 +84,11 @@ paths:
       summary: 项目列表
       security: [{ bearerAuth: [] }]
       responses: { '200': { description: OK } }
+  /projects/export:
+    get:
+      summary: 导出项目 CSV
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
   /projects/editor-options:
     get:
       summary: 项目编辑选项（负责人/部门）
@@ -98,6 +103,11 @@ paths:
       summary: 创建任务
       security: [{ bearerAuth: [] }]
       responses: { '201': { description: Created } }
+  /tasks/export:
+    get:
+      summary: 导出任务 CSV
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
   /tasks/assignee-options:
     get:
       summary: 任务执行人选项
@@ -110,6 +120,26 @@ paths:
       responses: { '200': { description: OK } }
     delete:
       summary: 删除任务
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+  /notifications:
+    get:
+      summary: 通知列表
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+  /notifications/unread-count:
+    get:
+      summary: 未读通知数量
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+  /notifications/{id}/read:
+    patch:
+      summary: 标记单条通知已读
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
+  /notifications/read-all:
+    patch:
+      summary: 标记全部通知已读
       security: [{ bearerAuth: [] }]
       responses: { '200': { description: OK } }
   /audit/logs:

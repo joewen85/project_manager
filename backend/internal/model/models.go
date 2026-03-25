@@ -95,3 +95,13 @@ type AuditLog struct {
 	ClientIP  string `gorm:"size:50" json:"clientIp"`
 	UserAgent string `gorm:"size:255" json:"userAgent"`
 }
+
+type Notification struct {
+	BaseModel
+	UserID   uint   `gorm:"index;not null" json:"userId"`
+	Title    string `gorm:"size:150;not null" json:"title"`
+	Content  string `gorm:"type:text" json:"content"`
+	Module   string `gorm:"size:50;index;not null" json:"module"`
+	TargetID uint   `gorm:"index" json:"targetId"`
+	IsRead   bool   `gorm:"default:false;index" json:"isRead"`
+}

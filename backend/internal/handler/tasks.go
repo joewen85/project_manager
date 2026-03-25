@@ -38,6 +38,26 @@ func generateTaskNo() string {
 	return "TASK-" + uuid.NewString()[0:8]
 }
 
+func diffUserIDs(newIDs []uint, oldIDs []uint) (added []uint, removed []uint) {
+	oldSet := map[uint]struct{}{}
+	for _, id := range oldIDs {
+		oldSet[id] = struct{}{}
+	}
+	newSet := map[uint]struct{}{}
+	for _, id := range newIDs {
+		newSet[id] = struct{}{}
+		if _, ok := oldSet[id]; !ok {
+			added = append(added, id)
+		}
+	}
+	for _, id := range oldIDs {
+		if _, ok := newSet[id]; !ok {
+			removed = append(removed, id)
+		}
+	}
+	return added, removed
+}
+
 type taskAssigneeOption struct {
 	ID       uint   `json:"id"`
 	Name     string `json:"name"`
@@ -142,6 +162,7 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		var users []model.User
 		h.DB.Where("id IN ?", req.AssigneeIDs).Find(&users)
 		h.DB.Model(&item).Association("Assignees").Replace(&users)
+		h.createNotifications(req.AssigneeIDs, "任务已指派给你", "任务 "+item.TaskNo+" - "+item.Title+" 已分配给你", "tasks", item.ID)
 	}
 
 	h.DB.Preload("Assignees").Preload("Creator").First(&item, item.ID)
@@ -188,11 +209,20 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "UPDATE_TASK_FAILED", err.Error())
 		return
 	}
+	var oldAssignees []model.User
+	h.DB.Model(&item).Association("Assignees").Find(&oldAssignees)
+	oldIDs := make([]uint, 0, len(oldAssignees))
+	for _, user := range oldAssignees {
+		oldIDs = append(oldIDs, user.ID)
+	}
 	var users []model.User
 	if len(req.AssigneeIDs) > 0 {
 		h.DB.Where("id IN ?", req.AssigneeIDs).Find(&users)
 	}
 	h.DB.Model(&item).Association("Assignees").Replace(&users)
+	added, removed := diffUserIDs(req.AssigneeIDs, oldIDs)
+	h.createNotifications(added, "你被加入任务执行人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你设为执行人", "tasks", item.ID)
+	h.createNotifications(removed, "你已被移出任务执行人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你移出执行人", "tasks", item.ID)
 	h.DB.Preload("Assignees").Preload("Creator").First(&item, item.ID)
 	h.writeAudit(c, "tasks", "update", item.ID, true, "更新任务")
 	c.JSON(http.StatusOK, item)

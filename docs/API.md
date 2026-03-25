@@ -41,6 +41,9 @@ Base URL: `http://localhost:8080/api/v1`
 ## 项目管理
 ### GET `/projects`
 - Query: `page` `pageSize` `keyword`
+### GET `/projects/export`
+- 用途: 导出当前可见项目为 CSV
+- Query: `keyword`
 ### GET `/projects/editor-options`
 - 用途: 项目编辑弹窗选项（负责人、参与部门）
 - Query: `keyword` `userKeyword` `departmentKeyword` `pageSize`
@@ -60,6 +63,9 @@ Base URL: `http://localhost:8080/api/v1`
 ## 任务管理
 ### GET `/tasks`
 - Query: `projectId` `status` `page` `pageSize` `keyword`
+### GET `/tasks/export`
+- 用途: 导出当前可见任务为 CSV
+- Query: `projectId` `status` `keyword`
 ### GET `/tasks/assignee-options`
 - 用途: 任务编辑弹窗执行人选项
 - Query: `keyword` `pageSize`
@@ -86,6 +92,13 @@ Base URL: `http://localhost:8080/api/v1`
 ## 统计分析
 ### GET `/stats/dashboard`
 - 响应: 用户数、项目数、任务数、完成率
+
+## 站内通知
+### GET `/notifications`
+- Query: `page` `pageSize` `isRead` `module` `keyword`
+### GET `/notifications/unread-count`
+### PATCH `/notifications/:id/read`
+### PATCH `/notifications/read-all`
 
 ## 审计日志
 ### GET `/audit/logs`

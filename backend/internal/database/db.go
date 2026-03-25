@@ -21,5 +21,6 @@ func Migrate(db *gorm.DB) error {
 		&model.Project{},
 		&model.Task{},
 		&model.AuditLog{},
+		&model.Notification{},
 	)
 }

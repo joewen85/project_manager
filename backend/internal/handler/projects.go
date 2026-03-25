@@ -140,6 +140,7 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		var users []model.User
 		h.DB.Where("id IN ?", req.UserIDs).Find(&users)
 		h.DB.Model(&item).Association("Users").Replace(&users)
+		h.createNotifications(req.UserIDs, "你被设为项目负责人", "项目 "+item.Code+" - "+item.Name+" 已将你设为负责人", "projects", item.ID)
 	}
 	if len(req.DepartmentIDs) > 0 {
 		var departments []model.Department
@@ -185,11 +186,21 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		return
 	}
 
+	var oldUsers []model.User
+	h.DB.Model(&item).Association("Users").Find(&oldUsers)
+	oldUserIDs := make([]uint, 0, len(oldUsers))
+	for _, user := range oldUsers {
+		oldUserIDs = append(oldUserIDs, user.ID)
+	}
+
 	var users []model.User
 	if len(req.UserIDs) > 0 {
 		h.DB.Where("id IN ?", req.UserIDs).Find(&users)
 	}
 	h.DB.Model(&item).Association("Users").Replace(&users)
+	addedUsers, removedUsers := diffUserIDs(req.UserIDs, oldUserIDs)
+	h.createNotifications(addedUsers, "你被加入项目负责人", "项目 "+item.Code+" - "+item.Name+" 已将你设为负责人", "projects", item.ID)
+	h.createNotifications(removedUsers, "你已被移出项目负责人", "项目 "+item.Code+" - "+item.Name+" 已将你移出负责人", "projects", item.ID)
 
 	var departments []model.Department
 	if len(req.DepartmentIDs) > 0 {

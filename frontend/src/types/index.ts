@@ -35,3 +35,14 @@ export interface Task {
   parentId?: number
   children?: Task[]
 }
+
+export interface Notification {
+  id: number
+  userId: number
+  title: string
+  content: string
+  module: string
+  targetId: number
+  isRead: boolean
+  createdAt: string
+}

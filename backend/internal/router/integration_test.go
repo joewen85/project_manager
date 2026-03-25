@@ -2,10 +2,13 @@ package router
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"project-manager/backend/internal/config"
@@ -57,6 +60,28 @@ func loginAndToken(t *testing.T, serverURL string) string {
 		t.Fatalf("empty token")
 	}
 	return token
+}
+
+func requestJSON(t *testing.T, method, url, token string, payload any) (*http.Response, map[string]any) {
+	t.Helper()
+	var body io.Reader
+	if payload != nil {
+		raw, _ := json.Marshal(payload)
+		body = bytes.NewReader(raw)
+	}
+	req, _ := http.NewRequest(method, url, body)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
+	return resp, out
 }
 
 func TestAuthCRUDAndAuditFlow(t *testing.T) {
@@ -210,4 +235,315 @@ func TestGanttAndTaskTreeConsistency(t *testing.T) {
 	if len(gantt) != countTree {
 		t.Fatalf("gantt count %d != tree count %d", len(gantt), countTree)
 	}
+}
+
+func TestUserScopeAndExportFlow(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+
+	permReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/rbac/permissions", nil)
+	permReq.Header.Set("Authorization", "Bearer "+adminToken)
+	permResp, err := http.DefaultClient.Do(permReq)
+	if err != nil {
+		t.Fatalf("query permissions failed: %v", err)
+	}
+	if permResp.StatusCode != http.StatusOK {
+		t.Fatalf("query permissions status expected 200 got %d", permResp.StatusCode)
+	}
+	var permissions []map[string]any
+	_ = json.NewDecoder(permResp.Body).Decode(&permissions)
+	permResp.Body.Close()
+
+	codeToID := map[string]uint{}
+	for _, permission := range permissions {
+		code, _ := permission["code"].(string)
+		id, _ := permission["id"].(float64)
+		codeToID[code] = uint(id)
+	}
+	readerPerms := []uint{
+		codeToID["projects.read"],
+		codeToID["tasks.read"],
+		codeToID["stats.read"],
+	}
+
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":          "scope-reader",
+		"description":   "scope reader",
+		"permissionIds": readerPerms,
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create role status expected 201 got %d", roleResp.StatusCode)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	userAResp, userABody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "scope_u1",
+		"name":          "Scope U1",
+		"email":         "scope_u1@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if userAResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create userA status expected 201 got %d", userAResp.StatusCode)
+	}
+	userAID := uint(userABody["id"].(float64))
+
+	userBResp, userBBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "scope_u2",
+		"name":          "Scope U2",
+		"email":         "scope_u2@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if userBResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create userB status expected 201 got %d", userBResp.StatusCode)
+	}
+	userBID := uint(userBBody["id"].(float64))
+
+	loginUser := func(username string) string {
+		payload := map[string]string{"username": username, "password": "pass1234"}
+		raw, _ := json.Marshal(payload)
+		resp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(raw))
+		if err != nil {
+			t.Fatalf("login %s failed: %v", username, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("login %s status expected 200 got %d", username, resp.StatusCode)
+		}
+		var result map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&result)
+		return result["token"].(string)
+	}
+	userAToken := loginUser("scope_u1")
+
+	projectAResp, projectABody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":          "SCOPE-P1",
+		"name":          "Scope Project 1",
+		"description":   "for user1",
+		"userIds":       []uint{userAID},
+		"departmentIds": []uint{},
+	})
+	if projectAResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create projectA status expected 201 got %d", projectAResp.StatusCode)
+	}
+	projectAID := int(projectABody["id"].(float64))
+
+	projectBResp, projectBBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":          "SCOPE-P2",
+		"name":          "Scope Project 2",
+		"description":   "for user2",
+		"userIds":       []uint{},
+		"departmentIds": []uint{},
+	})
+	if projectBResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create projectB status expected 201 got %d", projectBResp.StatusCode)
+	}
+	projectBID := int(projectBBody["id"].(float64))
+
+	_, _ = requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Scope Task 1",
+		"projectId":   projectAID,
+		"status":      "processing",
+		"progress":    40,
+		"startAt":     "2026-03-24T10:00:00Z",
+		"endAt":       "2026-03-25T10:00:00Z",
+		"assigneeIds": []uint{userAID},
+	})
+	_, _ = requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Scope Task 2",
+		"projectId":   projectBID,
+		"status":      "queued",
+		"progress":    20,
+		"startAt":     "2026-03-24T10:00:00Z",
+		"endAt":       "2026-03-25T10:00:00Z",
+		"assigneeIds": []uint{userBID},
+	})
+
+	projectsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/projects", nil)
+	projectsReq.Header.Set("Authorization", "Bearer "+userAToken)
+	projectsResp, err := http.DefaultClient.Do(projectsReq)
+	if err != nil {
+		t.Fatalf("query scoped projects failed: %v", err)
+	}
+	var projectList struct {
+		List []map[string]any `json:"list"`
+	}
+	_ = json.NewDecoder(projectsResp.Body).Decode(&projectList)
+	projectsResp.Body.Close()
+	if len(projectList.List) != 1 {
+		t.Fatalf("expected 1 scoped project, got %d", len(projectList.List))
+	}
+
+	tasksReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tasks", nil)
+	tasksReq.Header.Set("Authorization", "Bearer "+userAToken)
+	tasksResp, err := http.DefaultClient.Do(tasksReq)
+	if err != nil {
+		t.Fatalf("query scoped tasks failed: %v", err)
+	}
+	var taskList struct {
+		List []map[string]any `json:"list"`
+	}
+	_ = json.NewDecoder(tasksResp.Body).Decode(&taskList)
+	tasksResp.Body.Close()
+	if len(taskList.List) != 1 {
+		t.Fatalf("expected 1 scoped task, got %d", len(taskList.List))
+	}
+
+	statsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/stats/dashboard", nil)
+	statsReq.Header.Set("Authorization", "Bearer "+userAToken)
+	statsResp, err := http.DefaultClient.Do(statsReq)
+	if err != nil {
+		t.Fatalf("query scoped stats failed: %v", err)
+	}
+	var stats map[string]any
+	_ = json.NewDecoder(statsResp.Body).Decode(&stats)
+	statsResp.Body.Close()
+	if int(stats["tasks"].(float64)) != 1 {
+		t.Fatalf("expected scoped tasks=1, got %v", stats["tasks"])
+	}
+
+	projectExportReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/projects/export", nil)
+	projectExportReq.Header.Set("Authorization", "Bearer "+userAToken)
+	projectExportResp, err := http.DefaultClient.Do(projectExportReq)
+	if err != nil {
+		t.Fatalf("export projects failed: %v", err)
+	}
+	projectExportRaw, _ := io.ReadAll(projectExportResp.Body)
+	projectExportResp.Body.Close()
+	projectCSV, _ := csv.NewReader(strings.NewReader(string(projectExportRaw))).ReadAll()
+	if len(projectCSV) < 2 || strings.Contains(strings.Join(projectCSV[len(projectCSV)-1], ","), "SCOPE-P2") {
+		t.Fatalf("project export should not contain SCOPE-P2, got: %s", string(projectExportRaw))
+	}
+
+	taskExportReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tasks/export", nil)
+	taskExportReq.Header.Set("Authorization", "Bearer "+userAToken)
+	taskExportResp, err := http.DefaultClient.Do(taskExportReq)
+	if err != nil {
+		t.Fatalf("export tasks failed: %v", err)
+	}
+	taskExportRaw, _ := io.ReadAll(taskExportResp.Body)
+	taskExportResp.Body.Close()
+	if strings.Contains(string(taskExportRaw), "Scope Task 2") {
+		t.Fatalf("task export should not contain Scope Task 2, got: %s", string(taskExportRaw))
+	}
+}
+
+func TestNotificationFlowOnTaskAssign(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+
+	permReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/rbac/permissions", nil)
+	permReq.Header.Set("Authorization", "Bearer "+adminToken)
+	permResp, err := http.DefaultClient.Do(permReq)
+	if err != nil {
+		t.Fatalf("query permissions failed: %v", err)
+	}
+	var permissions []map[string]any
+	_ = json.NewDecoder(permResp.Body).Decode(&permissions)
+	permResp.Body.Close()
+	codeToID := map[string]uint{}
+	for _, permission := range permissions {
+		code, _ := permission["code"].(string)
+		id, _ := permission["id"].(float64)
+		codeToID[code] = uint(id)
+	}
+
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "notify-reader",
+		"description": "notify reader",
+		"permissionIds": []uint{
+			codeToID["projects.read"], codeToID["tasks.read"], codeToID["notifications.read"], codeToID["notifications.write"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create role status expected 201 got %d", roleResp.StatusCode)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "notify_u1",
+		"name":          "Notify U1",
+		"email":         "notify_u1@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if userResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create user status expected 201 got %d", userResp.StatusCode)
+	}
+	userID := uint(userBody["id"].(float64))
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code": "NOTIFY-P1", "name": "Notify Project", "description": "d",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create project status expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Notify Task",
+		"projectId":   projectID,
+		"status":      "pending",
+		"progress":    0,
+		"startAt":     "2026-03-24T10:00:00Z",
+		"endAt":       "2026-03-25T10:00:00Z",
+		"assigneeIds": []uint{userID},
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create task status expected 201 got %d", taskResp.StatusCode)
+	}
+	taskID := int(taskBody["id"].(float64))
+
+	loginPayload := map[string]string{"username": "notify_u1", "password": "pass1234"}
+	loginRaw, _ := json.Marshal(loginPayload)
+	loginResp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(loginRaw))
+	if err != nil {
+		t.Fatalf("login notify_u1 failed: %v", err)
+	}
+	var loginResult map[string]any
+	_ = json.NewDecoder(loginResp.Body).Decode(&loginResult)
+	loginResp.Body.Close()
+	userToken := loginResult["token"].(string)
+
+	countReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/notifications/unread-count", nil)
+	countReq.Header.Set("Authorization", "Bearer "+userToken)
+	countResp, err := http.DefaultClient.Do(countReq)
+	if err != nil {
+		t.Fatalf("count notifications failed: %v", err)
+	}
+	var countBody map[string]any
+	_ = json.NewDecoder(countResp.Body).Decode(&countBody)
+	countResp.Body.Close()
+	if int(countBody["count"].(float64)) < 1 {
+		t.Fatalf("expected unread count >=1 got %v", countBody["count"])
+	}
+
+	_, _ = requestJSON(t, http.MethodPut, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID), adminToken, map[string]any{
+		"title":       "Notify Task",
+		"projectId":   projectID,
+		"status":      "processing",
+		"progress":    60,
+		"startAt":     "2026-03-24T10:00:00Z",
+		"endAt":       "2026-03-26T10:00:00Z",
+		"assigneeIds": []uint{},
+	})
+
+	markAllReq, _ := http.NewRequest(http.MethodPatch, ts.URL+"/api/v1/notifications/read-all", nil)
+	markAllReq.Header.Set("Authorization", "Bearer "+userToken)
+	markAllResp, err := http.DefaultClient.Do(markAllReq)
+	if err != nil {
+		t.Fatalf("mark all notifications read failed: %v", err)
+	}
+	if markAllResp.StatusCode != http.StatusOK {
+		t.Fatalf("mark all status expected 200 got %d", markAllResp.StatusCode)
+	}
+	markAllResp.Body.Close()
 }

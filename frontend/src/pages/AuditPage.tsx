@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../services/api'
 import { DataState } from '../components/DataState'
+import { formatDateTime } from '../utils/datetime'
 
 export function AuditPage() {
   const [items, setItems] = useState<any[]>([])
@@ -48,7 +49,7 @@ export function AuditPage() {
               {items.map((item) => (
                 <tr key={item.id}>
                   <td>{item.id}</td><td>{item.module}</td><td>{item.action}</td><td>{item.userId}</td><td>{item.targetId}</td>
-                  <td>{item.success ? '成功' : '失败'}</td><td>{new Date(item.createdAt).toLocaleString()}</td>
+                  <td>{item.success ? '成功' : '失败'}</td><td>{formatDateTime(item.createdAt)}</td>
                 </tr>
               ))}
             </tbody>

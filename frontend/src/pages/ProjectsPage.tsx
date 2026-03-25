@@ -6,6 +6,7 @@ import { Task } from '../types'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
+import { formatDateTime } from '../utils/datetime'
 
 interface ProjectForm {
   id?: number
@@ -39,6 +40,8 @@ export function ProjectsPage() {
   const [tree, setTree] = useState<Task[]>([])
   const [form, setForm] = useState<ProjectForm>(initialForm)
   const [modalOpen, setModalOpen] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailProject, setDetailProject] = useState<any | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -151,6 +154,16 @@ export function ProjectsPage() {
     await load()
   }
 
+  const viewDetail = async (item: any) => {
+    try {
+      const res = await api.get(`/projects/${item.id}`)
+      setDetailProject(res.data || item)
+    } catch {
+      setDetailProject(item)
+    }
+    setDetailOpen(true)
+  }
+
   const processedProjects = useMemo(() => {
     const lowerKeyword = keyword.trim().toLowerCase()
     let result = projects.filter((project) => {
@@ -221,8 +234,13 @@ export function ProjectsPage() {
           <table><thead><tr><th>编码</th><th>名称</th><th>描述</th><th>负责人</th><th>部门</th><th>操作</th></tr></thead><tbody>
             {pagedProjects.map((p) => (
               <tr key={p.id}>
-                <td>{p.code}</td><td>{p.name}</td><td>{p.description}</td><td>{(p.users || []).length}</td><td>{(p.departments || []).length}</td>
+                <td>{p.code}</td>
+                <td>{p.name}</td>
+                <td><span className="cell-ellipsis" title={p.description || '-'}>{p.description || '-'}</span></td>
+                <td>{(p.users || []).length}</td>
+                <td>{(p.departments || []).length}</td>
                 <td>
+                  <button className="btn secondary" onClick={() => { void viewDetail(p) }}>查看详情</button>
                   <button className="btn secondary" onClick={() => edit(p)}>编辑</button>
                   <button className="btn danger" onClick={() => onDelete(p.id)}>删除</button>
                 </td>
@@ -236,6 +254,39 @@ export function ProjectsPage() {
 
       <GanttChart tasks={gantt} />
 
+      <Modal open={detailOpen} title="项目详情" onClose={() => setDetailOpen(false)}>
+        {detailProject && (
+          <div className="detail-grid">
+            <section className="detail-section">
+              <h4>基础信息</h4>
+              <div className="detail-columns">
+                <div><strong>项目ID：</strong>{detailProject.id}</div>
+                <div><strong>编码：</strong>{detailProject.code || '-'}</div>
+                <div><strong>名称：</strong>{detailProject.name || '-'}</div>
+              </div>
+              <div className="detail-description-card">
+                <strong>描述</strong>
+                <p>{detailProject.description || '-'}</p>
+              </div>
+            </section>
+            <section className="detail-section">
+              <h4>时间信息</h4>
+              <div className="detail-columns">
+                <div className="detail-time-line"><strong>项目周期：</strong>{formatDateTime(detailProject.startAt)} - {formatDateTime(detailProject.endAt)}</div>
+              </div>
+            </section>
+            <section className="detail-section">
+              <h4>关联信息</h4>
+              <div className="detail-columns">
+                <div><strong>负责人：</strong>{(detailProject.users || []).map((u: any) => `${u.name}(${u.username})`).join('，') || '-'}</div>
+                <div><strong>参与部门：</strong>{(detailProject.departments || []).map((d: any) => d.name).join('，') || '-'}</div>
+                <div><strong>任务数量：</strong>{Array.isArray(detailProject.tasks) ? detailProject.tasks.length : '-'}</div>
+              </div>
+            </section>
+          </div>
+        )}
+      </Modal>
+
       <Modal open={modalOpen} title={form.id ? '编辑项目' : '新增项目'} onClose={() => setModalOpen(false)}>
         <form className="form-grid" onSubmit={submit}>
           <label className="required-label" htmlFor="project-code">编码</label>
@@ -243,7 +294,7 @@ export function ProjectsPage() {
           <label className="required-label" htmlFor="project-name">名称</label>
           <input id="project-name" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} required />
           <label htmlFor="project-description">描述</label>
-          <input id="project-description" value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} />
+          <textarea id="project-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} />
           <label htmlFor="project-start">开始时间</label>
           <input id="project-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} />
           <label htmlFor="project-end">结束时间</label>
