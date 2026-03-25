@@ -67,7 +67,7 @@ func (h *Handler) ExportProjectsCSV(c *gin.Context) {
 		query = query.Where("code LIKE ? OR name LIKE ? OR description LIKE ?", like, like, like)
 	}
 	if err := query.Find(&projects).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "EXPORT_PROJECTS_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "EXPORT_PROJECTS_FAILED", err)
 		return
 	}
 
@@ -106,7 +106,7 @@ func (h *Handler) ExportTasksCSV(c *gin.Context) {
 		query = query.Where("task_no LIKE ? OR title LIKE ? OR description LIKE ?", like, like, like)
 	}
 	if err := query.Find(&tasks).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "EXPORT_TASKS_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "EXPORT_TASKS_FAILED", err)
 		return
 	}
 
@@ -122,6 +122,7 @@ func (h *Handler) ExportTasksCSV(c *gin.Context) {
 			task.Title,
 			task.Description,
 			string(task.Status),
+			string(task.Priority),
 			strconv.Itoa(task.Progress),
 			formatTime(task.StartAt),
 			formatTime(task.EndAt),
@@ -133,7 +134,7 @@ func (h *Handler) ExportTasksCSV(c *gin.Context) {
 		})
 	}
 	writeCSV(c, "tasks.csv",
-		[]string{"ID", "任务编号", "标题", "描述", "状态", "进度", "开始时间", "结束时间", "项目ID", "父任务ID", "创建人ID", "执行人", "创建时间"},
+		[]string{"ID", "任务编号", "标题", "描述", "状态", "优先级", "进度", "开始时间", "结束时间", "项目ID", "父任务ID", "创建人ID", "执行人", "创建时间"},
 		rows,
 	)
 }

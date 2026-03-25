@@ -50,7 +50,9 @@ Base URL: `http://localhost:8080/api/v1`
 - 响应: `{ users: [{ id, name, username, email }], departments: [{ id, name }] }`
 ### GET `/projects/:id`
 ### POST `/projects`
-- 请求体: `{ code, name, description, startAt, endAt, userIds, departmentIds }`
+- 请求体: `{ code?, name, description, startAt, endAt, userIds, departmentIds }`
+- 约束:
+  - `code` 为空时后端自动生成随机项目编码
 ### PUT `/projects/:id`
 ### DELETE `/projects/:id`
 
@@ -62,7 +64,9 @@ Base URL: `http://localhost:8080/api/v1`
 
 ## 任务管理
 ### GET `/tasks`
-- Query: `projectId` `status` `page` `pageSize` `keyword`
+- Query: `projectId` `status` `page` `pageSize` `keyword` `sortBy` `sortOrder`
+  - `sortBy=priority` 时支持优先级排序
+  - `sortOrder` 支持：`high|medium|low`（默认 `high`）
 ### GET `/tasks/export`
 - 用途: 导出当前可见任务为 CSV
 - Query: `projectId` `status` `keyword`
@@ -72,11 +76,12 @@ Base URL: `http://localhost:8080/api/v1`
 - 响应: `{ users: [{ id, name, username, email }] }`
 
 ### POST `/tasks`
-- 请求体: `{ taskNo?, title, description, status, progress, startAt, endAt, projectId, parentId, assigneeIds }`
+- 请求体: `{ taskNo?, title, description, status, priority, progress, startAt, endAt, projectId, parentId, assigneeIds }`
 - 约束:
   - `creatorId` 默认使用当前登录用户
   - `taskNo` 唯一（为空自动生成）
   - `status` 支持 `pending|queued|processing|completed`
+  - `priority` 支持 `high|medium|low`（默认 `high`）
 
 ### GET `/tasks/progress-list`
 - 进度列表统计

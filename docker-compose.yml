@@ -1,6 +1,6 @@
 services:
   mysql:
-    image: ${MYSQL_IMAGE:-mysql:8.4}
+    image: ${MYSQL_IMAGE:-registry.cn-guangzhou.aliyuncs.com/joe/mysql:lts}
     container_name: pm-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
@@ -16,7 +16,12 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        GO_BUILDER_IMAGE: ${GO_BUILDER_IMAGE:-golang:1.23-alpine}
+        APP_RUNTIME_IMAGE: ${APP_RUNTIME_IMAGE:-alpine:3.20}
+        GO_PROXY: ${GO_PROXY:-https://goproxy.cn,direct}
     container_name: pm-backend
     depends_on:
       mysql:
@@ -33,7 +38,12 @@ services:
       - '${BACKEND_PORT:-8080}:${APP_PORT:-8080}'
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        NODE_BUILDER_IMAGE: ${NODE_BUILDER_IMAGE:-node:22-alpine}
+        NGINX_IMAGE: ${NGINX_IMAGE:-registry.cn-guangzhou.aliyuncs.com/joe/nginx:alpine}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
     container_name: pm-frontend
     depends_on:
       - backend

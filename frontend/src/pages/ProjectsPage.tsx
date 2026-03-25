@@ -1,8 +1,8 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { api } from '../services/api'
+import { FormEvent, useEffect, useState } from 'react'
+import { api, fetchArray, fetchData, fetchPage, readApiError } from '../services/api'
 import { GanttChart } from '../components/GanttChart'
 import { TaskTree } from '../components/TaskTree'
-import { Task } from '../types'
+import { Task, Department, Project, User } from '../types'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
@@ -21,27 +21,27 @@ interface ProjectForm {
 
 const initialForm: ProjectForm = { code: '', name: '', description: '', startAt: '', endAt: '', userIds: [], departmentIds: [] }
 
-type SortKey = 'code' | 'name' | 'owners' | 'departments' | 'createdAt'
+type SortKey = 'code' | 'name' | 'createdAt' | 'startAt' | 'endAt'
 type SortOrder = 'asc' | 'desc'
 const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
 
 export function ProjectsPage() {
-  const [projects, setProjects] = useState<any[]>([])
-  const [users, setUsers] = useState<any[]>([])
-  const [departments, setDepartments] = useState<any[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
   const [selected, setSelected] = useState<number>()
   const [keyword, setKeyword] = useState('')
-  const [filter, setFilter] = useState<'all' | 'hasOwner' | 'hasDepartment'>('all')
   const [sortKey, setSortKey] = useState<SortKey>('createdAt')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [total, setTotal] = useState(0)
   const [gantt, setGantt] = useState<Task[]>([])
   const [tree, setTree] = useState<Task[]>([])
   const [form, setForm] = useState<ProjectForm>(initialForm)
   const [modalOpen, setModalOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
-  const [detailProject, setDetailProject] = useState<any | null>(null)
+  const [detailProject, setDetailProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -54,14 +54,19 @@ export function ProjectsPage() {
     try {
       setLoading(true)
       setError('')
-      const projectRes = await api.get('/projects?page=1&pageSize=200')
-      const rawList = projectRes.data?.list ?? projectRes.data
-      const list = Array.isArray(rawList) ? rawList : []
-      setProjects(list)
-      if (list.length > 0 && !selected) setSelected(list[0].id)
-    } catch (loadError: any) {
-      setError(loadError?.response?.data?.message || '项目列表加载失败')
+      const projectPage = await fetchPage<Project>(
+        '/projects',
+        { page, pageSize, keyword, sortBy: sortKey, sortOrder },
+        { page, pageSize }
+      )
+      setProjects(projectPage.list)
+      setTotal(projectPage.total)
+      if (projectPage.list.length > 0 && !selected) setSelected(projectPage.list[0].id)
+      if (projectPage.list.length === 0) setSelected(undefined)
+    } catch (loadError) {
+      setError(readApiError(loadError, '项目列表加载失败'))
       setProjects([])
+      setTotal(0)
     } finally {
       setLoading(false)
     }
@@ -69,25 +74,23 @@ export function ProjectsPage() {
 
   useEffect(() => {
     void load()
-  }, [])
+  }, [page, pageSize, keyword, sortKey, sortOrder])
 
   useEffect(() => {
     if (!selected) return
-    void api.get(`/projects/${selected}/gantt`).then((res) => setGantt(Array.isArray(res.data) ? res.data : []))
-    void api.get(`/projects/${selected}/task-tree`).then((res) => setTree(Array.isArray(res.data) ? res.data : []))
+    void fetchArray<Task>(`/projects/${selected}/gantt`, undefined, { silent: true }).then(setGantt).catch(() => setGantt([]))
+    void fetchArray<Task>(`/projects/${selected}/task-tree`, undefined, { silent: true }).then(setTree).catch(() => setTree([]))
   }, [selected])
 
   useEffect(() => {
     if (!modalOpen) return
     const timer = window.setTimeout(() => {
-      const userQuery = ownerKeyword.trim() ? `&keyword=${encodeURIComponent(ownerKeyword.trim())}` : ''
-      const departmentQuery = departmentKeyword.trim() ? `&keyword=${encodeURIComponent(departmentKeyword.trim())}` : ''
       void Promise.all([
-        api.get(`/users?page=1&pageSize=200${userQuery}`, { silent: true } as any).catch(() => ({ data: { list: [] } })),
-        api.get(`/departments?page=1&pageSize=200${departmentQuery}`, { silent: true } as any).catch(() => ({ data: { list: [] } }))
-      ]).then(([userRes, departmentRes]) => {
-        setUsers(Array.isArray(userRes.data?.list) ? userRes.data.list : [])
-        setDepartments(Array.isArray(departmentRes.data?.list) ? departmentRes.data.list : [])
+        fetchPage<User>('/users', { page: 1, pageSize: 200, keyword: ownerKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 })),
+        fetchPage<Department>('/departments', { page: 1, pageSize: 200, keyword: departmentKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 }))
+      ]).then(([userPage, departmentPage]) => {
+        setUsers(userPage.list)
+        setDepartments(departmentPage.list)
       })
     }, 300)
     return () => window.clearTimeout(timer)
@@ -102,7 +105,7 @@ export function ProjectsPage() {
     setModalOpen(true)
   }
 
-  const edit = (item: any) => {
+  const edit = (item: Project) => {
     setForm({
       id: item.id,
       code: item.code,
@@ -110,8 +113,8 @@ export function ProjectsPage() {
       description: item.description,
       startAt: item.startAt ? item.startAt.slice(0, 16) : '',
       endAt: item.endAt ? item.endAt.slice(0, 16) : '',
-      userIds: (item.users || []).map((user: any) => user.id),
-      departmentIds: (item.departments || []).map((department: any) => department.id)
+      userIds: (item.users || []).map((user) => user.id),
+      departmentIds: (item.departments || []).map((department) => department.id)
     })
     setFormError('')
     setFormSuccess('')
@@ -141,8 +144,8 @@ export function ProjectsPage() {
       setModalOpen(false)
       setForm(initialForm)
       await load()
-    } catch (submitError: any) {
-      setFormError(submitError?.response?.data?.message || '保存项目失败')
+    } catch (submitError) {
+      setFormError(readApiError(submitError, '保存项目失败'))
     } finally {
       setSubmitting(false)
     }
@@ -150,69 +153,36 @@ export function ProjectsPage() {
 
   const onDelete = async (id: number) => {
     if (!confirm('确认删除该项目？')) return
-    await api.delete(`/projects/${id}`)
-    await load()
+    try {
+      await api.delete(`/projects/${id}`)
+      await load()
+    } catch (deleteError) {
+      setError(readApiError(deleteError, '删除项目失败'))
+    }
   }
 
-  const viewDetail = async (item: any) => {
+  const viewDetail = async (item: Project) => {
     try {
-      const res = await api.get(`/projects/${item.id}`)
-      setDetailProject(res.data || item)
+      const detail = await fetchData<Project>(`/projects/${item.id}`)
+      setDetailProject(detail || item)
     } catch {
       setDetailProject(item)
     }
     setDetailOpen(true)
   }
 
-  const processedProjects = useMemo(() => {
-    const lowerKeyword = keyword.trim().toLowerCase()
-    let result = projects.filter((project) => {
-      const keywordMatched = !lowerKeyword || [project.code, project.name, project.description].some((value) => String(value || '').toLowerCase().includes(lowerKeyword))
-      if (!keywordMatched) return false
-
-      if (filter === 'hasOwner') return (project.users || []).length > 0
-      if (filter === 'hasDepartment') return (project.departments || []).length > 0
-      return true
-    })
-
-    const getter = (project: any): string | number => {
-      if (sortKey === 'owners') return (project.users || []).length
-      if (sortKey === 'departments') return (project.departments || []).length
-      return String(project[sortKey] ?? '')
-    }
-
-    result = [...result].sort((a, b) => {
-      const left = getter(a)
-      const right = getter(b)
-      if (typeof left === 'number' && typeof right === 'number') return sortOrder === 'asc' ? left - right : right - left
-      return sortOrder === 'asc' ? String(left).localeCompare(String(right)) : String(right).localeCompare(String(left))
-    })
-
-    return result
-  }, [projects, keyword, filter, sortKey, sortOrder])
-
-  const total = processedProjects.length
-  const totalPages = Math.max(Math.ceil(total / pageSize), 1)
-  const currentPage = Math.min(page, totalPages)
-  const pagedProjects = processedProjects.slice((currentPage - 1) * pageSize, currentPage * pageSize)
-
   return (
     <section className="page-section">
       <div className="card toolbar-grid">
         <input aria-label="搜索项目" value={keyword} placeholder="搜索：编码/名称/描述" onChange={(e) => { setKeyword(e.target.value); setPage(1) }} />
-        <select aria-label="项目筛选" value={filter} onChange={(e) => { setFilter(e.target.value as any); setPage(1) }}>
-          <option value="all">全部项目</option>
-          <option value="hasOwner">仅有负责人</option>
-          <option value="hasDepartment">仅有部门</option>
-        </select>
-        <select aria-label="项目排序字段" value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
+        <select aria-label="项目排序字段" value={sortKey} onChange={(e) => { setSortKey(e.target.value as SortKey); setPage(1) }}>
           <option value="createdAt">按创建时间</option>
           <option value="code">按编码</option>
           <option value="name">按名称</option>
-          <option value="owners">按负责人数量</option>
-          <option value="departments">按部门数量</option>
+          <option value="startAt">按开始时间</option>
+          <option value="endAt">按结束时间</option>
         </select>
-        <select aria-label="项目排序方式" value={sortOrder} onChange={(e) => setSortOrder(e.target.value as SortOrder)}>
+        <select aria-label="项目排序方式" value={sortOrder} onChange={(e) => { setSortOrder(e.target.value as SortOrder); setPage(1) }}>
           <option value="desc">降序</option>
           <option value="asc">升序</option>
         </select>
@@ -229,10 +199,10 @@ export function ProjectsPage() {
       <TaskTree tasks={tree} />
 
       <div className="card">
-        <DataState loading={loading} error={error} empty={!loading && !error && pagedProjects.length === 0} emptyText="暂无匹配的项目" onRetry={() => { void load() }} />
-        {!loading && !error && pagedProjects.length > 0 && (
+        <DataState loading={loading} error={error} empty={!loading && !error && projects.length === 0} emptyText="暂无匹配的项目" onRetry={() => { void load() }} />
+        {!loading && !error && projects.length > 0 && (
           <table><thead><tr><th>编码</th><th>名称</th><th>描述</th><th>负责人</th><th>部门</th><th>操作</th></tr></thead><tbody>
-            {pagedProjects.map((p) => (
+            {projects.map((p) => (
               <tr key={p.id}>
                 <td>{p.code}</td>
                 <td>{p.name}</td>
@@ -250,7 +220,7 @@ export function ProjectsPage() {
         )}
       </div>
 
-      {!loading && !error && total > 0 && <Pagination total={total} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />}
+      {!loading && !error && total > 0 && <Pagination total={total} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />}
 
       <GanttChart tasks={gantt} />
 
@@ -278,8 +248,8 @@ export function ProjectsPage() {
             <section className="detail-section">
               <h4>关联信息</h4>
               <div className="detail-columns">
-                <div><strong>负责人：</strong>{(detailProject.users || []).map((u: any) => `${u.name}(${u.username})`).join('，') || '-'}</div>
-                <div><strong>参与部门：</strong>{(detailProject.departments || []).map((d: any) => d.name).join('，') || '-'}</div>
+                <div><strong>负责人：</strong>{(detailProject.users || []).map((u) => `${u.name}(${u.username})`).join('，') || '-'}</div>
+                <div><strong>参与部门：</strong>{(detailProject.departments || []).map((d) => d.name).join('，') || '-'}</div>
                 <div><strong>任务数量：</strong>{Array.isArray(detailProject.tasks) ? detailProject.tasks.length : '-'}</div>
               </div>
             </section>
@@ -289,8 +259,8 @@ export function ProjectsPage() {
 
       <Modal open={modalOpen} title={form.id ? '编辑项目' : '新增项目'} onClose={() => setModalOpen(false)}>
         <form className="form-grid" onSubmit={submit}>
-          <label className="required-label" htmlFor="project-code">编码</label>
-          <input id="project-code" value={form.code} onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))} required />
+          <label htmlFor="project-code">编码（可空自动生成）</label>
+          <input id="project-code" value={form.code} onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))} />
           <label className="required-label" htmlFor="project-name">名称</label>
           <input id="project-name" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} required />
           <label htmlFor="project-description">描述</label>
@@ -300,39 +270,21 @@ export function ProjectsPage() {
           <label htmlFor="project-end">结束时间</label>
           <input id="project-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} />
           <label htmlFor="project-users">项目负责人</label>
-          <input
-            aria-label="搜索负责人"
-            placeholder="搜索负责人：姓名/用户名/邮箱"
-            value={ownerKeyword}
-            onChange={(e) => setOwnerKeyword(e.target.value)}
-          />
+          <input aria-label="搜索负责人" placeholder="搜索负责人：姓名/用户名/邮箱" value={ownerKeyword} onChange={(e) => setOwnerKeyword(e.target.value)} />
           <div id="project-users" className="multi-checklist">
             {users.map((user) => (
               <label key={user.id} className="multi-check-item">
-                <input
-                  type="checkbox"
-                  checked={form.userIds.includes(user.id)}
-                  onChange={() => setForm((prev) => ({ ...prev, userIds: toggleNumber(prev.userIds, user.id) }))}
-                />
+                <input type="checkbox" checked={form.userIds.includes(user.id)} onChange={() => setForm((prev) => ({ ...prev, userIds: toggleNumber(prev.userIds, user.id) }))} />
                 <span>{user.name} ({user.username})</span>
               </label>
             ))}
           </div>
           <label htmlFor="project-departments">参与部门</label>
-          <input
-            aria-label="搜索部门"
-            placeholder="搜索部门名称"
-            value={departmentKeyword}
-            onChange={(e) => setDepartmentKeyword(e.target.value)}
-          />
+          <input aria-label="搜索部门" placeholder="搜索部门名称" value={departmentKeyword} onChange={(e) => setDepartmentKeyword(e.target.value)} />
           <div id="project-departments" className="multi-checklist">
             {departments.map((department) => (
               <label key={department.id} className="multi-check-item">
-                <input
-                  type="checkbox"
-                  checked={form.departmentIds.includes(department.id)}
-                  onChange={() => setForm((prev) => ({ ...prev, departmentIds: toggleNumber(prev.departmentIds, department.id) }))}
-                />
+                <input type="checkbox" checked={form.departmentIds.includes(department.id)} onChange={() => setForm((prev) => ({ ...prev, departmentIds: toggleNumber(prev.departmentIds, department.id) }))} />
                 <span>{department.name}</span>
               </label>
             ))}

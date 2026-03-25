@@ -7,6 +7,7 @@ import (
 	"project-manager/backend/internal/model"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func uniqueUint(values []uint) []uint {
@@ -29,9 +30,13 @@ func uniqueUint(values []uint) []uint {
 }
 
 func (h *Handler) createNotifications(userIDs []uint, title, content, module string, targetID uint) {
+	_ = h.createNotificationsWithDB(h.DB, userIDs, title, content, module, targetID)
+}
+
+func (h *Handler) createNotificationsWithDB(db *gorm.DB, userIDs []uint, title, content, module string, targetID uint) error {
 	ids := uniqueUint(userIDs)
 	if len(ids) == 0 {
-		return
+		return nil
 	}
 	items := make([]model.Notification, 0, len(ids))
 	for _, userID := range ids {
@@ -44,7 +49,7 @@ func (h *Handler) createNotifications(userIDs []uint, title, content, module str
 			IsRead:   false,
 		})
 	}
-	_ = h.DB.Create(&items).Error
+	return db.Create(&items).Error
 }
 
 func (h *Handler) ListNotifications(c *gin.Context) {
@@ -67,11 +72,11 @@ func (h *Handler) ListNotifications(c *gin.Context) {
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_NOTIFICATIONS_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_NOTIFICATIONS_FAILED", err)
 		return
 	}
 	if err := query.Order("id desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_NOTIFICATIONS_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_NOTIFICATIONS_FAILED", err)
 		return
 	}
 	c.JSON(http.StatusOK, pageResult[model.Notification]{List: items, Total: total, Page: page, PageSize: pageSize})
@@ -81,7 +86,7 @@ func (h *Handler) UnreadNotificationCount(c *gin.Context) {
 	uid := c.GetUint("userId")
 	var count int64
 	if err := h.DB.Model(&model.Notification{}).Where("user_id = ? AND is_read = ?", uid, false).Count(&count).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_NOTIFICATION_COUNT_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_NOTIFICATION_COUNT_FAILED", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"count": count})
@@ -96,7 +101,7 @@ func (h *Handler) MarkNotificationRead(c *gin.Context) {
 	}
 	item.IsRead = true
 	if err := h.DB.Save(&item).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "MARK_NOTIFICATION_READ_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "MARK_NOTIFICATION_READ_FAILED", err)
 		return
 	}
 	c.JSON(http.StatusOK, item)
@@ -105,7 +110,7 @@ func (h *Handler) MarkNotificationRead(c *gin.Context) {
 func (h *Handler) MarkAllNotificationsRead(c *gin.Context) {
 	uid := c.GetUint("userId")
 	if err := h.DB.Model(&model.Notification{}).Where("user_id = ? AND is_read = ?", uid, false).Update("is_read", true).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "MARK_ALL_NOTIFICATIONS_READ_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "MARK_ALL_NOTIFICATIONS_READ_FAILED", err)
 		return
 	}
 	respondMessage(c, http.StatusOK, "NOTIFICATIONS_MARKED_READ", "已全部标记为已读")

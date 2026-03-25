@@ -47,3 +47,17 @@ func parseRFC3339(value string) (*time.Time, error) {
 	}
 	return &parsed, nil
 }
+
+func parseSort(c *gin.Context, defaultClause string, allowed map[string]string) string {
+	sortBy := strings.TrimSpace(c.Query("sortBy"))
+	column, ok := allowed[sortBy]
+	if !ok {
+		return defaultClause
+	}
+
+	order := strings.ToLower(strings.TrimSpace(c.Query("sortOrder")))
+	if order != "asc" {
+		order = "desc"
+	}
+	return column + " " + order
+}

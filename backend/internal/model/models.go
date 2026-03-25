@@ -5,10 +5,18 @@ import "time"
 type TaskStatus string
 
 const (
-	TaskPending   TaskStatus = "pending"
-	TaskQueued    TaskStatus = "queued"
+	TaskPending    TaskStatus = "pending"
+	TaskQueued     TaskStatus = "queued"
 	TaskProcessing TaskStatus = "processing"
-	TaskCompleted TaskStatus = "completed"
+	TaskCompleted  TaskStatus = "completed"
+)
+
+type TaskPriority string
+
+const (
+	TaskPriorityHigh   TaskPriority = "high"
+	TaskPriorityMedium TaskPriority = "medium"
+	TaskPriorityLow    TaskPriority = "low"
 )
 
 type BaseModel struct {
@@ -19,15 +27,15 @@ type BaseModel struct {
 
 type User struct {
 	BaseModel
-	Username   string       `gorm:"size:64;uniqueIndex;not null" json:"username"`
-	Name       string       `gorm:"size:100;not null" json:"name"`
-	Email      string       `gorm:"size:120;uniqueIndex;not null" json:"email"`
-	Password   string       `gorm:"size:255;not null" json:"-"`
-	IsActive   bool         `gorm:"default:true" json:"isActive"`
-	Roles      []Role       `gorm:"many2many:user_roles;" json:"roles,omitempty"`
+	Username    string       `gorm:"size:64;uniqueIndex;not null" json:"username"`
+	Name        string       `gorm:"size:100;not null" json:"name"`
+	Email       string       `gorm:"size:120;uniqueIndex;not null" json:"email"`
+	Password    string       `gorm:"size:255;not null" json:"-"`
+	IsActive    bool         `gorm:"default:true" json:"isActive"`
+	Roles       []Role       `gorm:"many2many:user_roles;" json:"roles,omitempty"`
 	Departments []Department `gorm:"many2many:user_departments;" json:"departments,omitempty"`
-	Projects   []Project    `gorm:"many2many:project_users;" json:"projects,omitempty"`
-	Tasks      []Task       `gorm:"many2many:task_users;" json:"tasks,omitempty"`
+	Projects    []Project    `gorm:"many2many:project_users;" json:"projects,omitempty"`
+	Tasks       []Task       `gorm:"many2many:task_users;" json:"tasks,omitempty"`
 }
 
 type Role struct {
@@ -54,39 +62,40 @@ type Department struct {
 
 type Project struct {
 	BaseModel
-	Code         string       `gorm:"size:64;uniqueIndex;not null" json:"code"`
-	Name         string       `gorm:"size:150;not null" json:"name"`
-	Description  string       `gorm:"type:text" json:"description"`
-	StartAt      *time.Time   `json:"startAt"`
-	EndAt        *time.Time   `json:"endAt"`
-	Users        []User       `gorm:"many2many:project_users;" json:"users,omitempty"`
-	Departments  []Department `gorm:"many2many:project_departments;" json:"departments,omitempty"`
-	Tasks        []Task       `json:"tasks,omitempty"`
+	Code        string       `gorm:"size:64;uniqueIndex;not null" json:"code"`
+	Name        string       `gorm:"size:150;not null" json:"name"`
+	Description string       `gorm:"type:text" json:"description"`
+	StartAt     *time.Time   `json:"startAt"`
+	EndAt       *time.Time   `json:"endAt"`
+	Users       []User       `gorm:"many2many:project_users;" json:"users,omitempty"`
+	Departments []Department `gorm:"many2many:project_departments;" json:"departments,omitempty"`
+	Tasks       []Task       `json:"tasks,omitempty"`
 }
 
 type Task struct {
 	BaseModel
-	TaskNo      string      `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`
-	Title       string      `gorm:"size:150;not null" json:"title"`
-	Description string      `gorm:"type:text" json:"description"`
-	Status      TaskStatus  `gorm:"size:20;default:'pending'" json:"status"`
-	Progress    int         `gorm:"default:0" json:"progress"`
-	StartAt     *time.Time  `json:"startAt"`
-	EndAt       *time.Time  `json:"endAt"`
-	CreatorID   uint        `gorm:"not null" json:"creatorId"`
-	Creator     User        `json:"creator,omitempty"`
-	ProjectID   uint        `gorm:"not null;index" json:"projectId"`
-	Project     Project     `json:"project,omitempty"`
-	ParentID    *uint       `gorm:"index" json:"parentId"`
-	Children    []Task      `gorm:"foreignKey:ParentID" json:"children,omitempty"`
-	Assignees   []User      `gorm:"many2many:task_users;" json:"assignees,omitempty"`
+	TaskNo      string       `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`
+	Title       string       `gorm:"size:150;not null" json:"title"`
+	Description string       `gorm:"type:text" json:"description"`
+	Status      TaskStatus   `gorm:"size:20;default:'pending';index" json:"status"`
+	Priority    TaskPriority `gorm:"size:20;default:'high';index" json:"priority"`
+	Progress    int          `gorm:"default:0" json:"progress"`
+	StartAt     *time.Time   `json:"startAt"`
+	EndAt       *time.Time   `json:"endAt"`
+	CreatorID   uint         `gorm:"not null;index" json:"creatorId"`
+	Creator     User         `json:"creator,omitempty"`
+	ProjectID   uint         `gorm:"not null;index" json:"projectId"`
+	Project     Project      `json:"project,omitempty"`
+	ParentID    *uint        `gorm:"index" json:"parentId"`
+	Children    []Task       `gorm:"foreignKey:ParentID" json:"children,omitempty"`
+	Assignees   []User       `gorm:"many2many:task_users;" json:"assignees,omitempty"`
 }
 
 type AuditLog struct {
 	BaseModel
 	UserID    uint   `gorm:"index" json:"userId"`
-	Module    string `gorm:"size:50;index;not null" json:"module"`
-	Action    string `gorm:"size:50;not null" json:"action"`
+	Module    string `gorm:"size:50;index;index:idx_audit_module_action;not null" json:"module"`
+	Action    string `gorm:"size:50;index:idx_audit_module_action;not null" json:"action"`
 	TargetID  uint   `gorm:"index" json:"targetId"`
 	Method    string `gorm:"size:10;not null" json:"method"`
 	Path      string `gorm:"size:255;not null" json:"path"`
@@ -98,10 +107,10 @@ type AuditLog struct {
 
 type Notification struct {
 	BaseModel
-	UserID   uint   `gorm:"index;not null" json:"userId"`
+	UserID   uint   `gorm:"index;index:idx_notification_user_read;not null" json:"userId"`
 	Title    string `gorm:"size:150;not null" json:"title"`
 	Content  string `gorm:"type:text" json:"content"`
 	Module   string `gorm:"size:50;index;not null" json:"module"`
 	TargetID uint   `gorm:"index" json:"targetId"`
-	IsRead   bool   `gorm:"default:false;index" json:"isRead"`
+	IsRead   bool   `gorm:"default:false;index;index:idx_notification_user_read" json:"isRead"`
 }

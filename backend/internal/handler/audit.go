@@ -2,13 +2,26 @@ package handler
 
 import (
 	"fmt"
+	"log"
+	"net/http"
 
 	"project-manager/backend/internal/model"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
+func auditDetailf(format string, args ...interface{}) string {
+	return fmt.Sprintf(format, args...)
+}
+
 func (h *Handler) writeAudit(c *gin.Context, module, action string, targetID uint, success bool, detail string) {
+	if err := h.writeAuditWithDB(c, h.DB, module, action, targetID, success, detail); err != nil {
+		log.Printf("audit log write failed: %v", err)
+	}
+}
+
+func (h *Handler) writeAuditWithDB(c *gin.Context, db *gorm.DB, module, action string, targetID uint, success bool, detail string) error {
 	uid, _ := c.Get("userId")
 	userID, _ := uid.(uint)
 
@@ -25,9 +38,7 @@ func (h *Handler) writeAudit(c *gin.Context, module, action string, targetID uin
 		UserAgent: c.Request.UserAgent(),
 	}
 
-	if err := h.DB.Create(&log).Error; err != nil {
-		fmt.Printf("audit log write failed: %v\n", err)
-	}
+	return db.Create(&log).Error
 }
 
 func (h *Handler) ListAuditLogs(c *gin.Context) {
@@ -43,17 +54,17 @@ func (h *Handler) ListAuditLogs(c *gin.Context) {
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		respondError(c, 500, "QUERY_AUDIT_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_AUDIT_FAILED", err)
 		return
 	}
 
 	var items []model.AuditLog
 	if err := query.Order("id desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error; err != nil {
-		respondError(c, 500, "QUERY_AUDIT_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_AUDIT_FAILED", err)
 		return
 	}
 
-	c.JSON(200, pageResult[model.AuditLog]{
+	c.JSON(http.StatusOK, pageResult[model.AuditLog]{
 		List:     items,
 		Total:    total,
 		Page:     page,

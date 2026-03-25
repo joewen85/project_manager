@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,10 @@ import (
 )
 
 func setupTestRouter(t *testing.T) *httptest.Server {
+	return setupTestRouterWithHandler(t, nil)
+}
+
+func setupTestRouterWithHandler(t *testing.T, configure func(*handler.Handler)) *httptest.Server {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	if err != nil {
@@ -35,6 +40,9 @@ func setupTestRouter(t *testing.T) *httptest.Server {
 
 	cfg := config.Config{JWTSecret: "test-secret"}
 	h := handler.New(db, cfg)
+	if configure != nil {
+		configure(h)
+	}
 	engine := New(cfg, h)
 	return httptest.NewServer(engine)
 }
@@ -546,4 +554,169 @@ func TestNotificationFlowOnTaskAssign(t *testing.T) {
 		t.Fatalf("mark all status expected 200 got %d", markAllResp.StatusCode)
 	}
 	markAllResp.Body.Close()
+}
+
+func TestTaskCreateRollbackOnFailpoint(t *testing.T) {
+	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
+		h.TxFailpoint = func(point string) error {
+			if point == "tasks.create.after_assignees" {
+				return errors.New("failpoint: tasks create")
+			}
+			return nil
+		}
+	})
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", token, map[string]any{
+		"code": "ROLLBACK-TASK-P1", "name": "Rollback Task Project", "description": "d",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create project status expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	taskResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", token, map[string]any{
+		"title":       "Rollback Task",
+		"projectId":   projectID,
+		"status":      "pending",
+		"progress":    10,
+		"startAt":     "2026-03-24T10:00:00Z",
+		"endAt":       "2026-03-25T10:00:00Z",
+		"assigneeIds": []uint{1},
+	})
+	if taskResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("task create with failpoint expected 400 got %d", taskResp.StatusCode)
+	}
+
+	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks?page=1&pageSize=20&projectId="+strconv.Itoa(projectID), token, nil)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("query tasks status expected 200 got %d", listResp.StatusCode)
+	}
+	total := int(listBody["total"].(float64))
+	if total != 0 {
+		t.Fatalf("expected task rollback, total should be 0 got %d", total)
+	}
+}
+
+func TestProjectUpdateRollbackOnFailpoint(t *testing.T) {
+	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
+		h.TxFailpoint = func(point string) error {
+			if point == "projects.update.after_relations" {
+				return errors.New("failpoint: projects update")
+			}
+			return nil
+		}
+	})
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", token, map[string]any{
+		"code": "ROLLBACK-PROJECT-P1", "name": "Old Name", "description": "old",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create project status expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	updateResp, _ := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/projects/"+strconv.Itoa(projectID), token, map[string]any{
+		"code":          "ROLLBACK-PROJECT-P1",
+		"name":          "New Name Should Rollback",
+		"description":   "new",
+		"userIds":       []uint{1},
+		"departmentIds": []uint{},
+	})
+	if updateResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("update project with failpoint expected 400 got %d", updateResp.StatusCode)
+	}
+
+	detailResp, detailBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/projects/"+strconv.Itoa(projectID), token, nil)
+	if detailResp.StatusCode != http.StatusOK {
+		t.Fatalf("project detail status expected 200 got %d", detailResp.StatusCode)
+	}
+	name, _ := detailBody["name"].(string)
+	if name != "Old Name" {
+		t.Fatalf("expected rollback project name old value, got %s", name)
+	}
+}
+
+func TestRbacCreateRoleRollbackOnFailpoint(t *testing.T) {
+	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
+		h.TxFailpoint = func(point string) error {
+			if point == "rbac.create_role.after_permissions" {
+				return errors.New("failpoint: rbac create role")
+			}
+			return nil
+		}
+	})
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+
+	roleName := "rollback-role"
+	createResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", token, map[string]any{
+		"name":          roleName,
+		"description":   "rollback test",
+		"permissionIds": []uint{1},
+	})
+	if createResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("create role with failpoint expected 400 got %d", createResp.StatusCode)
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/rbac/roles", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rawResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request roles failed: %v", err)
+	}
+	defer rawResp.Body.Close()
+	var roles []map[string]any
+	_ = json.NewDecoder(rawResp.Body).Decode(&roles)
+	for _, role := range roles {
+		name, _ := role["name"].(string)
+		if name == roleName {
+			t.Fatalf("role should rollback and not be persisted")
+		}
+	}
+}
+
+func TestRbacCreatePermissionRollbackOnFailpoint(t *testing.T) {
+	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
+		h.TxFailpoint = func(point string) error {
+			if point == "rbac.create_permission.after_create" {
+				return errors.New("failpoint: rbac create permission")
+			}
+			return nil
+		}
+	})
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+	code := "rollback.permission"
+	createResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/permissions", token, map[string]any{
+		"code": code,
+		"name": "Rollback Permission",
+	})
+	if createResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("create permission with failpoint expected 400 got %d", createResp.StatusCode)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/rbac/permissions", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("query permissions failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("query permissions status expected 200 got %d", resp.StatusCode)
+	}
+	var permissions []map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&permissions)
+	for _, permission := range permissions {
+		permissionCode, _ := permission["code"].(string)
+		if permissionCode == code {
+			t.Fatalf("permission should rollback and not be persisted")
+		}
+	}
 }

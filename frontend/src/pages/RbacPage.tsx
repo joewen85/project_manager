@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { api } from '../services/api'
+import { api, fetchArray, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
 import { Modal } from '../components/Modal'
+import { Permission, Role } from '../types'
 
 interface RoleForm {
   id?: number
@@ -21,8 +22,8 @@ const initialRoleForm: RoleForm = { name: '', description: '', permissionIds: []
 const initialPermissionForm: PermissionForm = { code: '', name: '', description: '' }
 
 export function RbacPage() {
-  const [roles, setRoles] = useState<any[]>([])
-  const [permissions, setPermissions] = useState<any[]>([])
+  const [roles, setRoles] = useState<Role[]>([])
+  const [permissions, setPermissions] = useState<Permission[]>([])
   const [roleForm, setRoleForm] = useState<RoleForm>(initialRoleForm)
   const [permissionForm, setPermissionForm] = useState<PermissionForm>(initialPermissionForm)
   const [loading, setLoading] = useState(false)
@@ -40,14 +41,14 @@ export function RbacPage() {
     try {
       setLoading(true)
       setError('')
-      const [rolesRes, permissionsRes] = await Promise.all([
-        api.get('/rbac/roles'),
-        api.get('/rbac/permissions')
+      const [roleList, permissionList] = await Promise.all([
+        fetchArray<Role>('/rbac/roles'),
+        fetchArray<Permission>('/rbac/permissions')
       ])
-      setRoles(rolesRes.data ?? [])
-      setPermissions(permissionsRes.data ?? [])
-    } catch (loadError: any) {
-      setError(loadError?.response?.data?.message || 'RBAC 数据加载失败')
+      setRoles(roleList)
+      setPermissions(permissionList)
+    } catch (loadError) {
+      setError(readApiError(loadError, 'RBAC 数据加载失败'))
       setRoles([])
       setPermissions([])
     } finally {
@@ -73,8 +74,8 @@ export function RbacPage() {
       setRoleModalOpen(false)
       setRoleForm(initialRoleForm)
       await load()
-    } catch (submitError: any) {
-      setRoleFormError(submitError?.response?.data?.message || '保存角色失败')
+    } catch (submitError) {
+      setRoleFormError(readApiError(submitError, '保存角色失败'))
     } finally {
       setSubmittingRole(false)
     }
@@ -94,26 +95,26 @@ export function RbacPage() {
       setPermissionModalOpen(false)
       setPermissionForm(initialPermissionForm)
       await load()
-    } catch (submitError: any) {
-      setPermissionFormError(submitError?.response?.data?.message || '保存权限失败')
+    } catch (submitError) {
+      setPermissionFormError(readApiError(submitError, '保存权限失败'))
     } finally {
       setSubmittingPermission(false)
     }
   }
 
-  const editRole = (role: any) => {
+  const editRole = (role: Role) => {
     setRoleForm({
       id: role.id,
       name: role.name,
       description: role.description,
-      permissionIds: (role.permissions || []).map((item: any) => item.id)
+      permissionIds: (role.permissions || []).map((item) => item.id)
     })
     setRoleFormError('')
     setRoleFormSuccess('')
     setRoleModalOpen(true)
   }
 
-  const editPermission = (permission: any) => {
+  const editPermission = (permission: Permission) => {
     setPermissionForm({
       id: permission.id,
       code: permission.code,

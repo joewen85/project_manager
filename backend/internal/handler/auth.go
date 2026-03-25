@@ -18,7 +18,7 @@ type loginRequest struct {
 func (h *Handler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		respondValidationError(c, err)
 		return
 	}
 

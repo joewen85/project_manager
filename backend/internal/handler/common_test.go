@@ -50,3 +50,29 @@ func TestParseRFC3339Invalid(t *testing.T) {
 		t.Fatalf("expected nil parsed, got %v", parsed)
 	}
 }
+
+func TestParseSort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("GET", "/?sortBy=title&sortOrder=asc", nil)
+
+	clause := parseSort(ctx, "tasks.id desc", map[string]string{
+		"title": "tasks.title",
+	})
+	if clause != "tasks.title asc" {
+		t.Fatalf("unexpected sort clause: %s", clause)
+	}
+}
+
+func TestParseSortFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("GET", "/?sortBy=unknown&sortOrder=asc", nil)
+
+	clause := parseSort(ctx, "tasks.id desc", map[string]string{
+		"title": "tasks.title",
+	})
+	if clause != "tasks.id desc" {
+		t.Fatalf("unexpected default sort clause: %s", clause)
+	}
+}

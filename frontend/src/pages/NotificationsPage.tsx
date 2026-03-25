@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../services/api'
+import { api, fetchPage, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
 import { Notification } from '../types'
 import { Pagination } from '../components/Pagination'
@@ -24,21 +24,27 @@ export function NotificationsPage() {
     return permissions.includes('rbac.manage')
   })
 
+  const parseReadFilter = (value: string): 'all' | 'unread' | 'read' =>
+    value === 'unread' || value === 'read' ? value : 'all'
+
+  const parseModuleFilter = (value: string): 'all' | 'tasks' | 'projects' =>
+    value === 'tasks' || value === 'projects' ? value : 'all'
+
   const load = async () => {
     try {
       setLoading(true)
       setError('')
-      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
-      if (isReadFilter === 'unread') params.set('isRead', 'false')
-      if (isReadFilter === 'read') params.set('isRead', 'true')
-      if (moduleFilter !== 'all') params.set('module', moduleFilter)
-      if (keyword.trim()) params.set('keyword', keyword.trim())
-      const res = await api.get(`/notifications?${params.toString()}`)
-      const list = Array.isArray(res.data?.list) ? res.data.list : []
-      setItems(list)
-      setTotal(Number(res.data?.total || 0))
-    } catch (loadError: any) {
-      const status = loadError?.response?.status
+      const isRead = isReadFilter === 'all' ? '' : (isReadFilter === 'read' ? 'true' : 'false')
+      const module = moduleFilter === 'all' ? '' : moduleFilter
+      const pageData = await fetchPage<Notification>(
+        '/notifications',
+        { page, pageSize, isRead, module, keyword: keyword.trim() },
+        { page, pageSize }
+      )
+      setItems(pageData.list)
+      setTotal(pageData.total)
+    } catch (loadError) {
+      const status = (loadError as { response?: { status?: number } })?.response?.status
       if (status === 403) {
         setForbidden(true)
         setError('当前账号未分配通知权限（notifications.read），请联系管理员在 RBAC 中授权。')
@@ -47,7 +53,7 @@ export function NotificationsPage() {
         setError('后端尚未启用通知接口（404）。请重启后端服务并确认已升级到最新代码。')
       } else {
         setForbidden(false)
-        setError(loadError?.response?.data?.message || '通知加载失败')
+        setError(readApiError(loadError, '通知加载失败'))
       }
       setItems([])
       setTotal(0)
@@ -89,12 +95,12 @@ export function NotificationsPage() {
   return (
     <section className="page-section">
       <div className="card toolbar-grid">
-        <select value={isReadFilter} aria-label="通知筛选" onChange={(e) => { setIsReadFilter(e.target.value as any); setPage(1) }}>
+        <select value={isReadFilter} aria-label="通知筛选" onChange={(e) => { setIsReadFilter(parseReadFilter(e.target.value)); setPage(1) }}>
           <option value="all">全部通知</option>
           <option value="unread">仅未读</option>
           <option value="read">仅已读</option>
         </select>
-        <select value={moduleFilter} aria-label="通知模块筛选" onChange={(e) => { setModuleFilter(e.target.value as any); setPage(1) }}>
+        <select value={moduleFilter} aria-label="通知模块筛选" onChange={(e) => { setModuleFilter(parseModuleFilter(e.target.value)); setPage(1) }}>
           <option value="all">全部模块</option>
           <option value="tasks">任务模块</option>
           <option value="projects">项目模块</option>

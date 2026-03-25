@@ -8,6 +8,7 @@ import (
 	"project-manager/backend/internal/util"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type createUserRequest struct {
@@ -38,11 +39,11 @@ func (h *Handler) ListUsers(c *gin.Context) {
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_USERS_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_USERS_FAILED", err)
 		return
 	}
 	if err := query.Preload("Roles").Preload("Departments").Offset((page - 1) * pageSize).Limit(pageSize).Find(&users).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_USERS_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_USERS_FAILED", err)
 		return
 	}
 	c.JSON(http.StatusOK, pageResult[model.User]{List: users, Total: total, Page: page, PageSize: pageSize})
@@ -51,7 +52,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 func (h *Handler) CreateUser(c *gin.Context) {
 	var req createUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		respondValidationError(c, err)
 		return
 	}
 
@@ -68,31 +69,44 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		Password: hash,
 		IsActive: true,
 	}
-	if err := h.DB.Create(&user).Error; err != nil {
-		respondError(c, http.StatusBadRequest, "CREATE_USER_FAILED", err.Error())
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&user).Error; err != nil {
+			return err
+		}
+		if len(req.RoleIDs) > 0 {
+			roles, err := findRolesByIDs(tx, req.RoleIDs)
+			if err != nil {
+				return err
+			}
+			if err := replaceAssociation(tx, &user, "Roles", &roles); err != nil {
+				return err
+			}
+		}
+		if len(req.DepartmentIDs) > 0 {
+			departments, err := findDepartmentsByIDs(tx, req.DepartmentIDs)
+			if err != nil {
+				return err
+			}
+			if err := replaceAssociation(tx, &user, "Departments", &departments); err != nil {
+				return err
+			}
+		}
+		if err := tx.Preload("Roles").Preload("Departments").First(&user, user.ID).Error; err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "users", "create", user.ID, true, "创建用户")
+	}); err != nil {
+		respondDBError(c, http.StatusBadRequest, "CREATE_USER_FAILED", err)
 		return
 	}
 
-	if len(req.RoleIDs) > 0 {
-		var roles []model.Role
-		h.DB.Where("id IN ?", req.RoleIDs).Find(&roles)
-		h.DB.Model(&user).Association("Roles").Replace(&roles)
-	}
-	if len(req.DepartmentIDs) > 0 {
-		var departments []model.Department
-		h.DB.Where("id IN ?", req.DepartmentIDs).Find(&departments)
-		h.DB.Model(&user).Association("Departments").Replace(&departments)
-	}
-
-	h.DB.Preload("Roles").Preload("Departments").First(&user, user.ID)
-	h.writeAudit(c, "users", "create", user.ID, true, "创建用户")
 	c.JSON(http.StatusCreated, user)
 }
 
 func (h *Handler) UpdateUser(c *gin.Context) {
 	var req updateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		respondValidationError(c, err)
 		return
 	}
 
@@ -116,25 +130,36 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 		user.Password = hash
 	}
 
-	if err := h.DB.Save(&user).Error; err != nil {
-		respondError(c, http.StatusBadRequest, "UPDATE_USER_FAILED", err.Error())
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&user).Error; err != nil {
+			return err
+		}
+
+		roles, err := findRolesByIDs(tx, req.RoleIDs)
+		if err != nil {
+			return err
+		}
+		if err := replaceAssociation(tx, &user, "Roles", &roles); err != nil {
+			return err
+		}
+
+		departments, err := findDepartmentsByIDs(tx, req.DepartmentIDs)
+		if err != nil {
+			return err
+		}
+		if err := replaceAssociation(tx, &user, "Departments", &departments); err != nil {
+			return err
+		}
+
+		if err := tx.Preload("Roles").Preload("Departments").First(&user, user.ID).Error; err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "users", "update", user.ID, true, auditDetailf("更新用户(id=%d)", user.ID))
+	}); err != nil {
+		respondDBError(c, http.StatusBadRequest, "UPDATE_USER_FAILED", err)
 		return
 	}
 
-	var roles []model.Role
-	if len(req.RoleIDs) > 0 {
-		h.DB.Where("id IN ?", req.RoleIDs).Find(&roles)
-	}
-	h.DB.Model(&user).Association("Roles").Replace(&roles)
-
-	var departments []model.Department
-	if len(req.DepartmentIDs) > 0 {
-		h.DB.Where("id IN ?", req.DepartmentIDs).Find(&departments)
-	}
-	h.DB.Model(&user).Association("Departments").Replace(&departments)
-
-	h.DB.Preload("Roles").Preload("Departments").First(&user, user.ID)
-	h.writeAudit(c, "users", "update", user.ID, true, "更新用户")
 	c.JSON(http.StatusOK, user)
 }
 
@@ -144,18 +169,21 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 		respondError(c, http.StatusNotFound, "USER_NOT_FOUND", "用户不存在")
 		return
 	}
-	if err := h.DB.Model(&user).Association("Roles").Clear(); err != nil {
-		respondError(c, http.StatusInternalServerError, "CLEAR_USER_ROLES_FAILED", err.Error())
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := clearAssociation(tx, &user, "Roles"); err != nil {
+			return err
+		}
+		if err := clearAssociation(tx, &user, "Departments"); err != nil {
+			return err
+		}
+		if err := tx.Delete(&user).Error; err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "users", "delete", user.ID, true, auditDetailf("删除用户(id=%d)", user.ID))
+	}); err != nil {
+		respondDBError(c, http.StatusInternalServerError, "DELETE_USER_FAILED", err)
 		return
 	}
-	if err := h.DB.Model(&user).Association("Departments").Clear(); err != nil {
-		respondError(c, http.StatusInternalServerError, "CLEAR_USER_DEPARTMENTS_FAILED", err.Error())
-		return
-	}
-	if err := h.DB.Delete(&user).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "DELETE_USER_FAILED", err.Error())
-		return
-	}
-	h.writeAudit(c, "users", "delete", user.ID, true, "删除用户")
+
 	respondMessage(c, http.StatusOK, "USER_DELETED", "删除成功")
 }

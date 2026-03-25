@@ -1,7 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { api } from '../services/api'
+import { api, fetchPage, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
 import { Modal } from '../components/Modal'
+import { Pagination } from '../components/Pagination'
+import { Department, User } from '../types'
 
 interface DepartmentForm {
   id?: number
@@ -13,8 +15,9 @@ interface DepartmentForm {
 const initialForm: DepartmentForm = { name: '', description: '', userIds: [] }
 
 export function DepartmentsPage() {
-  const [items, setItems] = useState<any[]>([])
-  const [users, setUsers] = useState<any[]>([])
+  const [items, setItems] = useState<Department[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [keywordInput, setKeywordInput] = useState('')
   const [keyword, setKeyword] = useState('')
   const [form, setForm] = useState<DepartmentForm>(initialForm)
   const [loading, setLoading] = useState(false)
@@ -23,26 +26,30 @@ export function DepartmentsPage() {
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [total, setTotal] = useState(0)
 
   const load = async () => {
     try {
       setLoading(true)
       setError('')
-      const query = keyword ? `&keyword=${encodeURIComponent(keyword)}` : ''
-      const [departmentsRes, usersRes] = await Promise.all([
-        api.get(`/departments?page=1&pageSize=50${query}`),
-        api.get('/users?page=1&pageSize=100')
+      const [departmentsPage, usersPage] = await Promise.all([
+        fetchPage<Department>('/departments', { page, pageSize, keyword }, { page, pageSize }),
+        fetchPage<User>('/users', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 })
       ])
-      setItems(departmentsRes.data.list ?? departmentsRes.data ?? [])
-      setUsers(usersRes.data.list ?? [])
-    } catch (loadError: any) {
-      setError(loadError?.response?.data?.message || '部门列表加载失败')
+      setItems(departmentsPage.list)
+      setTotal(departmentsPage.total)
+      setUsers(usersPage.list)
+    } catch (loadError) {
+      setError(readApiError(loadError, '部门列表加载失败'))
       setItems([])
     } finally {
       setLoading(false)
     }
   }
-  useEffect(() => { void load() }, [])
+
+  useEffect(() => { void load() }, [page, pageSize, keyword])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -58,19 +65,19 @@ export function DepartmentsPage() {
       setModalOpen(false)
       setForm(initialForm)
       await load()
-    } catch (submitError: any) {
-      setFormError(submitError?.response?.data?.message || '保存部门失败')
+    } catch (submitError) {
+      setFormError(readApiError(submitError, '保存部门失败'))
     } finally {
       setSubmitting(false)
     }
   }
 
-  const edit = (item: any) => {
+  const edit = (item: Department) => {
     setForm({
       id: item.id,
       name: item.name,
       description: item.description,
-      userIds: (item.users || []).map((user: any) => user.id)
+      userIds: (item.users || []).map((user) => user.id)
     })
     setFormError('')
     setFormSuccess('')
@@ -86,17 +93,21 @@ export function DepartmentsPage() {
 
   const onDelete = async (id: number) => {
     if (!confirm('确认删除该部门？')) return
-    await api.delete(`/departments/${id}`)
-    await load()
+    try {
+      await api.delete(`/departments/${id}`)
+      await load()
+    } catch (deleteError) {
+      setError(readApiError(deleteError, '删除部门失败'))
+    }
   }
 
   return (
     <section className="page-section">
       <div className="card form-grid">
         <h3>搜索</h3>
-        <input aria-label="部门关键词搜索" value={keyword} placeholder="名称/描述" onChange={(e) => setKeyword(e.target.value)} />
+        <input aria-label="部门关键词搜索" value={keywordInput} placeholder="名称/描述" onChange={(e) => setKeywordInput(e.target.value)} />
         <div className="row-actions">
-          <button className="btn" onClick={() => { void load() }}>查询</button>
+          <button className="btn" onClick={() => { setPage(1); setKeyword(keywordInput.trim()) }}>查询</button>
           <button className="btn secondary" onClick={openCreateModal}>新增部门</button>
         </div>
       </div>
@@ -117,6 +128,8 @@ export function DepartmentsPage() {
           </tbody></table>
         )}
       </div>
+
+      {!loading && !error && total > 0 && <Pagination total={total} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />}
 
       <Modal open={modalOpen} title={form.id ? '编辑部门' : '新增部门'} onClose={() => setModalOpen(false)}>
         <form className="form-grid" onSubmit={submit}>

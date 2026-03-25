@@ -42,6 +42,37 @@
    - 数据可视化与可访问性优化（图表/对比度/键盘可达）
 
 ## 本轮执行记录
+- 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
+- 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
+- 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）
+- 完成：新增 2 条事务回滚集成测试（任务创建回滚、项目更新回滚）
+- 完成：新增 2 条 RBAC 回滚集成测试（角色创建回滚、权限创建回滚）
+- 完成：后端错误响应统一 helper（`respondDBError`）并在核心 handler 收敛
+- 完成：后端审计 detail 模板统一（`auditDetailf`）并在核心写链路接入
+- 完成：查询型 handler 错误响应统一收敛（notifications/audit/stats/export/scope/tasks/projects）
+- 完成：前端核心页面 `any` 清理（Layout/RBAC/Audit/MyWork/Notifications）并构建通过
+- 完成：前端类型模型补齐（Permission/AuditLog/MyWorkData）与 Axios `silent` 类型声明
+- 完成：后端请求绑定错误统一（`respondValidationError`），收敛所有 `ShouldBindJSON` 的 `VALIDATION_ERROR` 输出
+- 完成：前端分页/列表响应解析通用化（`toPageResult`/`toArray`），并接入核心列表页面与通知下拉
+- 完成：前端查询参数构建继续收敛（Audit/Notifications 接入 `buildQuery`）
+- 完成：前端列表加载模板统一（新增 `fetchPage`/`fetchArray` 并接入核心列表页与通知下拉）
+- 完成：前端对象型请求统一（新增 `fetchData`，并接入 Dashboard/MyWork/Layout/Projects/RBAC）
+- 完成：页面层读取请求已收敛为统一 helper（`api.get` 仅保留在 service 层）
+- 完成：部署构建镜像参数化（`GO_BUILDER_IMAGE`/`APP_RUNTIME_IMAGE`/`NODE_BUILDER_IMAGE`/`NGINX_IMAGE`）
+- 完成：构建代理参数化（`GO_PROXY`/`NPM_REGISTRY`）并接入 compose 与 Dockerfile
+- 完成：`scripts/compose-up.sh` 镜像回退增强（含 DaoCloud 回源链路）与健康拉起验证
+- 完成：执行 `scripts/benchmark-api.sh`，输出 `docs/benchmark/after.md` 与 `docs/benchmark/compare.md`
+- 完成：新增稳健提效实施计划文档 `optimzie-plan.md`，包含步骤、验收与回滚策略
+- 完成：后端鉴权中间件请求级权限缓存（同一请求内不重复查权限）
+- 完成：后端 scope 增加 `isAdmin` 请求级缓存，减少重复角色判定查询
+- 完成：后端项目/任务列表支持服务端排序参数（`sortBy` / `sortOrder`）
+- 完成：后端用户/部门/项目/任务的写链路事务化（主表 + 关联 + 通知 + 审计）
+- 完成：模型层补充高频查询索引（tasks/status+creator、notifications/user+isRead、audit/module+action）
+- 完成：前端统一 API 辅助能力（`buildQuery`、`readApiError`）并扩展核心类型定义
+- 完成：前端 `UsersPage`/`DepartmentsPage` 服务端分页改造并接入统一错误处理
+- 完成：前端 `ProjectsPage`/`TasksPage` 改为服务端分页/排序/筛选驱动
+- 完成：Dashboard 图表拆分为懒加载组件 `DashboardCharts`，优化首屏包体路径
+- 完成：新增 `scripts/benchmark-api.sh`，用于关键接口耗时基线采样
 - 按要求跳过 `k8s 真机部署验收`
 - 已开始执行 `PLAN.md` 阶段H（基于 `ui-ux-pro-max`）
 - 完成：CSS 设计变量体系、顶层布局收敛、侧栏菜单 active 高亮与路由匹配优化

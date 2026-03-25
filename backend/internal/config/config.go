@@ -6,28 +6,28 @@ import (
 )
 
 type Config struct {
-	AppName    string
-	Port       string
-	JWTSecret  string
+	AppName          string
+	Port             string
+	JWTSecret        string
 	CORSAllowOrigins string
-	DBHost     string
-	DBPort     string
-	DBUser     string
-	DBPassword string
-	DBName     string
+	DBHost           string
+	DBPort           string
+	DBUser           string
+	DBPassword       string
+	DBName           string
 }
 
 func Load() Config {
 	cfg := Config{
-		AppName:    getEnv("APP_NAME", "project-manager"),
-		Port:       getEnv("APP_PORT", "8080"),
-		JWTSecret:  getEnv("JWT_SECRET", "change-me"),
+		AppName:          getEnv("APP_NAME", "project-manager"),
+		Port:             getEnv("APP_PORT", "8080"),
+		JWTSecret:        getEnv("JWT_SECRET", "change-me"),
 		CORSAllowOrigins: getEnv("CORS_ALLOW_ORIGINS", "http://localhost:5173"),
-		DBHost:     getEnv("DB_HOST", "127.0.0.1"),
-		DBPort:     getEnv("DB_PORT", "3306"),
-		DBUser:     getEnv("DB_USER", "root"),
-		DBPassword: getEnv("DB_PASSWORD", "root"),
-		DBName:     getEnv("DB_NAME", "project_management"),
+		DBHost:           getEnv("DB_HOST", "127.0.0.1"),
+		DBPort:           getEnv("DB_PORT", "3306"),
+		DBUser:           getEnv("DB_USER", "root"),
+		DBPassword:       getEnv("DB_PASSWORD", "root"),
+		DBName:           getEnv("DB_NAME", "project_management"),
 	}
 	return cfg
 }

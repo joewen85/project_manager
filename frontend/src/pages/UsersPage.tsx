@@ -1,7 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { api } from '../services/api'
+import { api, fetchArray, fetchPage, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
 import { Modal } from '../components/Modal'
+import { Pagination } from '../components/Pagination'
+import { Department, Role, User } from '../types'
 
 interface UserForm {
   id?: number
@@ -25,9 +27,10 @@ const initialForm: UserForm = {
 }
 
 export function UsersPage() {
-  const [users, setUsers] = useState<any[]>([])
-  const [roles, setRoles] = useState<any[]>([])
-  const [departments, setDepartments] = useState<any[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [roles, setRoles] = useState<Role[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
+  const [keywordInput, setKeywordInput] = useState('')
   const [keyword, setKeyword] = useState('')
   const [form, setForm] = useState<UserForm>(initialForm)
   const [loading, setLoading] = useState(false)
@@ -36,29 +39,32 @@ export function UsersPage() {
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [total, setTotal] = useState(0)
 
   const load = async () => {
     try {
       setLoading(true)
       setError('')
-      const query = keyword ? `&keyword=${encodeURIComponent(keyword)}` : ''
-      const [usersRes, rolesRes, departmentsRes] = await Promise.all([
-        api.get(`/users?page=1&pageSize=50${query}`),
-        api.get('/rbac/roles'),
-        api.get('/departments?page=1&pageSize=100')
+      const [usersPage, rolesList, departmentsPage] = await Promise.all([
+        fetchPage<User>('/users', { page, pageSize, keyword }, { page, pageSize }),
+        fetchArray<Role>('/rbac/roles'),
+        fetchPage<Department>('/departments', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 })
       ])
-      setUsers(usersRes.data.list ?? usersRes.data ?? [])
-      setRoles(rolesRes.data ?? [])
-      setDepartments(departmentsRes.data.list ?? [])
-    } catch (loadError: any) {
-      setError(loadError?.response?.data?.message || '用户列表加载失败')
+      setUsers(usersPage.list)
+      setTotal(usersPage.total)
+      setRoles(rolesList)
+      setDepartments(departmentsPage.list)
+    } catch (loadError) {
+      setError(readApiError(loadError, '用户列表加载失败'))
       setUsers([])
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => { void load() }, [page, pageSize, keyword])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -88,23 +94,23 @@ export function UsersPage() {
       setModalOpen(false)
       setForm(initialForm)
       await load()
-    } catch (submitError: any) {
-      setFormError(submitError?.response?.data?.message || '保存用户失败')
+    } catch (submitError) {
+      setFormError(readApiError(submitError, '保存用户失败'))
     } finally {
       setSubmitting(false)
     }
   }
 
-  const edit = (item: any) => {
+  const edit = (item: User) => {
     setForm({
       id: item.id,
       username: item.username,
       name: item.name,
       email: item.email,
       password: '',
-      isActive: item.isActive,
-      roleIds: (item.roles || []).map((role: any) => role.id),
-      departmentIds: (item.departments || []).map((department: any) => department.id)
+      isActive: Boolean(item.isActive),
+      roleIds: (item.roles || []).map((role) => role.id),
+      departmentIds: (item.departments || []).map((department) => department.id)
     })
     setFormError('')
     setFormSuccess('')
@@ -120,17 +126,21 @@ export function UsersPage() {
 
   const onDelete = async (id: number) => {
     if (!confirm('确认删除该用户？')) return
-    await api.delete(`/users/${id}`)
-    await load()
+    try {
+      await api.delete(`/users/${id}`)
+      await load()
+    } catch (deleteError) {
+      setError(readApiError(deleteError, '删除用户失败'))
+    }
   }
 
   return (
     <section className="page-section">
       <div className="card form-grid">
         <h3>搜索</h3>
-        <input aria-label="用户关键词搜索" value={keyword} placeholder="用户名/姓名/邮箱" onChange={(e) => setKeyword(e.target.value)} />
+        <input aria-label="用户关键词搜索" value={keywordInput} placeholder="用户名/姓名/邮箱" onChange={(e) => setKeywordInput(e.target.value)} />
         <div className="row-actions">
-          <button className="btn" onClick={() => { void load() }}>查询</button>
+          <button className="btn" onClick={() => { setPage(1); setKeyword(keywordInput.trim()) }}>查询</button>
           <button className="btn secondary" onClick={openCreateModal}>新增用户</button>
         </div>
       </div>
@@ -151,6 +161,8 @@ export function UsersPage() {
           </tbody></table>
         )}
       </div>
+
+      {!loading && !error && total > 0 && <Pagination total={total} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />}
 
       <Modal open={modalOpen} title={form.id ? '编辑用户' : '新增用户'} onClose={() => setModalOpen(false)}>
         <form className="form-grid" onSubmit={submit}>

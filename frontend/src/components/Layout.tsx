@@ -1,9 +1,9 @@
 import { BarChart3, Bell, Building2, FolderKanban, ListChecks, Moon, NotebookTabs, Shield, Sun, UserCircle2, Users } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getPermissions, setPermissions } from '../services/api'
+import { fetchData, fetchPage, getPermissions, readApiError, setPermissions } from '../services/api'
 import { api } from '../services/api'
-import { Notification } from '../types'
+import { Notification, Role } from '../types'
 
 const menus = [
   { to: '/', label: '统计分析', icon: BarChart3, permission: 'stats.read' },
@@ -16,6 +16,17 @@ const menus = [
   { to: '/audit', label: '审计日志', icon: NotebookTabs, permission: 'audit.read' },
   { to: '/me', label: '个人工作', icon: UserCircle2, permission: 'tasks.read' }
 ]
+
+interface ProfileResponse {
+  name?: string
+  username?: string
+  email?: string
+  roles?: Role[]
+}
+
+interface UnreadCountResponse {
+  count?: number
+}
 
 export function Layout() {
   const isLegacyNotificationsApiEnabled = () => localStorage.getItem('notifications_api_enabled') !== 'false'
@@ -100,11 +111,12 @@ export function Layout() {
       return
     }
     try {
-      const countRes = await api.get('/notifications/unread-count', { silent: true } as any)
-      setUnreadCount(Number(countRes.data?.count || 0))
+      const countData = await fetchData<UnreadCountResponse>('/notifications/unread-count', undefined, { silent: true })
+      setUnreadCount(Number(countData?.count || 0))
       markNotificationApiRecovered('unread')
-    } catch (error: any) {
-      if (error?.response?.status === 404) {
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      if (status === 404) {
         markNotificationApiFailed('unread')
       }
       setUnreadCount(0)
@@ -118,12 +130,13 @@ export function Layout() {
       return
     }
     try {
-      const listRes = await api.get('/notifications?page=1&pageSize=5', { silent: true } as any)
-      setLatestNotifications(Array.isArray(listRes.data?.list) ? listRes.data.list : [])
+      const listPage = await fetchPage<Notification>('/notifications', { page: 1, pageSize: 5 }, { page: 1, pageSize: 5 }, { silent: true })
+      setLatestNotifications(listPage.list)
       markNotificationApiRecovered('list')
       setNotificationsApiReady(true)
-    } catch (error: any) {
-      if (error?.response?.status === 404) {
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      if (status === 404) {
         markNotificationApiFailed('list')
         setNotificationsApiReady(false)
       }
@@ -144,14 +157,14 @@ export function Layout() {
 
     const refreshProfile = async () => {
       if (document.visibilityState !== 'visible') return
-      const res = await api.get('/auth/profile')
+      const profileData = await fetchData<ProfileResponse>('/auth/profile')
       setProfile({
-        name: res.data?.name,
-        username: res.data?.username,
-        email: res.data?.email
+        name: profileData?.name,
+        username: profileData?.username,
+        email: profileData?.email
       })
-      const rolePermissions = (res.data?.roles || []).flatMap((role: any) =>
-        (role.permissions || []).map((permission: any) => String(permission.code))
+      const rolePermissions = (profileData?.roles || []).flatMap((role) =>
+        (role.permissions || []).map((permission) => String(permission.code))
       )
       const merged = normalizePermissions(expandPermissions(rolePermissions))
       setPermissionState((prev) => {
@@ -166,9 +179,11 @@ export function Layout() {
       await refreshUnreadCount(merged)
     }
 
-    void refreshProfile()
+    void refreshProfile().catch((error) => {
+      console.error(readApiError(error, '用户信息刷新失败'))
+    })
     const profileTimer = window.setInterval(() => {
-      void refreshProfile()
+      void refreshProfile().catch(() => {})
     }, 60000)
     const unreadTimer = window.setInterval(() => {
       if (document.visibilityState === 'visible') {

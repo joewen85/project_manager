@@ -8,21 +8,35 @@ import (
 	"gorm.io/gorm"
 )
 
+const contextIsAdminKey = "isAdmin"
+
 func (h *Handler) currentUserIsAdmin(c *gin.Context) bool {
+	if value, ok := c.Get(contextIsAdminKey); ok {
+		if isAdmin, yes := value.(bool); yes {
+			return isAdmin
+		}
+	}
+
 	uid := c.GetUint("userId")
 	if uid == 0 {
+		c.Set(contextIsAdminKey, false)
 		return false
 	}
 
-	var count int64
+	var exists int
 	err := h.DB.Table("user_roles").
+		Select("1").
 		Joins("JOIN roles ON roles.id = user_roles.role_id").
 		Where("user_roles.user_id = ? AND roles.name = ?", uid, "admin").
-		Count(&count).Error
-	if err == nil {
-		return count > 0
+		Limit(1).
+		Scan(&exists).Error
+	if err != nil {
+		c.Set(contextIsAdminKey, false)
+		return false
 	}
-	return false
+	isAdmin := exists == 1
+	c.Set(contextIsAdminKey, isAdmin)
+	return isAdmin
 }
 
 func (h *Handler) scopeTasksQuery(c *gin.Context, query *gorm.DB) *gorm.DB {
@@ -63,7 +77,7 @@ func (h *Handler) ensureProjectVisible(c *gin.Context, projectID string) bool {
 	query := h.scopeProjectsQuery(c, h.DB.Model(&model.Project{})).Where("projects.id = ?", projectID)
 	var count int64
 	if err := query.Count(&count).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_PROJECT_SCOPE_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_PROJECT_SCOPE_FAILED", err)
 		return false
 	}
 	if count == 0 {

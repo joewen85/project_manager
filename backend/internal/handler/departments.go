@@ -7,6 +7,7 @@ import (
 	"project-manager/backend/internal/model"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type departmentRequest struct {
@@ -25,11 +26,11 @@ func (h *Handler) ListDepartments(c *gin.Context) {
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_DEPARTMENTS_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_DEPARTMENTS_FAILED", err)
 		return
 	}
 	if err := query.Preload("Users").Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_DEPARTMENTS_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_DEPARTMENTS_FAILED", err)
 		return
 	}
 	c.JSON(http.StatusOK, pageResult[model.Department]{List: items, Total: total, Page: page, PageSize: pageSize})
@@ -38,29 +39,40 @@ func (h *Handler) ListDepartments(c *gin.Context) {
 func (h *Handler) CreateDepartment(c *gin.Context) {
 	var req departmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		respondValidationError(c, err)
 		return
 	}
 
 	item := model.Department{Name: req.Name, Description: req.Description}
-	if err := h.DB.Create(&item).Error; err != nil {
-		respondError(c, http.StatusBadRequest, "CREATE_DEPARTMENT_FAILED", err.Error())
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&item).Error; err != nil {
+			return err
+		}
+		if len(req.UserIDs) > 0 {
+			users, err := findUsersByIDs(tx, req.UserIDs)
+			if err != nil {
+				return err
+			}
+			if err := replaceAssociation(tx, &item, "Users", &users); err != nil {
+				return err
+			}
+		}
+		if err := tx.Preload("Users").First(&item, item.ID).Error; err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "departments", "create", item.ID, true, auditDetailf("创建部门(id=%d)", item.ID))
+	}); err != nil {
+		respondDBError(c, http.StatusBadRequest, "CREATE_DEPARTMENT_FAILED", err)
 		return
 	}
-	if len(req.UserIDs) > 0 {
-		var users []model.User
-		h.DB.Where("id IN ?", req.UserIDs).Find(&users)
-		h.DB.Model(&item).Association("Users").Replace(&users)
-	}
-	h.DB.Preload("Users").First(&item, item.ID)
-	h.writeAudit(c, "departments", "create", item.ID, true, "创建部门")
+
 	c.JSON(http.StatusCreated, item)
 }
 
 func (h *Handler) UpdateDepartment(c *gin.Context) {
 	var req departmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		respondValidationError(c, err)
 		return
 	}
 
@@ -71,18 +83,27 @@ func (h *Handler) UpdateDepartment(c *gin.Context) {
 	}
 	item.Name = req.Name
 	item.Description = req.Description
-	if err := h.DB.Save(&item).Error; err != nil {
-		respondError(c, http.StatusBadRequest, "UPDATE_DEPARTMENT_FAILED", err.Error())
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&item).Error; err != nil {
+			return err
+		}
+
+		users, err := findUsersByIDs(tx, req.UserIDs)
+		if err != nil {
+			return err
+		}
+		if err := replaceAssociation(tx, &item, "Users", &users); err != nil {
+			return err
+		}
+		if err := tx.Preload("Users").First(&item, item.ID).Error; err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "departments", "update", item.ID, true, auditDetailf("更新部门(id=%d)", item.ID))
+	}); err != nil {
+		respondDBError(c, http.StatusBadRequest, "UPDATE_DEPARTMENT_FAILED", err)
 		return
 	}
 
-	var users []model.User
-	if len(req.UserIDs) > 0 {
-		h.DB.Where("id IN ?", req.UserIDs).Find(&users)
-	}
-	h.DB.Model(&item).Association("Users").Replace(&users)
-	h.DB.Preload("Users").First(&item, item.ID)
-	h.writeAudit(c, "departments", "update", item.ID, true, "更新部门")
 	c.JSON(http.StatusOK, item)
 }
 
@@ -92,18 +113,21 @@ func (h *Handler) DeleteDepartment(c *gin.Context) {
 		respondError(c, http.StatusNotFound, "DEPARTMENT_NOT_FOUND", "部门不存在")
 		return
 	}
-	if err := h.DB.Model(&item).Association("Users").Clear(); err != nil {
-		respondError(c, http.StatusInternalServerError, "CLEAR_DEPARTMENT_USERS_FAILED", err.Error())
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := clearAssociation(tx, &item, "Users"); err != nil {
+			return err
+		}
+		if err := clearAssociation(tx, &item, "Projects"); err != nil {
+			return err
+		}
+		if err := tx.Delete(&item).Error; err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "departments", "delete", item.ID, true, auditDetailf("删除部门(id=%d)", item.ID))
+	}); err != nil {
+		respondDBError(c, http.StatusInternalServerError, "DELETE_DEPARTMENT_FAILED", err)
 		return
 	}
-	if err := h.DB.Model(&item).Association("Projects").Clear(); err != nil {
-		respondError(c, http.StatusInternalServerError, "CLEAR_DEPARTMENT_PROJECTS_FAILED", err.Error())
-		return
-	}
-	if err := h.DB.Delete(&item).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "DELETE_DEPARTMENT_FAILED", err.Error())
-		return
-	}
-	h.writeAudit(c, "departments", "delete", item.ID, true, "删除部门")
+
 	respondMessage(c, http.StatusOK, "DEPARTMENT_DELETED", "删除成功")
 }

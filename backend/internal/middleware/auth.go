@@ -11,6 +11,11 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	contextPermissionsLoadedKey = "permissionsLoaded"
+	contextPermissionsKey       = "effectivePermissions"
+)
+
 func hasPermission(granted []string, required string) bool {
 	for _, item := range granted {
 		if item == required {
@@ -84,16 +89,10 @@ func RequirePermission(db *gorm.DB, permission string) gin.HandlerFunc {
 			return
 		}
 
-		effectivePermissions := claims.Permissions
-		if db != nil {
-			permissions, err := loadUserPermissions(db, claims.UserID)
-			if err != nil {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "user not found"})
-				return
-			}
-			if permissions != nil {
-				effectivePermissions = permissions
-			}
+		effectivePermissions, err := resolveEffectivePermissions(c, db, claims)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "user not found"})
+			return
 		}
 
 		if hasPermission(effectivePermissions, permission) {
@@ -103,4 +102,31 @@ func RequirePermission(db *gorm.DB, permission string) gin.HandlerFunc {
 
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": "FORBIDDEN", "message": "forbidden"})
 	}
+}
+
+func resolveEffectivePermissions(c *gin.Context, db *gorm.DB, claims *auth.Claims) ([]string, error) {
+	if loaded, ok := c.Get(contextPermissionsLoadedKey); ok {
+		if value, yes := loaded.(bool); yes && value {
+			if cached, exists := c.Get(contextPermissionsKey); exists {
+				if permissions, castOK := cached.([]string); castOK {
+					return permissions, nil
+				}
+			}
+		}
+	}
+
+	effectivePermissions := claims.Permissions
+	if db != nil {
+		permissions, err := loadUserPermissions(db, claims.UserID)
+		if err != nil {
+			return nil, err
+		}
+		if permissions != nil {
+			effectivePermissions = permissions
+		}
+	}
+
+	c.Set(contextPermissionsLoadedKey, true)
+	c.Set(contextPermissionsKey, effectivePermissions)
+	return effectivePermissions, nil
 }

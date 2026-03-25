@@ -83,3 +83,26 @@ func TestWritePermissionImpliesRead(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 }
+
+func TestResolveEffectivePermissionsCachesInContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	claims := &auth.Claims{Permissions: []string{"tasks.read"}}
+
+	first, err := resolveEffectivePermissions(c, nil, claims)
+	if err != nil {
+		t.Fatalf("resolve effective permissions failed: %v", err)
+	}
+	if len(first) != 1 || first[0] != "tasks.read" {
+		t.Fatalf("unexpected permissions: %#v", first)
+	}
+
+	claims.Permissions = []string{"users.read"}
+	second, err := resolveEffectivePermissions(c, nil, claims)
+	if err != nil {
+		t.Fatalf("resolve effective permissions second call failed: %v", err)
+	}
+	if len(second) != 1 || second[0] != "tasks.read" {
+		t.Fatalf("expected cached permissions, got %#v", second)
+	}
+}

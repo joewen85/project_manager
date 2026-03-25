@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { api } from '../services/api'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { fetchArray, fetchData, readApiError } from '../services/api'
 import { STATUS_META, STATUS_ORDER } from '../constants/status'
 import { Status } from '../types'
 import { DataState } from '../components/DataState'
 import { getPermissions } from '../services/api'
+import type { DashboardProgressItem } from '../components/DashboardCharts'
+
+const DashboardCharts = lazy(async () => import('../components/DashboardCharts').then((module) => ({ default: module.DashboardCharts })))
 
 interface DashboardStats {
   users: number
@@ -14,16 +16,14 @@ interface DashboardStats {
   completionRate: number
 }
 
-interface ProgressItem {
-  status: Status
-  count: number
-  statusLabel: string
-  fill: string
+interface DashboardProgressRaw {
+  status?: string
+  count?: number
 }
 
 export function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>()
-  const [progress, setProgress] = useState<ProgressItem[]>([])
+  const [progress, setProgress] = useState<DashboardProgressItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [canViewUsers, setCanViewUsers] = useState(() => {
@@ -35,22 +35,12 @@ export function DashboardPage() {
     try {
       setLoading(true)
       setError('')
-      const [statsRes, progressRes] = await Promise.all([
-        api.get('/stats/dashboard'),
-        api.get('/tasks/progress-list')
+      const [statsData, raw] = await Promise.all([
+        fetchData<DashboardStats>('/stats/dashboard'),
+        fetchArray<DashboardProgressRaw>('/tasks/progress-list')
       ])
-      setStats(statsRes.data)
+      setStats(statsData)
 
-      const raw = Array.isArray(progressRes.data) ? progressRes.data : progressRes.data?.list
-      if (!Array.isArray(raw)) {
-        setProgress(STATUS_ORDER.map((status) => ({
-          status,
-          count: 0,
-          statusLabel: STATUS_META[status].label,
-          fill: STATUS_META[status].color
-        })))
-        return
-      }
       const source = raw
         .filter((item) => item && typeof item === 'object')
         .map((item) => ({
@@ -67,8 +57,8 @@ export function DashboardPage() {
         }
       })
       setProgress(merged)
-    } catch (loadError: any) {
-      setError(loadError?.response?.data?.message || '统计数据加载失败')
+    } catch (loadError) {
+      setError(readApiError(loadError, '统计数据加载失败'))
       setStats(undefined)
       setProgress([])
     } finally {
@@ -97,39 +87,11 @@ export function DashboardPage() {
         <article className="card metric-card"><p>任务</p><strong>{stats?.tasks ?? 0}</strong></article>
         <article className="card metric-card"><p>完成率</p><strong>{((stats?.completionRate ?? 0) * 100).toFixed(1)}%</strong></article>
       </div>
-      {!loading && !error && <div className="charts">
-        <div className="card chart-card">
-          <h3>进度列表</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={progress}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#dbeafe" />
-              <XAxis dataKey="statusLabel" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="count" name="任务数量" radius={[8, 8, 0, 0]}>
-                {progress.map((item) => (
-                  <Cell key={item.status} fill={item.fill} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="card chart-card">
-          <h3>任务状态占比</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={progress} dataKey="count" nameKey="statusLabel" outerRadius={90}>
-                {progress.map((item) => (
-                  <Cell key={`pie-${item.status}`} fill={item.fill} />
-                ))}
-              </Pie>
-              <Legend />
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>}
+      {!loading && !error && (
+        <Suspense fallback={<div className="card">图表加载中...</div>}>
+          <DashboardCharts progress={progress} />
+        </Suspense>
+      )}
     </section>
   )
 }

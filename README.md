@@ -60,7 +60,17 @@ bash scripts/compose-up.sh
 ```
 或手动指定镜像：
 ```bash
-MYSQL_IMAGE=mysql:8.0 docker compose up -d --build
+MYSQL_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/mysql:lts docker compose up -d --build
+```
+如构建阶段访问 Docker Hub 受限，可一并指定构建基础镜像：
+```bash
+GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.23-alpine \
+APP_RUNTIME_IMAGE=docker.m.daocloud.io/library/alpine:3.20 \
+NODE_BUILDER_IMAGE=docker.m.daocloud.io/library/node:22-alpine \
+NGINX_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/nginx:alpine \
+GO_PROXY=https://goproxy.cn,direct \
+NPM_REGISTRY=https://registry.npmmirror.com \
+docker compose up -d --build
 ```
 如本机端口冲突，可指定主机端口：
 ```bash
@@ -105,4 +115,15 @@ helm upgrade --install project-manager ./deploy/helm/project-manager
 ## 一键验收
 ```bash
 bash scripts/verify-deploy.sh
+```
+
+## API 基准测试（可选）
+采集当前环境 benchmark：
+```bash
+LABEL=after RUNS=5 OUT_FILE=docs/benchmark/after.md bash scripts/benchmark-api.sh
+```
+
+生成前后对比报告：
+```bash
+BEFORE_FILE=docs/benchmark/before.md AFTER_FILE=docs/benchmark/after.md OUT_FILE=docs/benchmark/compare.md bash scripts/benchmark-compare.sh
 ```

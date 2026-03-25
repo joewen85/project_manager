@@ -12,39 +12,74 @@ find_free_port() {
   echo "$port"
 }
 
-images=(
+mysql_images=(
+  "registry.cn-guangzhou.aliyuncs.com/joe/mysql:lts"
   "mysql:8.4"
-  "mysql:8.0"
-  "registry.cn-hangzhou.aliyuncs.com/library/mysql:8.4"
-  "registry.cn-hangzhou.aliyuncs.com/library/mysql:8.0"
+)
+
+go_builder_images=(
+  "docker.m.daocloud.io/library/golang:1.23-alpine"
+  "golang:1.23-alpine"
+)
+
+app_runtime_images=(
+  "docker.m.daocloud.io/library/alpine:3.20"
+  "alpine:3.20"
+)
+
+node_builder_images=(
+  "docker.m.daocloud.io/library/node:22-alpine"
+  "node:22-alpine"
+)
+
+nginx_images=(
+  "registry.cn-guangzhou.aliyuncs.com/joe/nginx:alpine"
+  "nginx:alpine"
 )
 
 choose_image() {
-  if [[ -n "${MYSQL_IMAGE:-}" ]]; then
-    echo "$MYSQL_IMAGE"
+  local var_name="$1"
+  shift
+  local configured
+  configured="$(eval "printf '%s' \"\${$var_name:-}\"")"
+  if [[ -n "$configured" ]]; then
+    echo "$configured"
     return
   fi
 
-  for image in "${images[@]}"; do
+  local image
+  for image in "$@"; do
     echo "Trying to pull $image ..." >&2
-    if docker pull "$image"; then
+    if docker pull "$image" >/dev/null 2>&1; then
+      echo "Pulled $image" >&2
       echo "$image"
       return
     fi
   done
 
-  echo "Failed to pull all candidate MySQL images." >&2
-  echo "Please configure Docker mirror or export MYSQL_IMAGE manually." >&2
+  echo "Failed to pull all candidate images for $var_name." >&2
+  echo "Please configure Docker mirror or export $var_name manually." >&2
   exit 1
 }
 
-selected_image="$(choose_image | tail -n 1)"
-export MYSQL_IMAGE="$selected_image"
+export MYSQL_IMAGE="$(choose_image "MYSQL_IMAGE" "${mysql_images[@]}")"
+export GO_BUILDER_IMAGE="$(choose_image "GO_BUILDER_IMAGE" "${go_builder_images[@]}")"
+export APP_RUNTIME_IMAGE="$(choose_image "APP_RUNTIME_IMAGE" "${app_runtime_images[@]}")"
+export NODE_BUILDER_IMAGE="$(choose_image "NODE_BUILDER_IMAGE" "${node_builder_images[@]}")"
+export NGINX_IMAGE="$(choose_image "NGINX_IMAGE" "${nginx_images[@]}")"
+export GO_PROXY="${GO_PROXY:-https://goproxy.cn,direct}"
+export NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 export MYSQL_PORT="${MYSQL_PORT:-$(find_free_port 3306)}"
 export BACKEND_PORT="${BACKEND_PORT:-$(find_free_port 8080)}"
 export FRONTEND_PORT="${FRONTEND_PORT:-$(find_free_port 5173)}"
 
 echo "Using MYSQL_IMAGE=$MYSQL_IMAGE"
+echo "Using GO_BUILDER_IMAGE=$GO_BUILDER_IMAGE"
+echo "Using APP_RUNTIME_IMAGE=$APP_RUNTIME_IMAGE"
+echo "Using NODE_BUILDER_IMAGE=$NODE_BUILDER_IMAGE"
+echo "Using NGINX_IMAGE=$NGINX_IMAGE"
+echo "Using GO_PROXY=$GO_PROXY"
+echo "Using NPM_REGISTRY=$NPM_REGISTRY"
 echo "Using MYSQL_PORT=$MYSQL_PORT BACKEND_PORT=$BACKEND_PORT FRONTEND_PORT=$FRONTEND_PORT"
 docker compose up -d --build
 

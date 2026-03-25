@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { api } from '../services/api'
+import { fetchData, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
+import { MyWorkData } from '../types'
 
 export function MyWorkPage() {
-  const [data, setData] = useState<{ myTasks: any[]; myCreated: any[]; myParticipate: any[] }>({ myTasks: [], myCreated: [], myParticipate: [] })
+  const [data, setData] = useState<MyWorkData>({ myTasks: [], myCreated: [], myParticipate: [] })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -11,10 +12,10 @@ export function MyWorkPage() {
     try {
       setLoading(true)
       setError('')
-      const res = await api.get('/tasks/me')
-      setData(res.data)
-    } catch (loadError: any) {
-      setError(loadError?.response?.data?.message || '个人工作数据加载失败')
+      const payload = await fetchData<MyWorkData>('/tasks/me')
+      setData(payload)
+    } catch (loadError) {
+      setError(readApiError(loadError, '个人工作数据加载失败'))
       setData({ myTasks: [], myCreated: [], myParticipate: [] })
     } finally {
       setLoading(false)

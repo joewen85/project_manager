@@ -1,11 +1,16 @@
-FROM node:22-alpine AS builder
+ARG NODE_BUILDER_IMAGE=node:22-alpine
+ARG NGINX_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/nginx:alpine
+ARG NPM_REGISTRY=https://registry.npmjs.org
+
+FROM ${NODE_BUILDER_IMAGE} AS builder
+ARG NPM_REGISTRY
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm config set registry "${NPM_REGISTRY}" && npm install
 COPY . .
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM ${NGINX_IMAGE}
 COPY --from=builder /app/dist /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

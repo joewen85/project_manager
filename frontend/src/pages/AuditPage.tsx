@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { api } from '../services/api'
+import { fetchPage, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
 import { formatDateTime } from '../utils/datetime'
+import { AuditLog } from '../types'
 
 export function AuditPage() {
-  const [items, setItems] = useState<any[]>([])
+  const [items, setItems] = useState<AuditLog[]>([])
   const [module, setModule] = useState('')
   const [action, setAction] = useState('')
   const [loading, setLoading] = useState(false)
@@ -14,13 +15,10 @@ export function AuditPage() {
     try {
       setLoading(true)
       setError('')
-      const query = new URLSearchParams({ page: '1', pageSize: '100' })
-      if (module) query.set('module', module)
-      if (action) query.set('action', action)
-      const res = await api.get(`/audit/logs?${query.toString()}`)
-      setItems(res.data.list ?? [])
-    } catch (loadError: any) {
-      setError(loadError?.response?.data?.message || '审计日志加载失败')
+      const pageData = await fetchPage<AuditLog>('/audit/logs', { page: 1, pageSize: 100, module, action }, { page: 1, pageSize: 100 })
+      setItems(pageData.list)
+    } catch (loadError) {
+      setError(readApiError(loadError, '审计日志加载失败'))
       setItems([])
     } finally {
       setLoading(false)

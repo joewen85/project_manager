@@ -8,10 +8,12 @@ import (
 	"project-manager/backend/internal/model"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type projectRequest struct {
-	Code          string `json:"code" binding:"required"`
+	Code          string `json:"code"`
 	Name          string `json:"name" binding:"required"`
 	Description   string `json:"description"`
 	StartAt       string `json:"startAt"`
@@ -37,6 +39,10 @@ type projectEditorOptionsResponse struct {
 	Departments []projectEditorOptionDepartment `json:"departments"`
 }
 
+func generateProjectCode() string {
+	return "PROJ-" + strings.ToUpper(uuid.NewString()[0:8])
+}
+
 func (h *Handler) ListProjects(c *gin.Context) {
 	page, pageSize := parsePage(c)
 	var projects []model.Project
@@ -48,11 +54,18 @@ func (h *Handler) ListProjects(c *gin.Context) {
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_PROJECTS_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_PROJECTS_FAILED", err)
 		return
 	}
-	if err := query.Preload("Users").Preload("Departments").Offset((page - 1) * pageSize).Limit(pageSize).Find(&projects).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_PROJECTS_FAILED", err.Error())
+	orderBy := parseSort(c, "projects.id desc", map[string]string{
+		"code":      "projects.code",
+		"name":      "projects.name",
+		"startAt":   "projects.start_at",
+		"endAt":     "projects.end_at",
+		"createdAt": "projects.created_at",
+	})
+	if err := query.Preload("Users").Preload("Departments").Order(orderBy).Offset((page - 1) * pageSize).Limit(pageSize).Find(&projects).Error; err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_PROJECTS_FAILED", err)
 		return
 	}
 	c.JSON(http.StatusOK, pageResult[model.Project]{List: projects, Total: total, Page: page, PageSize: pageSize})
@@ -91,13 +104,13 @@ func (h *Handler) ProjectEditorOptions(c *gin.Context) {
 
 	var users []projectEditorOptionUser
 	if err := usersQuery.Order("name asc").Limit(pageSize).Find(&users).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_PROJECT_EDITOR_USERS_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_PROJECT_EDITOR_USERS_FAILED", err)
 		return
 	}
 
 	var departments []projectEditorOptionDepartment
 	if err := departmentsQuery.Order("name asc").Limit(pageSize).Find(&departments).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "QUERY_PROJECT_EDITOR_DEPARTMENTS_FAILED", err.Error())
+		respondDBError(c, http.StatusInternalServerError, "QUERY_PROJECT_EDITOR_DEPARTMENTS_FAILED", err)
 		return
 	}
 
@@ -110,7 +123,7 @@ func (h *Handler) ProjectEditorOptions(c *gin.Context) {
 func (h *Handler) CreateProject(c *gin.Context) {
 	var req projectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		respondValidationError(c, err)
 		return
 	}
 	startAt, err := parseRFC3339(req.StartAt)
@@ -124,39 +137,70 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		return
 	}
 
+	code := strings.TrimSpace(req.Code)
+	if code == "" {
+		code = generateProjectCode()
+	}
+
 	item := model.Project{
-		Code:        req.Code,
+		Code:        code,
 		Name:        req.Name,
 		Description: req.Description,
 		StartAt:     startAt,
 		EndAt:       endAt,
 	}
-	if err := h.DB.Create(&item).Error; err != nil {
-		respondError(c, http.StatusBadRequest, "CREATE_PROJECT_FAILED", err.Error())
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&item).Error; err != nil {
+			return err
+		}
+
+		if len(req.UserIDs) > 0 {
+			users, err := findUsersByIDs(tx, req.UserIDs)
+			if err != nil {
+				return err
+			}
+			if err := replaceAssociation(tx, &item, "Users", &users); err != nil {
+				return err
+			}
+			if err := h.createNotificationsWithDB(tx, req.UserIDs, "你被设为项目负责人", "项目 "+item.Code+" - "+item.Name+" 已将你设为负责人", "projects", item.ID); err != nil {
+				return err
+			}
+		}
+		if len(req.DepartmentIDs) > 0 {
+			departments, err := findDepartmentsByIDs(tx, req.DepartmentIDs)
+			if err != nil {
+				return err
+			}
+			if err := replaceAssociation(tx, &item, "Departments", &departments); err != nil {
+				return err
+			}
+		}
+		if err := h.triggerFailpoint("projects.create.after_relations"); err != nil {
+			return err
+		}
+
+		if err := tx.Preload("Users").Preload("Departments").First(&item, item.ID).Error; err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "projects", "create", item.ID, true, auditDetailf("创建项目(id=%d)", item.ID))
+	}); err != nil {
+		respondDBError(c, http.StatusBadRequest, "CREATE_PROJECT_FAILED", err)
 		return
 	}
 
-	if len(req.UserIDs) > 0 {
-		var users []model.User
-		h.DB.Where("id IN ?", req.UserIDs).Find(&users)
-		h.DB.Model(&item).Association("Users").Replace(&users)
-		h.createNotifications(req.UserIDs, "你被设为项目负责人", "项目 "+item.Code+" - "+item.Name+" 已将你设为负责人", "projects", item.ID)
-	}
-	if len(req.DepartmentIDs) > 0 {
-		var departments []model.Department
-		h.DB.Where("id IN ?", req.DepartmentIDs).Find(&departments)
-		h.DB.Model(&item).Association("Departments").Replace(&departments)
-	}
-
-	h.DB.Preload("Users").Preload("Departments").First(&item, item.ID)
-	h.writeAudit(c, "projects", "create", item.ID, true, "创建项目")
 	c.JSON(http.StatusCreated, item)
 }
 
 func (h *Handler) UpdateProject(c *gin.Context) {
 	var req projectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondError(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		respondValidationError(c, err)
+		return
+	}
+
+	code := strings.TrimSpace(req.Code)
+	if code == "" {
+		respondError(c, http.StatusBadRequest, "PROJECT_CODE_REQUIRED", "项目编码不能为空")
 		return
 	}
 
@@ -176,40 +220,60 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		return
 	}
 
-	item.Code = req.Code
+	item.Code = code
 	item.Name = req.Name
 	item.Description = req.Description
 	item.StartAt = startAt
 	item.EndAt = endAt
-	if err := h.DB.Save(&item).Error; err != nil {
-		respondError(c, http.StatusBadRequest, "UPDATE_PROJECT_FAILED", err.Error())
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		var oldUsers []model.User
+		if err := tx.Model(&item).Association("Users").Find(&oldUsers); err != nil {
+			return err
+		}
+		oldUserIDs := make([]uint, 0, len(oldUsers))
+		for _, user := range oldUsers {
+			oldUserIDs = append(oldUserIDs, user.ID)
+		}
+
+		if err := tx.Save(&item).Error; err != nil {
+			return err
+		}
+
+		users, err := findUsersByIDs(tx, req.UserIDs)
+		if err != nil {
+			return err
+		}
+		if err := replaceAssociation(tx, &item, "Users", &users); err != nil {
+			return err
+		}
+		addedUsers, removedUsers := diffUserIDs(req.UserIDs, oldUserIDs)
+		if err := h.createNotificationsWithDB(tx, addedUsers, "你被加入项目负责人", "项目 "+item.Code+" - "+item.Name+" 已将你设为负责人", "projects", item.ID); err != nil {
+			return err
+		}
+		if err := h.createNotificationsWithDB(tx, removedUsers, "你已被移出项目负责人", "项目 "+item.Code+" - "+item.Name+" 已将你移出负责人", "projects", item.ID); err != nil {
+			return err
+		}
+
+		departments, err := findDepartmentsByIDs(tx, req.DepartmentIDs)
+		if err != nil {
+			return err
+		}
+		if err := replaceAssociation(tx, &item, "Departments", &departments); err != nil {
+			return err
+		}
+		if err := h.triggerFailpoint("projects.update.after_relations"); err != nil {
+			return err
+		}
+
+		if err := tx.Preload("Users").Preload("Departments").First(&item, item.ID).Error; err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "projects", "update", item.ID, true, auditDetailf("更新项目(id=%d)", item.ID))
+	}); err != nil {
+		respondDBError(c, http.StatusBadRequest, "UPDATE_PROJECT_FAILED", err)
 		return
 	}
 
-	var oldUsers []model.User
-	h.DB.Model(&item).Association("Users").Find(&oldUsers)
-	oldUserIDs := make([]uint, 0, len(oldUsers))
-	for _, user := range oldUsers {
-		oldUserIDs = append(oldUserIDs, user.ID)
-	}
-
-	var users []model.User
-	if len(req.UserIDs) > 0 {
-		h.DB.Where("id IN ?", req.UserIDs).Find(&users)
-	}
-	h.DB.Model(&item).Association("Users").Replace(&users)
-	addedUsers, removedUsers := diffUserIDs(req.UserIDs, oldUserIDs)
-	h.createNotifications(addedUsers, "你被加入项目负责人", "项目 "+item.Code+" - "+item.Name+" 已将你设为负责人", "projects", item.ID)
-	h.createNotifications(removedUsers, "你已被移出项目负责人", "项目 "+item.Code+" - "+item.Name+" 已将你移出负责人", "projects", item.ID)
-
-	var departments []model.Department
-	if len(req.DepartmentIDs) > 0 {
-		h.DB.Where("id IN ?", req.DepartmentIDs).Find(&departments)
-	}
-	h.DB.Model(&item).Association("Departments").Replace(&departments)
-
-	h.DB.Preload("Users").Preload("Departments").First(&item, item.ID)
-	h.writeAudit(c, "projects", "update", item.ID, true, "更新项目")
 	c.JSON(http.StatusOK, item)
 }
 
@@ -225,19 +289,25 @@ func (h *Handler) DeleteProject(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "PROJECT_HAS_TASKS", "请先删除或迁移项目下任务")
 		return
 	}
-	if err := h.DB.Model(&item).Association("Users").Clear(); err != nil {
-		respondError(c, http.StatusInternalServerError, "CLEAR_PROJECT_USERS_FAILED", err.Error())
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := clearAssociation(tx, &item, "Users"); err != nil {
+			return err
+		}
+		if err := clearAssociation(tx, &item, "Departments"); err != nil {
+			return err
+		}
+		if err := tx.Delete(&item).Error; err != nil {
+			return err
+		}
+		if err := h.triggerFailpoint("projects.delete.after_delete"); err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "projects", "delete", item.ID, true, auditDetailf("删除项目(id=%d)", item.ID))
+	}); err != nil {
+		respondDBError(c, http.StatusInternalServerError, "DELETE_PROJECT_FAILED", err)
 		return
 	}
-	if err := h.DB.Model(&item).Association("Departments").Clear(); err != nil {
-		respondError(c, http.StatusInternalServerError, "CLEAR_PROJECT_DEPARTMENTS_FAILED", err.Error())
-		return
-	}
-	if err := h.DB.Delete(&item).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "DELETE_PROJECT_FAILED", err.Error())
-		return
-	}
-	h.writeAudit(c, "projects", "delete", item.ID, true, "删除项目")
+
 	respondMessage(c, http.StatusOK, "PROJECT_DELETED", "删除成功")
 }
 
