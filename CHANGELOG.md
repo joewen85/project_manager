@@ -1,25 +1,25 @@
-# Changelog
+# 更新日志
 
-All notable changes to this project are documented in this file.
+本文件用于记录项目的关键版本变更。
 
 ## [v1.0.0] - 2026-03-25
 
-### Added
-- Complete project management baseline with `Go (Gin + Gorm + JWT)`, `MySQL`, and `Vite + React + TypeScript`.
-- RBAC, user management, department management, project management, task management, personal workspace, dashboard statistics, audit log, gantt chart, and task tree pages.
-- Environment template support via `.env.template`.
-- UI support modules and reusable components (`Pagination`, `DataState`, status constants, UI docs/checklists).
-- Deployment artifacts for Docker Compose and Helm/K8s.
+### 新增
+- 完成基于 `Go (Gin + Gorm + JWT)`、`MySQL`、`Vite + React + TypeScript` 的项目管理系统基础架构。
+- 新增 RBAC、用户管理、部门管理、项目管理、任务管理、个人工作台、统计分析、审计日志、甘特图、任务分解树等核心功能页面。
+- 新增 `.env.template` 环境变量模板，支持运行时通过环境变量读取配置。
+- 新增前端通用能力与组件（`Pagination`、`DataState`、状态常量、UI 规范文档/检查清单）。
+- 新增 Docker Compose 与 Helm/K8s 部署相关资源。
 
-### Changed
-- Improved permission scope behavior for project/task visibility (user-scoped results for non-admin users).
-- Enhanced dashboard behavior to hide user count metrics for users without user-management privileges.
-- Updated project/task edit dialogs to use searchable selector areas.
-- Improved gantt chart visual contrast and progress readability.
+### 变更
+- 优化项目/任务数据权限范围控制：普通用户按“与我相关”范围查看数据。
+- 优化统计分析页面：无用户管理权限时不展示“用户数”卡片。
+- 优化项目编辑与任务编辑弹窗，支持搜索选择负责人、部门、执行人。
+- 优化甘特图视觉样式，提高进度与状态的可读性和对比度。
 
-### Fixed
-- Fixed CORS issues in local development.
-- Fixed permission refresh timing issues after RBAC updates.
-- Fixed selector interaction issues where multi-select required `command + click` to unselect (replaced with checkbox-based selection UX).
-- Fixed task/project data-loading edge cases causing empty or unstable option lists in edit dialogs.
-- Fixed chart rendering null-safety issues in dashboard/gantt components.
+### 修复
+- 修复本地开发 CORS 跨域问题。
+- 修复 RBAC 权限更新后生效不及时的问题。
+- 修复多人选择控件必须 `command + 点击` 才能取消的问题（改为复选框交互）。
+- 修复项目/任务编辑时用户与部门选项加载不稳定、数据为空等问题。
+- 修复统计图与甘特图在空数据场景下的空指针渲染问题。
