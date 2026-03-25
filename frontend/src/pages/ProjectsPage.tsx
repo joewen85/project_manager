@@ -4,6 +4,8 @@ import { GanttChart } from '../components/GanttChart'
 import { TaskTree } from '../components/TaskTree'
 import { Task } from '../types'
 import { Modal } from '../components/Modal'
+import { Pagination } from '../components/Pagination'
+import { DataState } from '../components/DataState'
 
 interface ProjectForm {
   id?: number
@@ -20,6 +22,7 @@ const initialForm: ProjectForm = { code: '', name: '', description: '', startAt:
 
 type SortKey = 'code' | 'name' | 'owners' | 'departments' | 'createdAt'
 type SortOrder = 'asc' | 'desc'
+const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
 
 export function ProjectsPage() {
   const [projects, setProjects] = useState<any[]>([])
@@ -36,18 +39,29 @@ export function ProjectsPage() {
   const [tree, setTree] = useState<Task[]>([])
   const [form, setForm] = useState<ProjectForm>(initialForm)
   const [modalOpen, setModalOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [formSuccess, setFormSuccess] = useState('')
+  const [ownerKeyword, setOwnerKeyword] = useState('')
+  const [departmentKeyword, setDepartmentKeyword] = useState('')
 
   const load = async () => {
-    const projectRes = await api.get('/projects?page=1&pageSize=200')
-    const rawList = projectRes.data?.list ?? projectRes.data
-    const list = Array.isArray(rawList) ? rawList : []
-    setProjects(list)
-    if (list.length > 0 && !selected) setSelected(list[0].id)
-
-    const userRes = await api.get('/users?page=1&pageSize=200', { silent: true } as any).catch(() => ({ data: { list: [] } }))
-    setUsers(Array.isArray(userRes.data?.list) ? userRes.data.list : [])
-    const departmentRes = await api.get('/departments?page=1&pageSize=200', { silent: true } as any).catch(() => ({ data: { list: [] } }))
-    setDepartments(Array.isArray(departmentRes.data?.list) ? departmentRes.data.list : [])
+    try {
+      setLoading(true)
+      setError('')
+      const projectRes = await api.get('/projects?page=1&pageSize=200')
+      const rawList = projectRes.data?.list ?? projectRes.data
+      const list = Array.isArray(rawList) ? rawList : []
+      setProjects(list)
+      if (list.length > 0 && !selected) setSelected(list[0].id)
+    } catch (loadError: any) {
+      setError(loadError?.response?.data?.message || '项目列表加载失败')
+      setProjects([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -60,8 +74,28 @@ export function ProjectsPage() {
     void api.get(`/projects/${selected}/task-tree`).then((res) => setTree(Array.isArray(res.data) ? res.data : []))
   }, [selected])
 
+  useEffect(() => {
+    if (!modalOpen) return
+    const timer = window.setTimeout(() => {
+      const userQuery = ownerKeyword.trim() ? `&keyword=${encodeURIComponent(ownerKeyword.trim())}` : ''
+      const departmentQuery = departmentKeyword.trim() ? `&keyword=${encodeURIComponent(departmentKeyword.trim())}` : ''
+      void Promise.all([
+        api.get(`/users?page=1&pageSize=200${userQuery}`, { silent: true } as any).catch(() => ({ data: { list: [] } })),
+        api.get(`/departments?page=1&pageSize=200${departmentQuery}`, { silent: true } as any).catch(() => ({ data: { list: [] } }))
+      ]).then(([userRes, departmentRes]) => {
+        setUsers(Array.isArray(userRes.data?.list) ? userRes.data.list : [])
+        setDepartments(Array.isArray(departmentRes.data?.list) ? departmentRes.data.list : [])
+      })
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [modalOpen, ownerKeyword, departmentKeyword])
+
   const openCreateModal = () => {
     setForm(initialForm)
+    setFormError('')
+    setFormSuccess('')
+    setOwnerKeyword('')
+    setDepartmentKeyword('')
     setModalOpen(true)
   }
 
@@ -76,23 +110,39 @@ export function ProjectsPage() {
       userIds: (item.users || []).map((user: any) => user.id),
       departmentIds: (item.departments || []).map((department: any) => department.id)
     })
+    setFormError('')
+    setFormSuccess('')
+    setOwnerKeyword('')
+    setDepartmentKeyword('')
     setModalOpen(true)
   }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (form.startAt && form.endAt && new Date(form.startAt) > new Date(form.endAt)) {
+      setFormError('结束时间必须晚于开始时间')
+      return
+    }
     const payload = {
       ...form,
       startAt: form.startAt ? new Date(form.startAt).toISOString() : '',
       endAt: form.endAt ? new Date(form.endAt).toISOString() : ''
     }
 
-    if (form.id) await api.put(`/projects/${form.id}`, payload)
-    else await api.post('/projects', payload)
-
-    setModalOpen(false)
-    setForm(initialForm)
-    await load()
+    try {
+      setSubmitting(true)
+      setFormError('')
+      if (form.id) await api.put(`/projects/${form.id}`, payload)
+      else await api.post('/projects', payload)
+      setFormSuccess('保存成功')
+      setModalOpen(false)
+      setForm(initialForm)
+      await load()
+    } catch (submitError: any) {
+      setFormError(submitError?.response?.data?.message || '保存项目失败')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const onDelete = async (id: number) => {
@@ -134,24 +184,22 @@ export function ProjectsPage() {
   const pagedProjects = processedProjects.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   return (
-    <section>
-      <h2>项目列表 / 项目详情</h2>
-
+    <section className="page-section">
       <div className="card toolbar-grid">
-        <input value={keyword} placeholder="搜索：编码/名称/描述" onChange={(e) => { setKeyword(e.target.value); setPage(1) }} />
-        <select value={filter} onChange={(e) => { setFilter(e.target.value as any); setPage(1) }}>
+        <input aria-label="搜索项目" value={keyword} placeholder="搜索：编码/名称/描述" onChange={(e) => { setKeyword(e.target.value); setPage(1) }} />
+        <select aria-label="项目筛选" value={filter} onChange={(e) => { setFilter(e.target.value as any); setPage(1) }}>
           <option value="all">全部项目</option>
           <option value="hasOwner">仅有负责人</option>
           <option value="hasDepartment">仅有部门</option>
         </select>
-        <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
+        <select aria-label="项目排序字段" value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
           <option value="createdAt">按创建时间</option>
           <option value="code">按编码</option>
           <option value="name">按名称</option>
           <option value="owners">按负责人数量</option>
           <option value="departments">按部门数量</option>
         </select>
-        <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as SortOrder)}>
+        <select aria-label="项目排序方式" value={sortOrder} onChange={(e) => setSortOrder(e.target.value as SortOrder)}>
           <option value="desc">降序</option>
           <option value="asc">升序</option>
         </select>
@@ -168,38 +216,31 @@ export function ProjectsPage() {
       <TaskTree tasks={tree} />
 
       <div className="card">
-        <table><thead><tr><th>编码</th><th>名称</th><th>描述</th><th>负责人</th><th>部门</th><th>操作</th></tr></thead><tbody>
-          {pagedProjects.map((p) => (
-            <tr key={p.id}>
-              <td>{p.code}</td><td>{p.name}</td><td>{p.description}</td><td>{(p.users || []).length}</td><td>{(p.departments || []).length}</td>
-              <td>
-                <button className="btn secondary" onClick={() => edit(p)}>编辑</button>
-                <button className="btn danger" onClick={() => onDelete(p.id)}>删除</button>
-              </td>
-            </tr>
-          ))}
-        </tbody></table>
+        <DataState loading={loading} error={error} empty={!loading && !error && pagedProjects.length === 0} emptyText="暂无匹配的项目" onRetry={() => { void load() }} />
+        {!loading && !error && pagedProjects.length > 0 && (
+          <table><thead><tr><th>编码</th><th>名称</th><th>描述</th><th>负责人</th><th>部门</th><th>操作</th></tr></thead><tbody>
+            {pagedProjects.map((p) => (
+              <tr key={p.id}>
+                <td>{p.code}</td><td>{p.name}</td><td>{p.description}</td><td>{(p.users || []).length}</td><td>{(p.departments || []).length}</td>
+                <td>
+                  <button className="btn secondary" onClick={() => edit(p)}>编辑</button>
+                  <button className="btn danger" onClick={() => onDelete(p.id)}>删除</button>
+                </td>
+              </tr>
+            ))}
+          </tbody></table>
+        )}
       </div>
 
-      <div className="card pagination-row">
-        <span>共 {total} 条</span>
-        <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}>
-          <option value={10}>10/页</option>
-          <option value={20}>20/页</option>
-          <option value={50}>50/页</option>
-        </select>
-        <button className="btn secondary" disabled={currentPage <= 1} onClick={() => setPage((prev) => Math.max(prev - 1, 1))}>上一页</button>
-        <span>{currentPage} / {totalPages}</span>
-        <button className="btn secondary" disabled={currentPage >= totalPages} onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}>下一页</button>
-      </div>
+      {!loading && !error && total > 0 && <Pagination total={total} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />}
 
       <GanttChart tasks={gantt} />
 
       <Modal open={modalOpen} title={form.id ? '编辑项目' : '新增项目'} onClose={() => setModalOpen(false)}>
         <form className="form-grid" onSubmit={submit}>
-          <label htmlFor="project-code">编码</label>
+          <label className="required-label" htmlFor="project-code">编码</label>
           <input id="project-code" value={form.code} onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))} required />
-          <label htmlFor="project-name">名称</label>
+          <label className="required-label" htmlFor="project-name">名称</label>
           <input id="project-name" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} required />
           <label htmlFor="project-description">描述</label>
           <input id="project-description" value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} />
@@ -208,23 +249,49 @@ export function ProjectsPage() {
           <label htmlFor="project-end">结束时间</label>
           <input id="project-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} />
           <label htmlFor="project-users">项目负责人</label>
-          <select id="project-users" multiple value={form.userIds.map(String)} onChange={(event) => {
-            const selectedIds = Array.from(event.target.selectedOptions).map((option) => Number(option.value))
-            setForm((prev) => ({ ...prev, userIds: selectedIds }))
-          }}>
-            {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-          </select>
+          <input
+            aria-label="搜索负责人"
+            placeholder="搜索负责人：姓名/用户名/邮箱"
+            value={ownerKeyword}
+            onChange={(e) => setOwnerKeyword(e.target.value)}
+          />
+          <div id="project-users" className="multi-checklist">
+            {users.map((user) => (
+              <label key={user.id} className="multi-check-item">
+                <input
+                  type="checkbox"
+                  checked={form.userIds.includes(user.id)}
+                  onChange={() => setForm((prev) => ({ ...prev, userIds: toggleNumber(prev.userIds, user.id) }))}
+                />
+                <span>{user.name} ({user.username})</span>
+              </label>
+            ))}
+          </div>
           <label htmlFor="project-departments">参与部门</label>
-          <select id="project-departments" multiple value={form.departmentIds.map(String)} onChange={(event) => {
-            const selectedIds = Array.from(event.target.selectedOptions).map((option) => Number(option.value))
-            setForm((prev) => ({ ...prev, departmentIds: selectedIds }))
-          }}>
-            {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-          </select>
+          <input
+            aria-label="搜索部门"
+            placeholder="搜索部门名称"
+            value={departmentKeyword}
+            onChange={(e) => setDepartmentKeyword(e.target.value)}
+          />
+          <div id="project-departments" className="multi-checklist">
+            {departments.map((department) => (
+              <label key={department.id} className="multi-check-item">
+                <input
+                  type="checkbox"
+                  checked={form.departmentIds.includes(department.id)}
+                  onChange={() => setForm((prev) => ({ ...prev, departmentIds: toggleNumber(prev.departmentIds, department.id) }))}
+                />
+                <span>{department.name}</span>
+              </label>
+            ))}
+          </div>
           <div className="row-actions">
-            <button type="submit" className="btn">保存项目</button>
+            <button type="submit" className="btn" disabled={submitting}>{submitting ? '保存中...' : '保存项目'}</button>
             <button type="button" className="btn secondary" onClick={() => setForm(initialForm)}>重置</button>
           </div>
+          {formError && <p className="error">{formError}</p>}
+          {formSuccess && <p className="success">{formSuccess}</p>}
         </form>
       </Modal>
     </section>

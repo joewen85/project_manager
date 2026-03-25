@@ -1,5 +1,5 @@
-import { BarChart3, Building2, FolderKanban, ListChecks, NotebookTabs, Shield, UserCircle2, Users } from 'lucide-react'
-import { Link, Outlet } from 'react-router-dom'
+import { BarChart3, Building2, FolderKanban, ListChecks, Moon, NotebookTabs, Shield, Sun, UserCircle2, Users } from 'lucide-react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { getPermissions, setPermissions } from '../services/api'
 import { api } from '../services/api'
@@ -19,6 +19,12 @@ export function Layout() {
   const [profile, setProfile] = useState<{ name?: string; username?: string; email?: string }>({})
   const [permissions, setPermissionState] = useState<string[]>(getPermissions())
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('theme')
+    if (saved === 'light' || saved === 'dark') return saved
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  })
+  const location = useLocation()
   const visibleMenus = menus.filter((item) => permissions.includes(item.permission))
 
   useEffect(() => {
@@ -54,6 +60,11 @@ export function Layout() {
     return () => window.clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
   const logout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('permissions')
@@ -61,24 +72,39 @@ export function Layout() {
   }
 
   const initials = (profile.name || profile.username || 'U').slice(0, 2).toUpperCase()
+  const titleEntries: Array<[string, string]> = [
+    ['/', '统计分析'],
+    ['/rbac', 'RBAC 权限管理'],
+    ['/users', '用户管理'],
+    ['/departments', '部门管理'],
+    ['/projects', '项目列表'],
+    ['/tasks', '任务列表'],
+    ['/audit', '审计日志'],
+    ['/me', '个人工作']
+  ]
+  const currentTitle = titleEntries.find(([path]) => path === '/' ? location.pathname === '/' : location.pathname.startsWith(path))?.[1] || '项目管理系统'
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <h1>Project Manager</h1>
+        <h1 className="sidebar-title">Project Manager</h1>
         {visibleMenus.map((menu) => {
           const Icon = menu.icon
           return (
-            <Link className="nav-item" to={menu.to} key={menu.to}>
+            <NavLink className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} to={menu.to} key={menu.to} end={menu.to === '/'}>
               <Icon size={16} />
               <span>{menu.label}</span>
-            </Link>
+            </NavLink>
           )
         })}
       </aside>
       <main className="content" aria-live="polite">
         <header className="topbar card">
+          <h2 className="page-title">{currentTitle}</h2>
           <div className="user-anchor">
+            <button className="theme-toggle" onClick={() => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))} aria-label={theme === 'light' ? '切换深色模式' : '切换浅色模式'}>
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
             <button className="avatar-btn" onClick={() => setUserMenuOpen((prev) => !prev)} aria-label="用户菜单">
               {initials}
             </button>

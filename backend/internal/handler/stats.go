@@ -14,7 +14,9 @@ func (h *Handler) ProgressList(c *gin.Context) {
 		Count  int64  `json:"count"`
 	}
 	var items []progressItem
-	if err := h.DB.Model(&model.Task{}).Select("status, count(*) as count").Group("status").Scan(&items).Error; err != nil {
+	query := h.DB.Model(&model.Task{})
+	query = h.scopeTasksQuery(c, query)
+	if err := query.Select("status, count(*) as count").Group("status").Scan(&items).Error; err != nil {
 		respondError(c, http.StatusInternalServerError, "QUERY_PROGRESS_FAILED", err.Error())
 		return
 	}
@@ -23,10 +25,23 @@ func (h *Handler) ProgressList(c *gin.Context) {
 
 func (h *Handler) DashboardStats(c *gin.Context) {
 	var userCount, projectCount, taskCount, doneCount int64
-	h.DB.Model(&model.User{}).Count(&userCount)
-	h.DB.Model(&model.Project{}).Count(&projectCount)
-	h.DB.Model(&model.Task{}).Count(&taskCount)
-	h.DB.Model(&model.Task{}).Where("status = ?", model.TaskCompleted).Count(&doneCount)
+	isAdmin := h.currentUserIsAdmin(c)
+	if isAdmin {
+		h.DB.Model(&model.User{}).Count(&userCount)
+		h.DB.Model(&model.Project{}).Count(&projectCount)
+		h.DB.Model(&model.Task{}).Count(&taskCount)
+		h.DB.Model(&model.Task{}).Where("status = ?", model.TaskCompleted).Count(&doneCount)
+	} else {
+		uid := c.GetUint("userId")
+		userCount = 1
+		taskBase := h.scopeTasksQuery(c, h.DB.Model(&model.Task{}))
+		taskBase.Count(&taskCount)
+		taskBase.Where("status = ?", model.TaskCompleted).Count(&doneCount)
+		taskBase.Distinct("project_id").Count(&projectCount)
+		if uid == 0 {
+			userCount = 0
+		}
+	}
 
 	completionRate := 0.0
 	if taskCount > 0 {

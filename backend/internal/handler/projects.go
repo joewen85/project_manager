@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"project-manager/backend/internal/model"
@@ -19,10 +20,28 @@ type projectRequest struct {
 	DepartmentIDs []uint `json:"departmentIds"`
 }
 
+type projectEditorOptionUser struct {
+	ID       uint   `json:"id"`
+	Name     string `json:"name"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
+
+type projectEditorOptionDepartment struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+}
+
+type projectEditorOptionsResponse struct {
+	Users       []projectEditorOptionUser       `json:"users"`
+	Departments []projectEditorOptionDepartment `json:"departments"`
+}
+
 func (h *Handler) ListProjects(c *gin.Context) {
 	page, pageSize := parsePage(c)
 	var projects []model.Project
 	query := h.DB.Model(&model.Project{})
+	query = h.scopeProjectsQuery(c, query)
 	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
 		like := "%" + keyword + "%"
 		query = query.Where("code LIKE ? OR name LIKE ? OR description LIKE ?", like, like, like)
@@ -37,6 +56,55 @@ func (h *Handler) ListProjects(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, pageResult[model.Project]{List: projects, Total: total, Page: page, PageSize: pageSize})
+}
+
+func (h *Handler) ProjectEditorOptions(c *gin.Context) {
+	keyword := strings.TrimSpace(c.Query("keyword"))
+	userKeyword := strings.TrimSpace(c.Query("userKeyword"))
+	departmentKeyword := strings.TrimSpace(c.Query("departmentKeyword"))
+	if userKeyword == "" {
+		userKeyword = keyword
+	}
+	if departmentKeyword == "" {
+		departmentKeyword = keyword
+	}
+	pageSize := 100
+	if value := strings.TrimSpace(c.Query("pageSize")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+			if parsed > 100 {
+				parsed = 100
+			}
+			pageSize = parsed
+		}
+	}
+
+	usersQuery := h.DB.Model(&model.User{}).Select("id, name, username, email")
+	departmentsQuery := h.DB.Model(&model.Department{}).Select("id, name")
+	if userKeyword != "" {
+		like := "%" + userKeyword + "%"
+		usersQuery = usersQuery.Where("name LIKE ? OR username LIKE ? OR email LIKE ?", like, like, like)
+	}
+	if departmentKeyword != "" {
+		like := "%" + departmentKeyword + "%"
+		departmentsQuery = departmentsQuery.Where("name LIKE ?", like)
+	}
+
+	var users []projectEditorOptionUser
+	if err := usersQuery.Order("name asc").Limit(pageSize).Find(&users).Error; err != nil {
+		respondError(c, http.StatusInternalServerError, "QUERY_PROJECT_EDITOR_USERS_FAILED", err.Error())
+		return
+	}
+
+	var departments []projectEditorOptionDepartment
+	if err := departmentsQuery.Order("name asc").Limit(pageSize).Find(&departments).Error; err != nil {
+		respondError(c, http.StatusInternalServerError, "QUERY_PROJECT_EDITOR_DEPARTMENTS_FAILED", err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, projectEditorOptionsResponse{
+		Users:       users,
+		Departments: departments,
+	})
 }
 
 func (h *Handler) CreateProject(c *gin.Context) {
@@ -163,6 +231,9 @@ func (h *Handler) DeleteProject(c *gin.Context) {
 }
 
 func (h *Handler) ProjectDetail(c *gin.Context) {
+	if !h.ensureProjectVisible(c, c.Param("id")) {
+		return
+	}
 	var project model.Project
 	if err := h.DB.
 		Preload("Users").

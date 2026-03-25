@@ -1,5 +1,7 @@
 import dayjs from 'dayjs'
+import { CSSProperties } from 'react'
 import { Task } from '../types'
+import { STATUS_META } from '../constants/status'
 
 interface Props {
   tasks?: Task[] | null
@@ -22,17 +24,26 @@ export function GanttChart({ tasks }: Props) {
       {validTasks.map((task) => {
         const startOffset = dayjs(task.startAt).diff(minDate, 'day')
         const duration = Math.max(dayjs(task.endAt).diff(dayjs(task.startAt), 'day'), 1)
+        const progress = Math.max(0, Math.min(100, Number(task.progress || 0)))
+        const statusMeta = STATUS_META[task.status] || STATUS_META.pending
         return (
           <div key={task.id} className="gantt-row">
-            <span>{task.taskNo} {task.title}</span>
+            <span className="gantt-label">
+              {task.taskNo} {task.title}
+              <em className="status-dot" style={{ background: statusMeta.color }}>{statusMeta.label}</em>
+            </span>
             <div className="gantt-track">
               <div
                 className="gantt-bar"
                 style={{
                   marginLeft: `${(startOffset / totalDays) * 100}%`,
-                  width: `${(duration / totalDays) * 100}%`
-                }}
-              />
+                  width: `${(duration / totalDays) * 100}%`,
+                  borderColor: statusMeta.color
+                } as CSSProperties}
+              >
+                <span className="gantt-bar-progress" style={{ width: `${progress}%`, background: statusMeta.color }} />
+                <span className="gantt-bar-text">{progress}%</span>
+              </div>
             </div>
           </div>
         )

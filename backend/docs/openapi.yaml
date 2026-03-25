@@ -84,6 +84,11 @@ paths:
       summary: 项目列表
       security: [{ bearerAuth: [] }]
       responses: { '200': { description: OK } }
+  /projects/editor-options:
+    get:
+      summary: 项目编辑选项（负责人/部门）
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
   /tasks:
     get:
       summary: 任务列表
@@ -93,6 +98,11 @@ paths:
       summary: 创建任务
       security: [{ bearerAuth: [] }]
       responses: { '201': { description: Created } }
+  /tasks/assignee-options:
+    get:
+      summary: 任务执行人选项
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: OK } }
   /tasks/{id}:
     put:
       summary: 更新任务

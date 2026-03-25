@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,16 +13,16 @@ import (
 )
 
 type taskRequest struct {
-	TaskNo      string    `json:"taskNo"`
-	Title       string    `json:"title" binding:"required"`
-	Description string    `json:"description"`
-	Status      string    `json:"status"`
-	Progress    int       `json:"progress"`
-	StartAt     string    `json:"startAt"`
-	EndAt       string    `json:"endAt"`
-	ProjectID   uint      `json:"projectId" binding:"required"`
-	ParentID    *uint     `json:"parentId"`
-	AssigneeIDs []uint    `json:"assigneeIds"`
+	TaskNo      string `json:"taskNo"`
+	Title       string `json:"title" binding:"required"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
+	Progress    int    `json:"progress"`
+	StartAt     string `json:"startAt"`
+	EndAt       string `json:"endAt"`
+	ProjectID   uint   `json:"projectId" binding:"required"`
+	ParentID    *uint  `json:"parentId"`
+	AssigneeIDs []uint `json:"assigneeIds"`
 }
 
 func normalizeStatus(status string) model.TaskStatus {
@@ -37,10 +38,18 @@ func generateTaskNo() string {
 	return "TASK-" + uuid.NewString()[0:8]
 }
 
+type taskAssigneeOption struct {
+	ID       uint   `json:"id"`
+	Name     string `json:"name"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
+
 func (h *Handler) ListTasks(c *gin.Context) {
 	page, pageSize := parsePage(c)
 	var tasks []model.Task
 	query := h.DB.Model(&model.Task{}).Preload("Assignees").Preload("Creator")
+	query = h.scopeTasksQuery(c, query)
 	if projectID := c.Query("projectId"); projectID != "" {
 		query = query.Where("project_id = ?", projectID)
 	}
@@ -61,6 +70,32 @@ func (h *Handler) ListTasks(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, pageResult[model.Task]{List: tasks, Total: total, Page: page, PageSize: pageSize})
+}
+
+func (h *Handler) TaskAssigneeOptions(c *gin.Context) {
+	keyword := strings.TrimSpace(c.Query("keyword"))
+	pageSize := 100
+	if value := strings.TrimSpace(c.Query("pageSize")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+			if parsed > 100 {
+				parsed = 100
+			}
+			pageSize = parsed
+		}
+	}
+
+	query := h.DB.Model(&model.User{}).Select("id, name, username, email")
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		query = query.Where("name LIKE ? OR username LIKE ? OR email LIKE ?", like, like, like)
+	}
+
+	var users []taskAssigneeOption
+	if err := query.Order("name asc").Limit(pageSize).Find(&users).Error; err != nil {
+		respondError(c, http.StatusInternalServerError, "QUERY_TASK_ASSIGNEE_OPTIONS_FAILED", err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"users": users})
 }
 
 func (h *Handler) CreateTask(c *gin.Context) {
@@ -183,6 +218,9 @@ func (h *Handler) DeleteTask(c *gin.Context) {
 
 func (h *Handler) TaskTree(c *gin.Context) {
 	projectID := c.Param("id")
+	if !h.ensureProjectVisible(c, projectID) {
+		return
+	}
 	var roots []model.Task
 	if err := h.DB.
 		Preload("Children.Children.Children").
@@ -197,6 +235,9 @@ func (h *Handler) TaskTree(c *gin.Context) {
 
 func (h *Handler) Gantt(c *gin.Context) {
 	projectID := c.Param("id")
+	if !h.ensureProjectVisible(c, projectID) {
+		return
+	}
 	type ganttItem struct {
 		ID       uint       `json:"id"`
 		TaskNo   string     `json:"taskNo"`
@@ -226,7 +267,7 @@ func (h *Handler) MyTasks(c *gin.Context) {
 
 	h.DB.Joins("JOIN task_users tu ON tu.task_id = tasks.id").Where("tu.user_id = ?", uid).Find(&out.MyTasks)
 	h.DB.Where("creator_id = ?", uid).Find(&out.MyCreated)
-	h.DB.Joins("JOIN task_users tu ON tu.task_id = tasks.id").Where("tu.user_id = ?", uid).Find(&out.MyParticipate)
+	h.DB.Joins("JOIN task_users tu ON tu.task_id = tasks.id").Where("tu.user_id = ? AND creator_id <> ?", uid, uid).Find(&out.MyParticipate)
 
 	c.JSON(http.StatusOK, out)
 }

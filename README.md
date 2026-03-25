@@ -92,6 +92,8 @@ npm run dev
 ## API 文档
 - 简版文档：`docs/API.md`
 - OpenAPI：`backend/docs/openapi.yaml`
+- 前端 UI 规范：`docs/FRONTEND_UI_GUIDE.md`
+- 前端 UI 验收清单：`docs/UI_QA_CHECKLIST.md`
 
 ## Helm 部署
 ```bash

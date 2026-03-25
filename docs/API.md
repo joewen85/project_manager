@@ -41,6 +41,10 @@ Base URL: `http://localhost:8080/api/v1`
 ## 项目管理
 ### GET `/projects`
 - Query: `page` `pageSize` `keyword`
+### GET `/projects/editor-options`
+- 用途: 项目编辑弹窗选项（负责人、参与部门）
+- Query: `keyword` `userKeyword` `departmentKeyword` `pageSize`
+- 响应: `{ users: [{ id, name, username, email }], departments: [{ id, name }] }`
 ### GET `/projects/:id`
 ### POST `/projects`
 - 请求体: `{ code, name, description, startAt, endAt, userIds, departmentIds }`
@@ -56,6 +60,10 @@ Base URL: `http://localhost:8080/api/v1`
 ## 任务管理
 ### GET `/tasks`
 - Query: `projectId` `status` `page` `pageSize` `keyword`
+### GET `/tasks/assignee-options`
+- 用途: 任务编辑弹窗执行人选项
+- Query: `keyword` `pageSize`
+- 响应: `{ users: [{ id, name, username, email }] }`
 
 ### POST `/tasks`
 - 请求体: `{ taskNo?, title, description, status, progress, startAt, endAt, projectId, parentId, assigneeIds }`

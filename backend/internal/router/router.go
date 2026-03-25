@@ -81,6 +81,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		projects.Use(middleware.RequirePermission(h.DB, "projects.read"))
 		{
 			projects.GET("", h.ListProjects)
+			projects.GET("/editor-options", h.ProjectEditorOptions)
 			projects.POST("", middleware.RequirePermission(h.DB, "projects.write"), h.CreateProject)
 			projects.PUT("/:id", middleware.RequirePermission(h.DB, "projects.write"), h.UpdateProject)
 			projects.DELETE("/:id", middleware.RequirePermission(h.DB, "projects.write"), h.DeleteProject)
@@ -93,6 +94,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		tasks.Use(middleware.RequirePermission(h.DB, "tasks.read"))
 		{
 			tasks.GET("", h.ListTasks)
+			tasks.GET("/assignee-options", h.TaskAssigneeOptions)
 			tasks.POST("", middleware.RequirePermission(h.DB, "tasks.write"), h.CreateTask)
 			tasks.PUT("/:id", middleware.RequirePermission(h.DB, "tasks.write"), h.UpdateTask)
 			tasks.DELETE("/:id", middleware.RequirePermission(h.DB, "tasks.write"), h.DeleteTask)
