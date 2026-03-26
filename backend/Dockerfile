@@ -1,4 +1,4 @@
-ARG GO_BUILDER_IMAGE=golang:1.23-alpine
+ARG GO_BUILDER_IMAGE=golang:1.25-alpine
 ARG APP_RUNTIME_IMAGE=alpine:3.20
 ARG GO_PROXY=https://proxy.golang.org,direct
 

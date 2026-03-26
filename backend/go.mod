@@ -1,8 +1,6 @@
 module project-manager/backend
 
-go 1.23.0
-
-toolchain go1.24.12
+go 1.25.0
 
 require (
 	github.com/gin-contrib/cors v1.7.2

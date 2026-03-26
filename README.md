@@ -41,8 +41,8 @@
 cp .env.template .env
 ```
 如前后端端口不是默认值，记得在 `.env` 配置：
-- `VITE_API_BASE_URL`
-- `CORS_ALLOW_ORIGINS`
+- `VITE_API_BASE_URL`（容器部署建议 `/api/v1`）
+- `CORS_ALLOW_ORIGINS`（仅前后端跨域直连时需要）
 
 ```bash
 docker compose up -d --build
@@ -64,7 +64,7 @@ MYSQL_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/mysql:lts docker compose up -
 ```
 如构建阶段访问 Docker Hub 受限，可一并指定构建基础镜像：
 ```bash
-GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.23-alpine \
+GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.25-alpine \
 APP_RUNTIME_IMAGE=docker.m.daocloud.io/library/alpine:3.20 \
 NODE_BUILDER_IMAGE=docker.m.daocloud.io/library/node:22-alpine \
 NGINX_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/nginx:alpine \

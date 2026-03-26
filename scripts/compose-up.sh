@@ -18,8 +18,8 @@ mysql_images=(
 )
 
 go_builder_images=(
-  "docker.m.daocloud.io/library/golang:1.23-alpine"
-  "golang:1.23-alpine"
+  "docker.m.daocloud.io/library/golang:1.25-alpine"
+  "golang:1.25-alpine"
 )
 
 app_runtime_images=(
