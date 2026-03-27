@@ -47,8 +47,14 @@ services:
     container_name: pm-frontend
     depends_on:
       - backend
+    environment:
+      FRONTEND_SSL_CERT_FILE: ${FRONTEND_SSL_CERT_FILE:-fullchain.pem}
+      FRONTEND_SSL_KEY_FILE: ${FRONTEND_SSL_KEY_FILE:-privkey.pem}
     ports:
       - '${FRONTEND_PORT:-5173}:80'
+      - '${FRONTEND_HTTPS_PORT:-5443}:443'
+    volumes:
+      - '${FRONTEND_SSL_DIR:-./deploy/ssl}:/etc/nginx/ssl:ro'
 
 volumes:
   mysql_data:

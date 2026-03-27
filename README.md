@@ -43,13 +43,17 @@ cp .env.template .env
 如前后端端口不是默认值，记得在 `.env` 配置：
 - `VITE_API_BASE_URL`（容器部署建议 `/api/v1`）
 - `CORS_ALLOW_ORIGINS`（仅前后端跨域直连时需要）
+- `FRONTEND_HTTPS_PORT`（线上建议 `443`）
+- `FRONTEND_SSL_DIR`（证书目录，默认 `./deploy/ssl`）
+- `FRONTEND_SSL_CERT_FILE` / `FRONTEND_SSL_KEY_FILE`（证书文件名）
 
 ```bash
 docker compose up -d --build
 ```
 - MySQL: `localhost:3306`
 - Backend: `http://localhost:8080`
-- Frontend: `http://localhost:5173`
+- Frontend HTTP: `http://localhost:5173`（自动跳转 HTTPS）
+- Frontend HTTPS: `https://localhost:5443`
 
 默认管理员：
 - `admin / admin123`
@@ -74,7 +78,23 @@ docker compose up -d --build
 ```
 如本机端口冲突，可指定主机端口：
 ```bash
-MYSQL_PORT=3307 BACKEND_PORT=8081 FRONTEND_PORT=5174 docker compose up -d --build
+MYSQL_PORT=3307 BACKEND_PORT=8081 FRONTEND_PORT=5174 FRONTEND_HTTPS_PORT=5444 docker compose up -d --build
+```
+
+## 线上 HTTPS 证书
+将证书放到 `deploy/ssl`（或通过 `.env` 设置 `FRONTEND_SSL_DIR`）并使用文件名：
+- `fullchain.pem`
+- `privkey.pem`
+
+线上一般建议：
+```bash
+FRONTEND_PORT=80 FRONTEND_HTTPS_PORT=443 FRONTEND_SSL_DIR=./deploy/ssl docker compose up -d --build
+```
+
+如果证书文件名不是上述默认值（例如 `www.yunstlm.com.pem` / `www.yunstlm.com.key`），可配置：
+```bash
+FRONTEND_SSL_CERT_FILE=www.yunstlm.com.pem
+FRONTEND_SSL_KEY_FILE=www.yunstlm.com.key
 ```
 
 ## 本地开发

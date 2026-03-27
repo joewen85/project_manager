@@ -72,6 +72,10 @@ export NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 export MYSQL_PORT="${MYSQL_PORT:-$(find_free_port 3306)}"
 export BACKEND_PORT="${BACKEND_PORT:-$(find_free_port 8080)}"
 export FRONTEND_PORT="${FRONTEND_PORT:-$(find_free_port 5173)}"
+export FRONTEND_HTTPS_PORT="${FRONTEND_HTTPS_PORT:-$(find_free_port 5443)}"
+export FRONTEND_SSL_DIR="${FRONTEND_SSL_DIR:-./deploy/ssl}"
+export FRONTEND_SSL_CERT_FILE="${FRONTEND_SSL_CERT_FILE:-fullchain.pem}"
+export FRONTEND_SSL_KEY_FILE="${FRONTEND_SSL_KEY_FILE:-privkey.pem}"
 
 echo "Using MYSQL_IMAGE=$MYSQL_IMAGE"
 echo "Using GO_BUILDER_IMAGE=$GO_BUILDER_IMAGE"
@@ -80,7 +84,9 @@ echo "Using NODE_BUILDER_IMAGE=$NODE_BUILDER_IMAGE"
 echo "Using NGINX_IMAGE=$NGINX_IMAGE"
 echo "Using GO_PROXY=$GO_PROXY"
 echo "Using NPM_REGISTRY=$NPM_REGISTRY"
-echo "Using MYSQL_PORT=$MYSQL_PORT BACKEND_PORT=$BACKEND_PORT FRONTEND_PORT=$FRONTEND_PORT"
+echo "Using FRONTEND_SSL_DIR=$FRONTEND_SSL_DIR"
+echo "Using FRONTEND_SSL_CERT_FILE=$FRONTEND_SSL_CERT_FILE FRONTEND_SSL_KEY_FILE=$FRONTEND_SSL_KEY_FILE"
+echo "Using MYSQL_PORT=$MYSQL_PORT BACKEND_PORT=$BACKEND_PORT FRONTEND_PORT=$FRONTEND_PORT FRONTEND_HTTPS_PORT=$FRONTEND_HTTPS_PORT"
 docker compose up -d --build
 
 echo "Compose started. Checking health..."
@@ -88,6 +94,7 @@ for i in {1..30}; do
   if curl -fsS "http://localhost:${BACKEND_PORT}/health" >/dev/null 2>&1; then
     echo "Backend health check passed."
     echo "Frontend URL: http://localhost:${FRONTEND_PORT}"
+    echo "Frontend HTTPS URL: https://localhost:${FRONTEND_HTTPS_PORT}"
     echo "Backend URL: http://localhost:${BACKEND_PORT}"
     echo "MySQL host port: ${MYSQL_PORT}"
     exit 0
