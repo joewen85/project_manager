@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Building2, FolderKanban, ListChecks, Moon, NotebookTabs, Shield, Sun, UserCircle2, Users } from 'lucide-react'
+import { BarChart3, Bell, Building2, CalendarRange, FolderKanban, ListChecks, Moon, NotebookTabs, Shield, Sun, UserCircle2, Users } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchData, fetchPage, getPermissions, readApiError, setPermissions } from '../services/api'
@@ -11,6 +11,7 @@ const menus = [
   { to: '/users', label: '用户管理', icon: Users, permission: 'users.read' },
   { to: '/departments', label: '部门管理', icon: Building2, permission: 'departments.read' },
   { to: '/projects', label: '项目列表', icon: FolderKanban, permission: 'projects.read' },
+  { to: '/gantt', label: '甘特模块', icon: CalendarRange, permission: 'projects.read' },
   { to: '/tasks', label: '任务列表', icon: ListChecks, permission: 'tasks.read' },
   { to: '/notifications', label: '站内通知', icon: Bell, permission: 'notifications.read' },
   { to: '/audit', label: '审计日志', icon: NotebookTabs, permission: 'audit.read' },
@@ -342,6 +343,7 @@ export function Layout() {
     ['/users', '用户管理'],
     ['/departments', '部门管理'],
     ['/projects', '项目列表'],
+    ['/gantt', '甘特图模块'],
     ['/tasks', '任务列表'],
     ['/notifications', '站内通知'],
     ['/audit', '审计日志'],

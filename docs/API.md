@@ -57,7 +57,15 @@ Base URL: `http://localhost:8080/api/v1`
 ### DELETE `/projects/:id`
 
 ### GET `/projects/:projectId/gantt`
-- 甘特图任务数据
+- 甘特图任务数据（含优先级、里程碑、执行人、依赖）
+
+### GET `/projects/gantt-portfolio`
+- 项目集甘特数据（支持多项目统筹）
+- Query: `projectIds`（可选，逗号分隔；为空则返回当前可见项目）
+
+### POST `/projects/:projectId/gantt/auto-resolve`
+- 自动同步依赖并顺延任务时间
+- 响应: `{ updatedCount, projectId }`
 
 ### GET `/projects/:projectId/task-tree`
 - 项目分解树结构（任务树）
@@ -76,7 +84,8 @@ Base URL: `http://localhost:8080/api/v1`
 - 响应: `{ users: [{ id, name, username, email }] }`
 
 ### POST `/tasks`
-- 请求体: `{ taskNo?, title, description, status, priority, progress, startAt, endAt, projectId, parentId, assigneeIds }`
+- 请求体: `{ taskNo?, title, description, status, priority, isMilestone, progress, startAt, endAt, projectId, parentId, assigneeIds, dependencies? }`
+- `dependencies` 格式: `[{ dependsOnTaskId, lagDays, type }]`
 - 约束:
   - `creatorId` 默认使用当前登录用户
   - `taskNo` 唯一（为空自动生成）
@@ -92,6 +101,13 @@ Base URL: `http://localhost:8080/api/v1`
   - `myCreated`
   - `myParticipate`
 ### PUT `/tasks/:id`
+### PUT `/tasks/:id/dependencies`
+- 请求体: `{ dependencies: [{ dependsOnTaskId, lagDays, type }] }`
+
+### PATCH `/tasks/:id/schedule`
+- 请求体: `{ startAt, endAt }`
+- Query: `autoResolve`（可选，默认 `true`）
+
 ### DELETE `/tasks/:id`
 
 ## 统计分析

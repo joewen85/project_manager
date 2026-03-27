@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api, fetchArray, fetchData, fetchPage, readApiError } from '../services/api'
-import { GanttChart } from '../components/GanttChart'
 import { TaskTree } from '../components/TaskTree'
 import { Task, Department, Project, User } from '../types'
 import { Modal } from '../components/Modal'
@@ -26,6 +26,7 @@ type SortOrder = 'asc' | 'desc'
 const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
 
 export function ProjectsPage() {
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -36,7 +37,6 @@ export function ProjectsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
-  const [gantt, setGantt] = useState<Task[]>([])
   const [tree, setTree] = useState<Task[]>([])
   const [form, setForm] = useState<ProjectForm>(initialForm)
   const [modalOpen, setModalOpen] = useState(false)
@@ -78,7 +78,6 @@ export function ProjectsPage() {
 
   useEffect(() => {
     if (!selected) return
-    void fetchArray<Task>(`/projects/${selected}/gantt`, undefined, { silent: true }).then(setGantt).catch(() => setGantt([]))
     void fetchArray<Task>(`/projects/${selected}/task-tree`, undefined, { silent: true }).then(setTree).catch(() => setTree([]))
   }, [selected])
 
@@ -191,9 +190,14 @@ export function ProjectsPage() {
 
       <div className="card">
         <label htmlFor="project-select">选择项目</label>
-        <select id="project-select" value={selected} onChange={(e) => setSelected(Number(e.target.value))}>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
-        </select>
+        <div className="row-actions">
+          <select id="project-select" value={selected} onChange={(e) => setSelected(Number(e.target.value))}>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
+          </select>
+          <button className="btn secondary" onClick={() => navigate(selected ? `/gantt?projectId=${selected}` : '/gantt')}>
+            打开甘特模块
+          </button>
+        </div>
       </div>
 
       <TaskTree tasks={tree} />
@@ -221,8 +225,6 @@ export function ProjectsPage() {
       </div>
 
       {!loading && !error && total > 0 && <Pagination total={total} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />}
-
-      <GanttChart tasks={gantt} />
 
       <Modal open={detailOpen} title="项目详情" onClose={() => setDetailOpen(false)}>
         {detailProject && (

@@ -45,16 +45,28 @@ export interface Task {
   description: string
   status: Status
   priority?: TaskPriority
+  isMilestone?: boolean
   progress: number
   startAt?: string
   endAt?: string
   projectId: number
+  projectCode?: string
+  projectName?: string
   parentId?: number
   children?: Task[]
   creatorId?: number
   creator?: User
   assignees?: User[]
+  dependencies?: TaskDependency[]
   createdAt?: string
+}
+
+export interface TaskDependency {
+  id?: number
+  taskId: number
+  dependsOnTaskId: number
+  lagDays?: number
+  type?: 'FS' | 'SS' | 'FF' | 'SF'
 }
 
 export interface Role {

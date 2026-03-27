@@ -74,21 +74,33 @@ type Project struct {
 
 type Task struct {
 	BaseModel
-	TaskNo      string       `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`
-	Title       string       `gorm:"size:150;not null" json:"title"`
-	Description string       `gorm:"type:text" json:"description"`
-	Status      TaskStatus   `gorm:"size:20;default:'pending';index" json:"status"`
-	Priority    TaskPriority `gorm:"size:20;default:'high';index" json:"priority"`
-	Progress    int          `gorm:"default:0" json:"progress"`
-	StartAt     *time.Time   `json:"startAt"`
-	EndAt       *time.Time   `json:"endAt"`
-	CreatorID   uint         `gorm:"not null;index" json:"creatorId"`
-	Creator     User         `json:"creator,omitempty"`
-	ProjectID   uint         `gorm:"not null;index" json:"projectId"`
-	Project     Project      `json:"project,omitempty"`
-	ParentID    *uint        `gorm:"index" json:"parentId"`
-	Children    []Task       `gorm:"foreignKey:ParentID" json:"children,omitempty"`
-	Assignees   []User       `gorm:"many2many:task_users;" json:"assignees,omitempty"`
+	TaskNo       string           `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`
+	Title        string           `gorm:"size:150;not null" json:"title"`
+	Description  string           `gorm:"type:text" json:"description"`
+	Status       TaskStatus       `gorm:"size:20;default:'pending';index" json:"status"`
+	Priority     TaskPriority     `gorm:"size:20;default:'high';index" json:"priority"`
+	IsMilestone  bool             `gorm:"default:false;index" json:"isMilestone"`
+	Progress     int              `gorm:"default:0" json:"progress"`
+	StartAt      *time.Time       `json:"startAt"`
+	EndAt        *time.Time       `json:"endAt"`
+	CreatorID    uint             `gorm:"not null;index" json:"creatorId"`
+	Creator      User             `json:"creator,omitempty"`
+	ProjectID    uint             `gorm:"not null;index" json:"projectId"`
+	Project      Project          `json:"project,omitempty"`
+	ParentID     *uint            `gorm:"index" json:"parentId"`
+	Children     []Task           `gorm:"foreignKey:ParentID" json:"children,omitempty"`
+	Assignees    []User           `gorm:"many2many:task_users;" json:"assignees,omitempty"`
+	Dependencies []TaskDependency `gorm:"foreignKey:TaskID" json:"dependencies,omitempty"`
+}
+
+type TaskDependency struct {
+	BaseModel
+	TaskID          uint   `gorm:"not null;index;uniqueIndex:idx_task_dependency_unique" json:"taskId"`
+	DependsOnTaskID uint   `gorm:"not null;index;uniqueIndex:idx_task_dependency_unique" json:"dependsOnTaskId"`
+	LagDays         int    `gorm:"default:0" json:"lagDays"`
+	Type            string `gorm:"size:8;default:'FS'" json:"type"`
+	Task            Task   `gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE;" json:"-"`
+	DependsOnTask   Task   `gorm:"foreignKey:DependsOnTaskID;constraint:OnDelete:CASCADE;" json:"-"`
 }
 
 type AuditLog struct {

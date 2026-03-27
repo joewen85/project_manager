@@ -27,6 +27,7 @@ interface TaskForm {
   description: string
   status: string
   priority: TaskPriority
+  isMilestone: boolean
   progress: number
   startAt: string
   endAt: string
@@ -41,6 +42,7 @@ const initialForm: TaskForm = {
   description: '',
   status: 'pending',
   priority: 'high',
+  isMilestone: false,
   progress: 0,
   startAt: '',
   endAt: '',
@@ -192,6 +194,7 @@ export function TasksPage() {
       status: item.status,
       priority: item.priority || 'high',
       progress: item.progress,
+      isMilestone: Boolean(item.isMilestone),
       startAt: item.startAt ? item.startAt.slice(0, 16) : '',
       endAt: item.endAt ? item.endAt.slice(0, 16) : '',
       projectId: item.projectId,
@@ -341,13 +344,14 @@ export function TasksPage() {
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && tasks.length === 0} emptyText="暂无匹配的任务" onRetry={() => { void load() }} />
         {!loading && !error && tasks.length > 0 && (
-          <table><thead><tr><th>任务编号</th><th>标题</th><th>描述</th><th>优先级</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
+          <table><thead><tr><th>任务编号</th><th>标题</th><th>描述</th><th>优先级</th><th>里程碑</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
             {tasks.map((task) => (
               <tr key={task.id} id={`task-row-${task.id}`} className={focusedTaskId === task.id ? 'task-row-focused' : ''}>
                 <td>{task.taskNo}</td>
                 <td>{task.title}</td>
                 <td><span className="cell-ellipsis" title={task.description || '-'}>{task.description || '-'}</span></td>
                 <td>{priorityLabel[(task.priority || 'high') as TaskPriority]}</td>
+                <td>{task.isMilestone ? '是' : '-'}</td>
                 <td>{statusLabel[task.status]}</td>
                 <td>{task.progress}%</td>
                 <td>{formatDateTime(task.startAt)}</td>
@@ -385,6 +389,7 @@ export function TasksPage() {
               <h4>状态与进度</h4>
               <div className="detail-columns">
                 <div><strong>优先级：</strong>{priorityLabel[(detailTask.priority || 'high') as TaskPriority]}</div>
+                <div><strong>里程碑：</strong>{detailTask.isMilestone ? '是' : '否'}</div>
                 <div><strong>状态：</strong>{statusLabel[detailTask.status] || detailTask.status || '-'}</div>
                 <div><strong>进度：</strong>{Number(detailTask.progress || 0)}%</div>
                 <div><strong>项目ID：</strong>{detailTask.projectId || '-'}</div>
@@ -509,6 +514,11 @@ export function TasksPage() {
             <option value="high">高</option>
             <option value="medium">中</option>
             <option value="low">低</option>
+          </select>
+          <label htmlFor="task-milestone">里程碑</label>
+          <select id="task-milestone" value={form.isMilestone ? '1' : '0'} onChange={(e) => setForm((prev) => ({ ...prev, isMilestone: e.target.value === '1' }))}>
+            <option value="0">否</option>
+            <option value="1">是</option>
           </select>
           <label htmlFor="task-progress">进度</label>
           <input id="task-progress" type="number" min={0} max={100} value={form.progress} onChange={(e) => setForm((prev) => ({ ...prev, progress: Number(e.target.value) }))} />
