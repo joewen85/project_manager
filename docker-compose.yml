@@ -19,8 +19,8 @@ services:
     build:
       context: ./backend
       args:
-        GO_BUILDER_IMAGE: ${GO_BUILDER_IMAGE:-golang:1.25-alpine}
-        APP_RUNTIME_IMAGE: ${APP_RUNTIME_IMAGE:-alpine:3.20}
+        GO_BUILDER_IMAGE: ${GO_BUILDER_IMAGE:-registry.cn-guangzhou.aliyuncs.com/joe/golang:1.25-alpine}
+        APP_RUNTIME_IMAGE: ${APP_RUNTIME_IMAGE:-registry.cn-guangzhou.aliyuncs.com/joe/alpine:latest}
         GO_PROXY: ${GO_PROXY:-https://goproxy.cn,direct}
     container_name: pm-backend
     depends_on:

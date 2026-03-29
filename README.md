@@ -70,8 +70,8 @@ MYSQL_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/mysql:lts docker compose up -
 ```
 如构建阶段访问 Docker Hub 受限，可一并指定构建基础镜像：
 ```bash
-GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.25-alpine \
-APP_RUNTIME_IMAGE=docker.m.daocloud.io/library/alpine:3.20 \
+GO_BUILDER_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/golang:1.25-alpine \
+APP_RUNTIME_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/alpine:latest \
 NODE_BUILDER_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/node:24-alpine \
 NGINX_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/nginx:alpine \
 GO_PROXY=https://goproxy.cn,direct \
