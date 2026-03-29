@@ -45,7 +45,7 @@ services:
     build:
       context: ./frontend
       args:
-        NODE_BUILDER_IMAGE: ${NODE_BUILDER_IMAGE:-node:22-alpine}
+        NODE_BUILDER_IMAGE: ${NODE_BUILDER_IMAGE:-registry.cn-guangzhou.aliyuncs.com/joe/node:24-alpine}
         NGINX_IMAGE: ${NGINX_IMAGE:-registry.cn-guangzhou.aliyuncs.com/joe/nginx:alpine}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
     container_name: pm-frontend

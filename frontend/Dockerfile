@@ -1,4 +1,4 @@
-ARG NODE_BUILDER_IMAGE=node:22-alpine
+ARG NODE_BUILDER_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/node:24-alpine
 ARG NGINX_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/nginx:alpine
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 
