@@ -1,8 +1,9 @@
 import { BarChart3, Bell, Building2, CalendarRange, FolderKanban, ListChecks, Moon, NotebookTabs, Shield, Sun, UserCircle2, Users } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchData, fetchPage, getPermissions, readApiError, setPermissions } from '../services/api'
 import { api } from '../services/api'
+import { Modal } from './Modal'
 import { Notification, Role } from '../types'
 
 const menus = [
@@ -28,6 +29,14 @@ interface ProfileResponse {
 interface UnreadCountResponse {
   count?: number
 }
+
+interface ChangePasswordForm {
+  oldPassword: string
+  newPassword: string
+  confirmPassword: string
+}
+
+const createEmptyChangePasswordForm = (): ChangePasswordForm => ({ oldPassword: '', newPassword: '', confirmPassword: '' })
 
 export function Layout() {
   const isLegacyNotificationsApiEnabled = () => localStorage.getItem('notifications_api_enabled') !== 'false'
@@ -56,6 +65,11 @@ export function Layout() {
   const [notificationMenuOpen, setNotificationMenuOpen] = useState(false)
   const [notificationsApiReady, setNotificationsApiReady] = useState<boolean>(() => isNotificationsListApiEnabled())
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
+  const [changePasswordSubmitting, setChangePasswordSubmitting] = useState(false)
+  const [changePasswordError, setChangePasswordError] = useState('')
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState('')
+  const [changePasswordForm, setChangePasswordForm] = useState<ChangePasswordForm>(createEmptyChangePasswordForm)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('theme')
     if (saved === 'light' || saved === 'dark') return saved
@@ -336,6 +350,52 @@ export function Layout() {
     window.location.href = '/login'
   }
 
+  const openChangePasswordModal = () => {
+    setUserMenuOpen(false)
+    setChangePasswordError('')
+    setChangePasswordSuccess('')
+    setChangePasswordForm(createEmptyChangePasswordForm())
+    setChangePasswordOpen(true)
+  }
+
+  const closeChangePasswordModal = () => {
+    setChangePasswordOpen(false)
+    setChangePasswordSubmitting(false)
+    setChangePasswordError('')
+    setChangePasswordSuccess('')
+    setChangePasswordForm(createEmptyChangePasswordForm())
+  }
+
+  const submitChangePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setChangePasswordError('')
+    setChangePasswordSuccess('')
+
+    if (changePasswordForm.newPassword.length < 6) {
+      setChangePasswordError('新密码至少 6 位')
+      return
+    }
+    if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) {
+      setChangePasswordError('两次输入的新密码不一致')
+      return
+    }
+    if (changePasswordForm.oldPassword === changePasswordForm.newPassword) {
+      setChangePasswordError('新密码不能与旧密码一致')
+      return
+    }
+
+    try {
+      setChangePasswordSubmitting(true)
+      await api.post('/auth/change-password', changePasswordForm)
+      setChangePasswordSuccess('密码修改成功')
+      setChangePasswordForm(createEmptyChangePasswordForm())
+    } catch (error) {
+      setChangePasswordError(readApiError(error, '密码修改失败'))
+    } finally {
+      setChangePasswordSubmitting(false)
+    }
+  }
+
   const initials = (profile.name || profile.username || 'U').slice(0, 2).toUpperCase()
   const titleEntries: Array<[string, string]> = [
     ['/', '统计分析'],
@@ -448,12 +508,53 @@ export function Layout() {
                     <p>{profile.email || '-'}</p>
                   </div>
                 </div>
+                <button className="logout-item" onClick={openChangePasswordModal}>🔐 修改密码</button>
                 <button className="logout-item" onClick={logout}>↪ 退出登录</button>
               </div>
             )}
           </div>
         </header>
         <Outlet />
+        <Modal open={changePasswordOpen} title="修改密码" onClose={closeChangePasswordModal}>
+          <form className="form-grid" onSubmit={submitChangePassword}>
+            <label className="required-label" htmlFor="old-password">旧密码</label>
+            <input
+              id="old-password"
+              type="password"
+              value={changePasswordForm.oldPassword}
+              onChange={(event) => setChangePasswordForm((prev) => ({ ...prev, oldPassword: event.target.value }))}
+              required
+            />
+            <label className="required-label" htmlFor="new-password">新密码</label>
+            <input
+              id="new-password"
+              type="password"
+              value={changePasswordForm.newPassword}
+              onChange={(event) => setChangePasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))}
+              minLength={6}
+              required
+            />
+            <label className="required-label" htmlFor="confirm-password">确认密码</label>
+            <input
+              id="confirm-password"
+              type="password"
+              value={changePasswordForm.confirmPassword}
+              onChange={(event) => setChangePasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+              minLength={6}
+              required
+            />
+            <div className="row-actions">
+              <button type="submit" className="btn" disabled={changePasswordSubmitting}>
+                {changePasswordSubmitting ? '保存中...' : '确认修改'}
+              </button>
+              <button type="button" className="btn secondary" onClick={closeChangePasswordModal} disabled={changePasswordSubmitting}>
+                取消
+              </button>
+            </div>
+            {changePasswordError && <p className="error">{changePasswordError}</p>}
+            {changePasswordSuccess && <p className="success">{changePasswordSuccess}</p>}
+          </form>
+        </Modal>
       </main>
     </div>
   )

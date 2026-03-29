@@ -45,6 +45,27 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: getAuthProfile
+  /auth/change-password:
+    post:
+      summary: 修改当前用户密码
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postAuthChangePassword
   /uploads:
     post:
       summary: 上传附件（支持多文件/文件夹）
@@ -979,6 +1000,23 @@ components:
           type: string
         password:
           type: string
+    ChangePasswordRequest:
+      type: object
+      required:
+      - oldPassword
+      - newPassword
+      - confirmPassword
+      properties:
+        oldPassword:
+          type: string
+          description: 旧密码
+        newPassword:
+          type: string
+          minLength: 6
+          description: 新密码（至少 6 位）
+        confirmPassword:
+          type: string
+          description: 确认新密码
     LoginResponse:
       type: object
       properties:

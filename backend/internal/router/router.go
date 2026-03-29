@@ -46,6 +46,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 	authGroup.Use(middleware.JWT(cfg.JWTSecret))
 	{
 		authGroup.GET("/auth/profile", h.Profile)
+		authGroup.POST("/auth/change-password", h.ChangePassword)
 		authGroup.POST("/uploads", h.UploadFile)
 
 		rbac := authGroup.Group("/rbac")

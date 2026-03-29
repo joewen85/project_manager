@@ -172,6 +172,85 @@ func requestMultipartFiles(t *testing.T, method, url, token, fieldName string, f
 	return resp, out
 }
 
+func TestChangeOwnPasswordFlow(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	username := "change_pwd_user"
+	originalPassword := "pass1234"
+	newPassword := "pass5678"
+
+	createUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      username,
+		"name":          "Change Password User",
+		"email":         "change_pwd_user@example.com",
+		"password":      originalPassword,
+		"roleIds":       []uint{},
+		"departmentIds": []uint{},
+	})
+	if createUserResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create change password user expected 201 got %d", createUserResp.StatusCode)
+	}
+
+	loginRaw, _ := json.Marshal(map[string]string{"username": username, "password": originalPassword})
+	loginResp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(loginRaw))
+	if err != nil {
+		t.Fatalf("login change password user failed: %v", err)
+	}
+	defer loginResp.Body.Close()
+	if loginResp.StatusCode != http.StatusOK {
+		t.Fatalf("login change password user status expected 200 got %d", loginResp.StatusCode)
+	}
+	var loginBody map[string]any
+	_ = json.NewDecoder(loginResp.Body).Decode(&loginBody)
+	token, _ := loginBody["token"].(string)
+	if token == "" {
+		t.Fatalf("change password user token should not be empty")
+	}
+
+	invalidResp, invalidBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/auth/change-password", token, map[string]any{
+		"oldPassword":     "wrong-old",
+		"newPassword":     newPassword,
+		"confirmPassword": newPassword,
+	})
+	if invalidResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("change password with invalid old password expected 400 got %d", invalidResp.StatusCode)
+	}
+	if invalidBody["code"] != "OLD_PASSWORD_INVALID" {
+		t.Fatalf("expected OLD_PASSWORD_INVALID code, got %v", invalidBody["code"])
+	}
+
+	changeResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/auth/change-password", token, map[string]any{
+		"oldPassword":     originalPassword,
+		"newPassword":     newPassword,
+		"confirmPassword": newPassword,
+	})
+	if changeResp.StatusCode != http.StatusOK {
+		t.Fatalf("change password status expected 200 got %d", changeResp.StatusCode)
+	}
+
+	oldLoginRaw, _ := json.Marshal(map[string]string{"username": username, "password": originalPassword})
+	oldLoginResp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(oldLoginRaw))
+	if err != nil {
+		t.Fatalf("login with old password failed: %v", err)
+	}
+	defer oldLoginResp.Body.Close()
+	if oldLoginResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("old password login status expected 401 got %d", oldLoginResp.StatusCode)
+	}
+
+	newLoginRaw, _ := json.Marshal(map[string]string{"username": username, "password": newPassword})
+	newLoginResp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(newLoginRaw))
+	if err != nil {
+		t.Fatalf("login with new password failed: %v", err)
+	}
+	defer newLoginResp.Body.Close()
+	if newLoginResp.StatusCode != http.StatusOK {
+		t.Fatalf("new password login status expected 200 got %d", newLoginResp.StatusCode)
+	}
+}
+
 func TestUploadAndAttachFlow(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()
