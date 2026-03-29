@@ -10,6 +10,8 @@ type Config struct {
 	Port             string
 	JWTSecret        string
 	CORSAllowOrigins string
+	UploadDir        string
+	UploadPublicBase string
 	DBHost           string
 	DBPort           string
 	DBUser           string
@@ -23,6 +25,8 @@ func Load() Config {
 		Port:             getEnv("APP_PORT", "8080"),
 		JWTSecret:        getEnv("JWT_SECRET", "change-me"),
 		CORSAllowOrigins: getEnv("CORS_ALLOW_ORIGINS", "http://localhost:5173"),
+		UploadDir:        getEnv("UPLOAD_DIR", "./static/uploads"),
+		UploadPublicBase: getEnv("UPLOAD_PUBLIC_BASE", "/static/uploads"),
 		DBHost:           getEnv("DB_HOST", "127.0.0.1"),
 		DBPort:           getEnv("DB_PORT", "3306"),
 		DBUser:           getEnv("DB_USER", "root"),

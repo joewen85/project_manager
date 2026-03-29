@@ -14,6 +14,7 @@ import (
 
 func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 	r := gin.Default()
+	r.StaticFS("/static/uploads", gin.Dir(cfg.UploadDir, false))
 	corsOrigins := strings.TrimSpace(cfg.CORSAllowOrigins)
 	if corsOrigins == "" {
 		corsOrigins = "http://localhost:5173"
@@ -45,6 +46,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 	authGroup.Use(middleware.JWT(cfg.JWTSecret))
 	{
 		authGroup.GET("/auth/profile", h.Profile)
+		authGroup.POST("/uploads", h.UploadFile)
 
 		rbac := authGroup.Group("/rbac")
 		rbac.Use(middleware.RequirePermission(h.DB, "rbac.manage"))

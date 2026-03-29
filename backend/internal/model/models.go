@@ -25,6 +25,14 @@ type BaseModel struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+type Attachment struct {
+	FileName     string `gorm:"size:255" json:"fileName"`
+	FilePath     string `gorm:"size:600" json:"filePath"`
+	RelativePath string `gorm:"size:600" json:"relativePath"`
+	FileSize     int64  `json:"fileSize"`
+	MimeType     string `gorm:"size:120" json:"mimeType"`
+}
+
 type User struct {
 	BaseModel
 	Username    string       `gorm:"size:64;uniqueIndex;not null" json:"username"`
@@ -67,6 +75,8 @@ type Project struct {
 	Description string       `gorm:"type:text" json:"description"`
 	StartAt     *time.Time   `json:"startAt"`
 	EndAt       *time.Time   `json:"endAt"`
+	Attachment  Attachment   `gorm:"embedded;embeddedPrefix:attachment_" json:"attachment,omitempty"`
+	Attachments []Attachment `gorm:"serializer:json" json:"attachments"`
 	Users       []User       `gorm:"many2many:project_users;" json:"users,omitempty"`
 	Departments []Department `gorm:"many2many:project_departments;" json:"departments,omitempty"`
 	Tasks       []Task       `json:"tasks,omitempty"`
@@ -83,6 +93,8 @@ type Task struct {
 	Progress     int              `gorm:"default:0" json:"progress"`
 	StartAt      *time.Time       `json:"startAt"`
 	EndAt        *time.Time       `json:"endAt"`
+	Attachment   Attachment       `gorm:"embedded;embeddedPrefix:attachment_" json:"attachment,omitempty"`
+	Attachments  []Attachment     `gorm:"serializer:json" json:"attachments"`
 	CreatorID    uint             `gorm:"not null;index" json:"creatorId"`
 	Creator      User             `json:"creator,omitempty"`
 	ProjectID    uint             `gorm:"not null;index" json:"projectId"`

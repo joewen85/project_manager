@@ -2,11 +2,12 @@ import { FormEvent, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, fetchArray, fetchData, fetchPage, readApiError } from '../services/api'
 import { TaskTree } from '../components/TaskTree'
-import { Task, Department, Project, User } from '../types'
+import { Task, Department, Project, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
 import { formatDateTime } from '../utils/datetime'
+import { AttachmentField } from '../components/AttachmentField'
 
 interface ProjectForm {
   id?: number
@@ -15,11 +16,18 @@ interface ProjectForm {
   description: string
   startAt: string
   endAt: string
+  attachments: UploadAttachment[]
   userIds: number[]
   departmentIds: number[]
 }
 
-const initialForm: ProjectForm = { code: '', name: '', description: '', startAt: '', endAt: '', userIds: [], departmentIds: [] }
+const normalizeAttachments = (item: { attachments?: UploadAttachment[]; attachment?: UploadAttachment }) => {
+  if (Array.isArray(item.attachments)) return item.attachments
+  if (item.attachment?.filePath) return [item.attachment]
+  return emptyUploadAttachments()
+}
+
+const initialForm: ProjectForm = { code: '', name: '', description: '', startAt: '', endAt: '', attachments: emptyUploadAttachments(), userIds: [], departmentIds: [] }
 
 type SortKey = 'code' | 'name' | 'createdAt' | 'startAt' | 'endAt'
 type SortOrder = 'asc' | 'desc'
@@ -112,6 +120,7 @@ export function ProjectsPage() {
       description: item.description,
       startAt: item.startAt ? item.startAt.slice(0, 16) : '',
       endAt: item.endAt ? item.endAt.slice(0, 16) : '',
+      attachments: normalizeAttachments(item),
       userIds: (item.users || []).map((user) => user.id),
       departmentIds: (item.departments || []).map((department) => department.id)
     })
@@ -240,6 +249,14 @@ export function ProjectsPage() {
                 <strong>描述</strong>
                 <p>{detailProject.description || '-'}</p>
               </div>
+              <div className="detail-columns">
+                <div>
+                  <strong>附件：</strong>
+                  {normalizeAttachments(detailProject).length > 0 ? normalizeAttachments(detailProject).map((item) => (
+                    <a key={item.filePath} href={item.filePath} target="_blank" rel="noreferrer">{item.relativePath || item.fileName || '附件'}</a>
+                  )) : '-'}
+                </div>
+              </div>
             </section>
             <section className="detail-section">
               <h4>时间信息</h4>
@@ -267,6 +284,8 @@ export function ProjectsPage() {
           <input id="project-name" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} required />
           <label htmlFor="project-description">描述</label>
           <textarea id="project-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} />
+          <label htmlFor="project-attachment">附件</label>
+          <AttachmentField inputId="project-attachment" value={form.attachments} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
           <label htmlFor="project-start">开始时间</label>
           <input id="project-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} />
           <label htmlFor="project-end">结束时间</label>

@@ -23,6 +23,8 @@ type taskRequest struct {
 	Progress     int                      `json:"progress"`
 	StartAt      string                   `json:"startAt"`
 	EndAt        string                   `json:"endAt"`
+	Attachment   *attachmentRequest       `json:"attachment"`
+	Attachments  *[]attachmentRequest     `json:"attachments"`
 	ProjectID    uint                     `json:"projectId" binding:"required"`
 	ParentID     *uint                    `json:"parentId"`
 	AssigneeIDs  []uint                   `json:"assigneeIds"`
@@ -362,12 +364,18 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "INVALID_END_AT", "endAt 必须是 RFC3339 时间格式")
 		return
 	}
+	attachments, _ := requestAttachments(req.Attachment, req.Attachments)
+	if err := validateAttachments(attachments, h.Cfg.UploadPublicBase); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_ATTACHMENT", err.Error())
+		return
+	}
 
 	creatorID := c.GetUint("userId")
 	taskNo := req.TaskNo
 	if taskNo == "" {
 		taskNo = generateTaskNo()
 	}
+	modelAttachments := toModelAttachments(attachments)
 
 	item := model.Task{
 		TaskNo:      taskNo,
@@ -379,6 +387,8 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		Progress:    req.Progress,
 		StartAt:     startAt,
 		EndAt:       endAt,
+		Attachment:  firstModelAttachment(modelAttachments),
+		Attachments: modelAttachments,
 		CreatorID:   creatorID,
 		ProjectID:   req.ProjectID,
 		ParentID:    req.ParentID,
@@ -445,6 +455,11 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "INVALID_END_AT", "endAt 必须是 RFC3339 时间格式")
 		return
 	}
+	attachments, provided := requestAttachments(req.Attachment, req.Attachments)
+	if err := validateAttachments(attachments, h.Cfg.UploadPublicBase); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_ATTACHMENT", err.Error())
+		return
+	}
 
 	if req.TaskNo != "" {
 		item.TaskNo = req.TaskNo
@@ -457,6 +472,11 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	item.Progress = req.Progress
 	item.StartAt = startAt
 	item.EndAt = endAt
+	if provided {
+		modelAttachments := toModelAttachments(attachments)
+		item.Attachment = firstModelAttachment(modelAttachments)
+		item.Attachments = modelAttachments
+	}
 	item.ProjectID = req.ProjectID
 	item.ParentID = req.ParentID
 

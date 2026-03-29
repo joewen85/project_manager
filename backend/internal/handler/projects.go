@@ -13,13 +13,15 @@ import (
 )
 
 type projectRequest struct {
-	Code          string `json:"code"`
-	Name          string `json:"name" binding:"required"`
-	Description   string `json:"description"`
-	StartAt       string `json:"startAt"`
-	EndAt         string `json:"endAt"`
-	UserIDs       []uint `json:"userIds"`
-	DepartmentIDs []uint `json:"departmentIds"`
+	Code          string               `json:"code"`
+	Name          string               `json:"name" binding:"required"`
+	Description   string               `json:"description"`
+	StartAt       string               `json:"startAt"`
+	EndAt         string               `json:"endAt"`
+	Attachment    *attachmentRequest   `json:"attachment"`
+	Attachments   *[]attachmentRequest `json:"attachments"`
+	UserIDs       []uint               `json:"userIds"`
+	DepartmentIDs []uint               `json:"departmentIds"`
 }
 
 type projectEditorOptionUser struct {
@@ -136,11 +138,17 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "INVALID_END_AT", "endAt 必须是 RFC3339 时间格式")
 		return
 	}
+	attachments, _ := requestAttachments(req.Attachment, req.Attachments)
+	if err := validateAttachments(attachments, h.Cfg.UploadPublicBase); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_ATTACHMENT", err.Error())
+		return
+	}
 
 	code := strings.TrimSpace(req.Code)
 	if code == "" {
 		code = generateProjectCode()
 	}
+	modelAttachments := toModelAttachments(attachments)
 
 	item := model.Project{
 		Code:        code,
@@ -148,6 +156,8 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		Description: req.Description,
 		StartAt:     startAt,
 		EndAt:       endAt,
+		Attachment:  firstModelAttachment(modelAttachments),
+		Attachments: modelAttachments,
 	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&item).Error; err != nil {
@@ -219,12 +229,22 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "INVALID_END_AT", "endAt 必须是 RFC3339 时间格式")
 		return
 	}
+	attachments, provided := requestAttachments(req.Attachment, req.Attachments)
+	if err := validateAttachments(attachments, h.Cfg.UploadPublicBase); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_ATTACHMENT", err.Error())
+		return
+	}
 
 	item.Code = code
 	item.Name = req.Name
 	item.Description = req.Description
 	item.StartAt = startAt
 	item.EndAt = endAt
+	if provided {
+		modelAttachments := toModelAttachments(attachments)
+		item.Attachment = firstModelAttachment(modelAttachments)
+		item.Attachments = modelAttachments
+	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		var oldUsers []model.User
 		if err := tx.Model(&item).Association("Users").Find(&oldUsers); err != nil {

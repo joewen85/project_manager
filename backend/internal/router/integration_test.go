@@ -1,13 +1,16 @@
 package router
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -38,7 +41,11 @@ func setupTestRouterWithHandler(t *testing.T, configure func(*handler.Handler)) 
 		t.Fatalf("seed failed: %v", err)
 	}
 
-	cfg := config.Config{JWTSecret: "test-secret"}
+	cfg := config.Config{
+		JWTSecret:        "test-secret",
+		UploadDir:        t.TempDir(),
+		UploadPublicBase: "/static/uploads",
+	}
 	h := handler.New(db, cfg)
 	if configure != nil {
 		configure(h)
@@ -90,6 +97,293 @@ func requestJSON(t *testing.T, method, url, token string, payload any) (*http.Re
 	_ = json.NewDecoder(resp.Body).Decode(&out)
 	resp.Body.Close()
 	return resp, out
+}
+
+func requestMultipartFile(t *testing.T, method, url, token, fieldName, fileName string, content []byte) (*http.Response, map[string]any) {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	fileWriter, err := writer.CreateFormFile(fieldName, fileName)
+	if err != nil {
+		t.Fatalf("create form file failed: %v", err)
+	}
+	if _, err = fileWriter.Write(content); err != nil {
+		t.Fatalf("write form file failed: %v", err)
+	}
+	if err = writer.Close(); err != nil {
+		t.Fatalf("close writer failed: %v", err)
+	}
+
+	req, _ := http.NewRequest(method, url, &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("multipart request failed: %v", err)
+	}
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
+	return resp, out
+}
+
+type multipartUploadFile struct {
+	FileName     string
+	RelativePath string
+	Content      []byte
+}
+
+func requestMultipartFiles(t *testing.T, method, url, token, fieldName string, files []multipartUploadFile) (*http.Response, map[string]any) {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for _, file := range files {
+		fileWriter, err := writer.CreateFormFile(fieldName, file.FileName)
+		if err != nil {
+			t.Fatalf("create form file failed: %v", err)
+		}
+		if _, err = fileWriter.Write(file.Content); err != nil {
+			t.Fatalf("write form file failed: %v", err)
+		}
+		if file.RelativePath != "" {
+			if err = writer.WriteField("relativePaths", file.RelativePath); err != nil {
+				t.Fatalf("write relativePaths failed: %v", err)
+			}
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close writer failed: %v", err)
+	}
+
+	req, _ := http.NewRequest(method, url, &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("multipart request failed: %v", err)
+	}
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
+	return resp, out
+}
+
+func TestUploadAndAttachFlow(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+	uploadResp, uploadBody := requestMultipartFiles(t, http.MethodPost, ts.URL+"/api/v1/uploads", token, "files", []multipartUploadFile{
+		{FileName: "spec.txt", RelativePath: "docs/spec.txt", Content: []byte("hello upload")},
+		{FileName: "a.png", RelativePath: "docs/diagram/a.png", Content: []byte("png-mock")},
+	})
+	if uploadResp.StatusCode != http.StatusCreated {
+		t.Fatalf("upload status expected 201 got %d, body=%v", uploadResp.StatusCode, uploadBody)
+	}
+
+	attachmentListAny, ok := uploadBody["attachments"].([]any)
+	if !ok || len(attachmentListAny) != 1 {
+		t.Fatalf("upload response missing attachments: %v", uploadBody)
+	}
+	attachmentAny, _ := attachmentListAny[0].(map[string]any)
+	filePath, _ := attachmentAny["filePath"].(string)
+	matched, _ := regexp.MatchString(`^/static/uploads/\d{4}/\d{2}/\d{2}/`, filePath)
+	if !matched {
+		t.Fatalf("unexpected upload path: %s", filePath)
+	}
+	relativePath, _ := attachmentAny["relativePath"].(string)
+	if relativePath != "docs.zip" {
+		t.Fatalf("unexpected relative path: %s", relativePath)
+	}
+	fileName, _ := attachmentAny["fileName"].(string)
+	if fileName != "docs.zip" {
+		t.Fatalf("unexpected upload file name: %s", fileName)
+	}
+
+	fileResp, err := http.Get(ts.URL + filePath)
+	if err != nil {
+		t.Fatalf("request uploaded file failed: %v", err)
+	}
+	zipBytes, readErr := io.ReadAll(fileResp.Body)
+	fileResp.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read uploaded file failed: %v", readErr)
+	}
+	if fileResp.StatusCode != http.StatusOK {
+		t.Fatalf("uploaded file status expected 200 got %d", fileResp.StatusCode)
+	}
+	zipReader, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	if err != nil {
+		t.Fatalf("uploaded file is not a valid zip: %v", err)
+	}
+	if len(zipReader.File) != 2 {
+		t.Fatalf("zip file entry count expected 2 got %d", len(zipReader.File))
+	}
+	zipEntries := map[string]bool{}
+	for _, entry := range zipReader.File {
+		zipEntries[entry.Name] = true
+	}
+	if !zipEntries["docs/spec.txt"] || !zipEntries["docs/diagram/a.png"] {
+		t.Fatalf("zip file entries unexpected: %v", zipEntries)
+	}
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", token, map[string]any{
+		"code":        "UPLOAD-PROJ-1",
+		"name":        "上传项目",
+		"description": "包含附件",
+		"attachments": attachmentListAny,
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create project status expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+	projectAttachments, _ := projectBody["attachments"].([]any)
+	if len(projectAttachments) != 1 {
+		t.Fatalf("project attachments not saved: %v", projectBody["attachments"])
+	}
+	projectAttachment, _ := projectAttachments[0].(map[string]any)
+	if projectAttachment["filePath"] == "" {
+		t.Fatalf("project attachment path not saved: %v", projectAttachment)
+	}
+
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", token, map[string]any{
+		"title":       "上传任务",
+		"projectId":   projectID,
+		"status":      "pending",
+		"progress":    0,
+		"attachments": attachmentListAny,
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create task status expected 201 got %d, body=%v", taskResp.StatusCode, taskBody)
+	}
+	taskAttachments, _ := taskBody["attachments"].([]any)
+	if len(taskAttachments) != 1 {
+		t.Fatalf("task attachments not saved: %v", taskBody["attachments"])
+	}
+	taskAttachment, _ := taskAttachments[0].(map[string]any)
+	if taskAttachment["filePath"] != filePath {
+		t.Fatalf("task attachment path not saved: %v", taskAttachment)
+	}
+}
+
+func TestUploadMixedFilesAndFoldersFlow(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+	uploadResp, uploadBody := requestMultipartFiles(t, http.MethodPost, ts.URL+"/api/v1/uploads", token, "files", []multipartUploadFile{
+		{FileName: "notes.txt", RelativePath: "notes.txt", Content: []byte("note")},
+		{FileName: "spec.txt", RelativePath: "docs/spec.txt", Content: []byte("doc spec")},
+		{FileName: "a.png", RelativePath: "docs/diagram/a.png", Content: []byte("doc image")},
+		{FileName: "logo.svg", RelativePath: "images/logo.svg", Content: []byte("logo")},
+		{FileName: "banner.jpg", RelativePath: "images/banner.jpg", Content: []byte("banner")},
+	})
+	if uploadResp.StatusCode != http.StatusCreated {
+		t.Fatalf("upload status expected 201 got %d, body=%v", uploadResp.StatusCode, uploadBody)
+	}
+
+	attachmentListAny, ok := uploadBody["attachments"].([]any)
+	if !ok || len(attachmentListAny) != 3 {
+		t.Fatalf("upload response attachments expected 3 got %v", uploadBody)
+	}
+
+	attachmentByRelativePath := map[string]map[string]any{}
+	for _, item := range attachmentListAny {
+		attachment, castOK := item.(map[string]any)
+		if !castOK {
+			t.Fatalf("unexpected attachment item: %v", item)
+		}
+		relativePath, _ := attachment["relativePath"].(string)
+		attachmentByRelativePath[relativePath] = attachment
+	}
+
+	notesAttachment, hasNotes := attachmentByRelativePath["notes.txt"]
+	if !hasNotes {
+		t.Fatalf("missing standalone file attachment: %v", attachmentByRelativePath)
+	}
+
+	docsZipAttachment, hasDocsZip := attachmentByRelativePath["docs.zip"]
+	if !hasDocsZip {
+		t.Fatalf("missing docs.zip attachment: %v", attachmentByRelativePath)
+	}
+	imagesZipAttachment, hasImagesZip := attachmentByRelativePath["images.zip"]
+	if !hasImagesZip {
+		t.Fatalf("missing images.zip attachment: %v", attachmentByRelativePath)
+	}
+
+	assertAttachmentPath := func(item map[string]any) string {
+		filePath, _ := item["filePath"].(string)
+		matched, _ := regexp.MatchString(`^/static/uploads/\d{4}/\d{2}/\d{2}/`, filePath)
+		if !matched {
+			t.Fatalf("unexpected upload path: %s", filePath)
+		}
+		return filePath
+	}
+
+	notesPath := assertAttachmentPath(notesAttachment)
+	docsZipPath := assertAttachmentPath(docsZipAttachment)
+	imagesZipPath := assertAttachmentPath(imagesZipAttachment)
+
+	if mimeType, _ := docsZipAttachment["mimeType"].(string); mimeType != "application/zip" {
+		t.Fatalf("docs zip mimeType expected application/zip got %s", mimeType)
+	}
+	if mimeType, _ := imagesZipAttachment["mimeType"].(string); mimeType != "application/zip" {
+		t.Fatalf("images zip mimeType expected application/zip got %s", mimeType)
+	}
+
+	notesResp, err := http.Get(ts.URL + notesPath)
+	if err != nil {
+		t.Fatalf("request uploaded note file failed: %v", err)
+	}
+	notesBytes, readErr := io.ReadAll(notesResp.Body)
+	notesResp.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read uploaded note file failed: %v", readErr)
+	}
+	if notesResp.StatusCode != http.StatusOK {
+		t.Fatalf("uploaded note file status expected 200 got %d", notesResp.StatusCode)
+	}
+	if string(notesBytes) != "note" {
+		t.Fatalf("uploaded note file content unexpected: %s", string(notesBytes))
+	}
+
+	assertZipEntries := func(filePath string, expectedEntries []string) {
+		fileResp, getErr := http.Get(ts.URL + filePath)
+		if getErr != nil {
+			t.Fatalf("request uploaded zip failed: %v", getErr)
+		}
+		zipBytes, zipReadErr := io.ReadAll(fileResp.Body)
+		fileResp.Body.Close()
+		if zipReadErr != nil {
+			t.Fatalf("read uploaded zip failed: %v", zipReadErr)
+		}
+		if fileResp.StatusCode != http.StatusOK {
+			t.Fatalf("uploaded zip status expected 200 got %d", fileResp.StatusCode)
+		}
+		zipReader, openErr := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+		if openErr != nil {
+			t.Fatalf("uploaded file is not a valid zip: %v", openErr)
+		}
+		entries := map[string]bool{}
+		for _, entry := range zipReader.File {
+			entries[entry.Name] = true
+		}
+		if len(entries) != len(expectedEntries) {
+			t.Fatalf("zip entry count expected %d got %d, entries=%v", len(expectedEntries), len(entries), entries)
+		}
+		for _, expected := range expectedEntries {
+			if !entries[expected] {
+				t.Fatalf("zip missing expected entry %s, entries=%v", expected, entries)
+			}
+		}
+	}
+
+	assertZipEntries(docsZipPath, []string{"docs/spec.txt", "docs/diagram/a.png"})
+	assertZipEntries(imagesZipPath, []string{"images/logo.svg", "images/banner.jpg"})
 }
 
 func TestAuthCRUDAndAuditFlow(t *testing.T) {

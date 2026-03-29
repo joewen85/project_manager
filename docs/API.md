@@ -11,6 +11,17 @@ Base URL: `http://localhost:8080/api/v1`
 ### GET `/auth/profile`
 - Header: `Authorization: Bearer <token>`
 
+## 文件上传
+### POST `/uploads`
+- Header: `Authorization: Bearer <token>`
+- Content-Type: `multipart/form-data`
+- 表单字段: `files`（支持多个；兼容 `file`）
+- 可选字段: `relativePaths`（与 `files` 顺序一一对应的相对路径）
+- 支持：多文件、文件夹（前端可通过 `webkitdirectory` 或拖放目录上传）
+- 规则：上传文件夹时，后端会按顶层目录自动压缩为 `zip` 附件返回
+- 响应: `{ attachments: [{ fileName, filePath, relativePath, fileSize, mimeType }] }`
+- 存储目录: `static/uploads/YYYY/MM/DD/`
+
 ## RBAC
 ### GET `/rbac/permissions`
 ### POST `/rbac/permissions`
@@ -50,7 +61,7 @@ Base URL: `http://localhost:8080/api/v1`
 - 响应: `{ users: [{ id, name, username, email }], departments: [{ id, name }] }`
 ### GET `/projects/:id`
 ### POST `/projects`
-- 请求体: `{ code?, name, description, startAt, endAt, userIds, departmentIds }`
+- 请求体: `{ code?, name, description, startAt, endAt, attachments?, userIds, departmentIds }`
 - 约束:
   - `code` 为空时后端自动生成随机项目编码
 ### PUT `/projects/:id`
@@ -84,7 +95,7 @@ Base URL: `http://localhost:8080/api/v1`
 - 响应: `{ users: [{ id, name, username, email }] }`
 
 ### POST `/tasks`
-- 请求体: `{ taskNo?, title, description, status, priority, isMilestone, progress, startAt, endAt, projectId, parentId, assigneeIds, dependencies? }`
+- 请求体: `{ taskNo?, title, description, status, priority, isMilestone, progress, startAt, endAt, attachments?, projectId, parentId, assigneeIds, dependencies? }`
 - `dependencies` 格式: `[{ dependsOnTaskId, lagDays, type }]`
 - 约束:
   - `creatorId` 默认使用当前登录用户

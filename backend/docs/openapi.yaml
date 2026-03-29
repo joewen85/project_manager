@@ -2,159 +2,1744 @@ openapi: 3.0.3
 info:
   title: Project Management API
   version: 0.1.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 servers:
-  - url: http://localhost:8080/api/v1
+- url: /api/v1
+security:
+- bearerAuth: []
 paths:
   /auth/login:
     post:
       summary: 用户登录
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [username, password]
-              properties:
-                username: { type: string }
-                password: { type: string }
+              $ref: '#/components/schemas/LoginRequest'
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postAuthLogin
+  /auth/profile:
+    get:
+      summary: 当前用户信息
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getAuthProfile
+  /uploads:
+    post:
+      summary: 上传附件（支持多文件/文件夹）
+      description: 'multipart/form-data 上传。推荐使用 files 字段（可多文件）； 兼容 file 单文件字段。前端可通过 webkitdirectory 或拖放目录上传；目录上传会自动压缩为 ZIP。
+
+        '
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: 多文件上传字段（files[]）
+                relativePaths:
+                  type: array
+                  items:
+                    type: string
+                  description: 与 files[] 一一对应的相对路径，用于目录上传与后端按目录打包 ZIP
+                file:
+                  type: string
+                  format: binary
+                  deprecated: true
+                  description: 兼容单文件上传字段
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postUploads
   /rbac/permissions:
     get:
       summary: 权限列表
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getRbacPermissions
     post:
       summary: 创建权限
-      security: [{ bearerAuth: [] }]
-      responses: { '201': { description: Created } }
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermissionUpsertRequest'
+      responses:
+        '201':
+          description: Created
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postRbacPermissions
   /rbac/permissions/{id}:
     put:
       summary: 更新权限
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermissionUpsertRequest'
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putRbacPermissionsById
     delete:
       summary: 删除权限
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteRbacPermissionsById
   /rbac/roles:
     get:
       summary: 角色列表
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getRbacRoles
     post:
       summary: 创建角色
-      security: [{ bearerAuth: [] }]
-      responses: { '201': { description: Created } }
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleUpsertRequest'
+      responses:
+        '201':
+          description: Created
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postRbacRoles
   /rbac/roles/{id}:
     put:
       summary: 更新角色
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleUpsertRequest'
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putRbacRolesById
     delete:
       summary: 删除角色
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteRbacRolesById
   /users:
     get:
       summary: 用户列表
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getUsers
     post:
       summary: 创建用户
-      security: [{ bearerAuth: [] }]
-      responses: { '201': { description: Created } }
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpsertRequest'
+      responses:
+        '201':
+          description: Created
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postUsers
   /users/{id}:
     put:
       summary: 更新用户
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpsertRequest'
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putUsersById
     delete:
       summary: 删除用户
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteUsersById
   /departments:
     get:
       summary: 部门列表
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getDepartments
+    post:
+      summary: 创建部门
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentUpsertRequest'
+      responses:
+        '201':
+          description: Created
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postDepartments
+  /departments/{id}:
+    put:
+      summary: 更新部门
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentUpsertRequest'
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putDepartmentsById
+    delete:
+      summary: 删除部门
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteDepartmentsById
   /projects:
     get:
       summary: 项目列表
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: sortBy
+        schema:
+          type: string
+          enum:
+          - code
+          - name
+          - startAt
+          - endAt
+          - createdAt
+      - in: query
+        name: sortOrder
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjects
+    post:
+      summary: 创建项目
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postProjects
   /projects/export:
     get:
       summary: 导出项目 CSV
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Keyword'
+      responses:
+        '200':
+          description: CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectsExport
   /projects/editor-options:
     get:
       summary: 项目编辑选项（负责人/部门）
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: userKeyword
+        schema:
+          type: string
+      - in: query
+        name: departmentKeyword
+        schema:
+          type: string
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectEditorOptionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectsEditorOptions
+  /projects/gantt-portfolio:
+    get:
+      summary: 项目集甘特图数据
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: projectIds
+        description: 逗号分隔项目 ID 列表
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GanttItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectsGanttPortfolio
+  /projects/{id}:
+    get:
+      summary: 项目详情
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectsById
+    put:
+      summary: 更新项目
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putProjectsById
+    delete:
+      summary: 删除项目
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteProjectsById
+  /projects/{id}/gantt:
+    get:
+      summary: 单项目甘特图数据
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GanttItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectsByIdGantt
+  /projects/{id}/gantt/auto-resolve:
+    post:
+      summary: 自动按依赖顺延任务计划
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoResolveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postProjectsByIdGanttAutoResolve
+  /projects/{id}/task-tree:
+    get:
+      summary: 项目任务树
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskTreeNode'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectsByIdTaskTree
   /tasks:
     get:
       summary: 任务列表
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - pending
+          - queued
+          - processing
+          - completed
+      - in: query
+        name: projectId
+        schema:
+          type: integer
+      - in: query
+        name: sortBy
+        schema:
+          type: string
+          enum:
+          - taskNo
+          - title
+          - status
+          - progress
+          - startAt
+          - endAt
+          - createdAt
+          - priority
+      - in: query
+        name: sortOrder
+        schema:
+          type: string
+          description: priority 排序时支持 high|medium|low
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getTasks
     post:
       summary: 创建任务
-      security: [{ bearerAuth: [] }]
-      responses: { '201': { description: Created } }
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postTasks
   /tasks/export:
     get:
       summary: 导出任务 CSV
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: projectId
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+      - $ref: '#/components/parameters/Keyword'
+      responses:
+        '200':
+          description: CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getTasksExport
   /tasks/assignee-options:
     get:
       summary: 任务执行人选项
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Keyword'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskAssigneeOptionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getTasksAssigneeOptions
   /tasks/{id}:
     put:
       summary: 更新任务
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putTasksById
     delete:
       summary: 删除任务
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
-  /notifications:
-    get:
-      summary: 通知列表
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
-  /notifications/unread-count:
-    get:
-      summary: 未读通知数量
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
-  /notifications/{id}/read:
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteTasksById
+  /tasks/{id}/dependencies:
+    put:
+      summary: 更新任务依赖
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskDependenciesUpdateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskDependenciesUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putTasksByIdDependencies
+  /tasks/{id}/schedule:
     patch:
-      summary: 标记单条通知已读
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
-  /notifications/read-all:
-    patch:
-      summary: 标记全部通知已读
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
-  /audit/logs:
+      summary: 更新任务计划时间
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      - in: query
+        name: autoResolve
+        description: false 时不触发自动顺延（默认 true）
+        schema:
+          type: boolean
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskScheduleUpdateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskScheduleUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: patchTasksByIdSchedule
+  /tasks/progress-list:
     get:
-      summary: 审计日志列表
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      summary: 任务进度列表
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgressItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getTasksProgressList
+  /tasks/me:
+    get:
+      summary: 我的任务聚合
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyTasksResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getTasksMe
   /stats/dashboard:
     get:
       summary: 仪表盘统计
-      security: [{ bearerAuth: [] }]
-      responses: { '200': { description: OK } }
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStatsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getStatsDashboard
+  /notifications:
+    get:
+      summary: 通知列表
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - in: query
+        name: isRead
+        schema:
+          type: boolean
+      - in: query
+        name: module
+        schema:
+          type: string
+      - $ref: '#/components/parameters/Keyword'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getNotifications
+  /notifications/unread-count:
+    get:
+      summary: 未读通知数量
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnreadCountResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getNotificationsUnreadCount
+  /notifications/{id}/read:
+    patch:
+      summary: 标记单条通知已读
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: patchNotificationsByIdRead
+  /notifications/read-all:
+    patch:
+      summary: 标记全部通知已读
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: patchNotificationsReadAll
+  /audit/logs:
+    get:
+      summary: 审计日志列表
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - in: query
+        name: module
+        schema:
+          type: string
+      - in: query
+        name: action
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getAuditLogs
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  parameters:
+    IdPath:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+    Page:
+      in: query
+      name: page
+      schema:
+        type: integer
+        minimum: 1
+    PageSize:
+      in: query
+      name: pageSize
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+    Keyword:
+      in: query
+      name: keyword
+      schema:
+        type: string
+  schemas:
+    ApiMessage:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    LoginRequest:
+      type: object
+      required:
+      - username
+      - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+        permissions:
+          type: array
+          items:
+            type: string
+    Attachment:
+      type: object
+      properties:
+        fileName:
+          type: string
+        filePath:
+          type: string
+        relativePath:
+          type: string
+        fileSize:
+          type: integer
+          format: int64
+        mimeType:
+          type: string
+    UploadResponse:
+      type: object
+      properties:
+        attachments:
+          type: array
+          description: 附件数组（attachments[]）
+          items:
+            $ref: '#/components/schemas/Attachment'
+        attachment:
+          allOf:
+          - $ref: '#/components/schemas/Attachment'
+          deprecated: true
+          description: 兼容单文件返回字段（仅上传 1 个文件时存在）
+    Permission:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+    PermissionUpsertRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+    Role:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+    RoleUpsertRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        permissionIds:
+          type: array
+          items:
+            type: integer
+    DepartmentLite:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+    UserLite:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+    Department:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLite'
+    DepartmentUpsertRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        userIds:
+          type: array
+          items:
+            type: integer
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        isActive:
+          type: boolean
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        departments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepartmentLite'
+    UserUpsertRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        isActive:
+          type: boolean
+        roleIds:
+          type: array
+          items:
+            type: integer
+        departmentIds:
+          type: array
+          items:
+            type: integer
+    TaskDependency:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskId:
+          type: integer
+        dependsOnTaskId:
+          type: integer
+        lagDays:
+          type: integer
+        type:
+          type: string
+          enum:
+          - FS
+          - SS
+          - FF
+          - SF
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskNo:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - queued
+          - processing
+          - completed
+        priority:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+        isMilestone:
+          type: boolean
+        progress:
+          type: integer
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        attachment:
+          allOf:
+          - $ref: '#/components/schemas/Attachment'
+          deprecated: true
+          description: 兼容旧字段，建议使用 attachments
+        attachments:
+          type: array
+          description: 附件数组（attachments[]）
+          items:
+            $ref: '#/components/schemas/Attachment'
+        creatorId:
+          type: integer
+        projectId:
+          type: integer
+        parentId:
+          type: integer
+          nullable: true
+        assignees:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLite'
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskDependency'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Project:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        attachment:
+          allOf:
+          - $ref: '#/components/schemas/Attachment'
+          deprecated: true
+          description: 兼容旧字段，建议使用 attachments
+        attachments:
+          type: array
+          description: 附件数组（attachments[]）
+          items:
+            $ref: '#/components/schemas/Attachment'
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLite'
+        departments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepartmentLite'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+    ProjectUpsertRequest:
+      type: object
+      required:
+      - name
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        attachment:
+          allOf:
+          - $ref: '#/components/schemas/Attachment'
+          deprecated: true
+          description: 兼容旧字段，建议使用 attachments
+        attachments:
+          type: array
+          description: 附件数组（attachments[]）
+          items:
+            $ref: '#/components/schemas/Attachment'
+        userIds:
+          type: array
+          items:
+            type: integer
+        departmentIds:
+          type: array
+          items:
+            type: integer
+    TaskDependencyRequest:
+      type: object
+      properties:
+        dependsOnTaskId:
+          type: integer
+        lagDays:
+          type: integer
+        type:
+          type: string
+          enum:
+          - FS
+          - SS
+          - FF
+          - SF
+    TaskUpsertRequest:
+      type: object
+      required:
+      - title
+      - projectId
+      properties:
+        taskNo:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - queued
+          - processing
+          - completed
+        priority:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+        isMilestone:
+          type: boolean
+        progress:
+          type: integer
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        attachment:
+          allOf:
+          - $ref: '#/components/schemas/Attachment'
+          deprecated: true
+          description: 兼容旧字段，建议使用 attachments
+        attachments:
+          type: array
+          description: 附件数组（attachments[]）
+          items:
+            $ref: '#/components/schemas/Attachment'
+        projectId:
+          type: integer
+        parentId:
+          type: integer
+          nullable: true
+        assigneeIds:
+          type: array
+          items:
+            type: integer
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskDependencyRequest'
+    TaskDependenciesUpdateRequest:
+      type: object
+      properties:
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskDependencyRequest'
+    TaskDependenciesUpdateResponse:
+      type: object
+      properties:
+        taskId:
+          type: integer
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskDependency'
+    TaskScheduleUpdateRequest:
+      type: object
+      required:
+      - startAt
+      - endAt
+      properties:
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+    TaskScheduleUpdateResponse:
+      type: object
+      properties:
+        updatedCount:
+          type: integer
+        task:
+          $ref: '#/components/schemas/Task'
+    TaskTreeNode:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskNo:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        priority:
+          type: string
+        progress:
+          type: integer
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        parentId:
+          type: integer
+          nullable: true
+        projectId:
+          type: integer
+        assignees:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLite'
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskTreeNode'
+    GanttDependencyItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskId:
+          type: integer
+        dependsOnTaskId:
+          type: integer
+        lagDays:
+          type: integer
+        type:
+          type: string
+          enum:
+          - FS
+          - SS
+          - FF
+          - SF
+    GanttAssignee:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+    GanttItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskNo:
+          type: string
+        title:
+          type: string
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        progress:
+          type: integer
+        parentId:
+          type: integer
+          nullable: true
+        status:
+          type: string
+        priority:
+          type: string
+        isMilestone:
+          type: boolean
+        projectId:
+          type: integer
+        projectCode:
+          type: string
+        projectName:
+          type: string
+        assignees:
+          type: array
+          items:
+            $ref: '#/components/schemas/GanttAssignee'
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/GanttDependencyItem'
+    AutoResolveResponse:
+      type: object
+      properties:
+        updatedCount:
+          type: integer
+        projectId:
+          type: integer
+    ProgressItem:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+          format: int64
+    MyTasksResponse:
+      type: object
+      properties:
+        myTasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        myCreated:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        myParticipate:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+    DashboardStatsResponse:
+      type: object
+      properties:
+        users:
+          type: integer
+          format: int64
+        projects:
+          type: integer
+          format: int64
+        tasks:
+          type: integer
+          format: int64
+        completedTasks:
+          type: integer
+          format: int64
+        completionRate:
+          type: number
+          format: double
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        module:
+          type: string
+        targetId:
+          type: integer
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    UnreadCountResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        module:
+          type: string
+        action:
+          type: string
+        targetId:
+          type: integer
+        method:
+          type: string
+        path:
+          type: string
+        success:
+          type: boolean
+        detail:
+          type: string
+        clientIp:
+          type: string
+        userAgent:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ProjectEditorOptionUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+    ProjectEditorOptionDepartment:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+    ProjectEditorOptionsResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectEditorOptionUser'
+        departments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectEditorOptionDepartment'
+    TaskAssigneeOptionsResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLite'
+    UserPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    DepartmentPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/Department'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    ProjectPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    TaskPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    NotificationPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    AuditLogPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiMessage'

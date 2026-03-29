@@ -16,3 +16,7 @@ backend/bin/
 .env
 .env.*
 !.env.template
+
+# Uploads
+static/uploads/**
+!static/uploads/.gitkeep

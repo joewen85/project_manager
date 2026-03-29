@@ -43,6 +43,8 @@ cp .env.template .env
 如前后端端口不是默认值，记得在 `.env` 配置：
 - `VITE_API_BASE_URL`（容器部署建议 `/api/v1`）
 - `CORS_ALLOW_ORIGINS`（仅前后端跨域直连时需要）
+- `UPLOAD_DIR`（本地开发建议 `../static/uploads`，容器由 compose 固定到 `/app/static/uploads`）
+- `UPLOAD_PUBLIC_BASE`（默认 `/static/uploads`）
 - `FRONTEND_HTTPS_PORT`（线上建议 `443`）
 - `FRONTEND_SSL_DIR`（证书目录，默认 `./deploy/ssl`）
 - `FRONTEND_SSL_CERT_FILE` / `FRONTEND_SSL_KEY_FILE`（证书文件名）
@@ -102,6 +104,10 @@ FRONTEND_SSL_KEY_FILE=www.yunstlm.com.key
 ```bash
 cp .env.template .env
 ```
+并确保上传目录存在（项目根目录）：
+```bash
+mkdir -p static/uploads
+```
 
 ### 后端
 ```bash
@@ -115,6 +121,8 @@ cd frontend
 npm install
 npm run dev
 ```
+开发模式下，`/static/uploads` 会由 Vite 代理到后端；容器模式下 `./static/uploads` 会挂载到后端容器 `/app/static/uploads`。
+项目与任务编辑表单支持：上传多个文件、上传文件夹、拖放上传；上传文件夹时会自动压缩为 ZIP 附件。
 
 ## 项目计划与进度
 - 计划：`PLAN.md`

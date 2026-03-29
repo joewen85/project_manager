@@ -29,6 +29,8 @@ services:
     environment:
       APP_PORT: ${APP_PORT:-8080}
       JWT_SECRET: ${JWT_SECRET:-change-me}
+      UPLOAD_DIR: /app/static/uploads
+      UPLOAD_PUBLIC_BASE: ${UPLOAD_PUBLIC_BASE:-/static/uploads}
       DB_HOST: mysql
       DB_PORT: ${DB_PORT:-3306}
       DB_USER: ${DB_USER:-root}
@@ -36,6 +38,8 @@ services:
       DB_NAME: ${DB_NAME:-project_management}
     ports:
       - '${BACKEND_PORT:-8080}:${APP_PORT:-8080}'
+    volumes:
+      - './static/uploads:/app/static/uploads'
 
   frontend:
     build:

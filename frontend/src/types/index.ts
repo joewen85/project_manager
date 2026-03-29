@@ -32,6 +32,8 @@ export interface Project {
   description: string
   startAt?: string
   endAt?: string
+  attachment?: UploadAttachment
+  attachments?: UploadAttachment[]
   createdAt?: string
   users?: User[]
   departments?: Department[]
@@ -49,6 +51,8 @@ export interface Task {
   progress: number
   startAt?: string
   endAt?: string
+  attachment?: UploadAttachment
+  attachments?: UploadAttachment[]
   projectId: number
   projectCode?: string
   projectName?: string
@@ -109,3 +113,21 @@ export interface MyWorkData {
   myCreated: Task[]
   myParticipate: Task[]
 }
+
+export interface UploadAttachment {
+  fileName: string
+  filePath: string
+  relativePath?: string
+  fileSize: number
+  mimeType: string
+}
+
+export const emptyUploadAttachment = (): UploadAttachment => ({
+  fileName: '',
+  filePath: '',
+  relativePath: '',
+  fileSize: 0,
+  mimeType: ''
+})
+
+export const emptyUploadAttachments = (): UploadAttachment[] => []

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import type { AxiosError, AxiosRequestConfig } from 'axios'
 import type { PageResult } from '../types'
+import type { UploadAttachment } from '../types'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -133,6 +134,28 @@ export const fetchPage = async <T>(
 export const readApiError = (error: unknown, fallback = '请求失败') => {
   const err = error as AxiosError<ApiErrorBody>
   return err?.response?.data?.message || err?.message || fallback
+}
+
+export interface UploadSourceFile {
+  file: File
+  relativePath?: string
+}
+
+export const uploadAttachments = async (files: UploadSourceFile[]) => {
+  if (files.length === 0) return []
+  const formData = new FormData()
+  files.forEach((entry) => {
+    const relativePath = (entry.relativePath || (entry.file as File & { webkitRelativePath?: string }).webkitRelativePath || entry.file.name).replaceAll('\\', '/')
+    formData.append('files', entry.file)
+    formData.append('relativePaths', relativePath)
+  })
+  const res = await api.post<{ attachments: UploadAttachment[] }>('/uploads', formData)
+  return res.data.attachments || []
+}
+
+export const uploadAttachment = async (file: File) => {
+  const attachments = await uploadAttachments([{ file }])
+  return attachments[0]
 }
 
 api.interceptors.response.use(

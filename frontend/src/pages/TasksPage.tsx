@@ -5,7 +5,8 @@ import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
 import { formatDateTime } from '../utils/datetime'
-import { Project, Task, TaskPriority, User } from '../types'
+import { Project, Task, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
+import { AttachmentField } from '../components/AttachmentField'
 
 const statusLabel: Record<string, string> = {
   pending: '待处理',
@@ -31,9 +32,16 @@ interface TaskForm {
   progress: number
   startAt: string
   endAt: string
+  attachments: UploadAttachment[]
   projectId: number
   parentId?: number
   assigneeIds: number[]
+}
+
+const normalizeAttachments = (item: { attachments?: UploadAttachment[]; attachment?: UploadAttachment }) => {
+  if (Array.isArray(item.attachments)) return item.attachments
+  if (item.attachment?.filePath) return [item.attachment]
+  return emptyUploadAttachments()
 }
 
 const initialForm: TaskForm = {
@@ -46,6 +54,7 @@ const initialForm: TaskForm = {
   progress: 0,
   startAt: '',
   endAt: '',
+  attachments: emptyUploadAttachments(),
   projectId: 0,
   assigneeIds: []
 }
@@ -197,6 +206,7 @@ export function TasksPage() {
       isMilestone: Boolean(item.isMilestone),
       startAt: item.startAt ? item.startAt.slice(0, 16) : '',
       endAt: item.endAt ? item.endAt.slice(0, 16) : '',
+      attachments: normalizeAttachments(item),
       projectId: item.projectId,
       parentId: item.parentId,
       assigneeIds: (item.assignees || []).map((user) => user.id)
@@ -402,6 +412,12 @@ export function TasksPage() {
                 <div><strong>创建人ID：</strong>{detailTask.creatorId || '-'}</div>
                 <div><strong>执行人：</strong>{(detailTask.assignees || []).map((u) => `${u.name}(${u.username})`).join('，') || '-'}</div>
                 <div className="detail-time-line"><strong>任务周期：</strong>{formatDateTime(detailTask.startAt)} - {formatDateTime(detailTask.endAt)}</div>
+                <div className="detail-time-line">
+                  <strong>附件：</strong>
+                  {normalizeAttachments(detailTask).length > 0 ? normalizeAttachments(detailTask).map((item) => (
+                    <a key={item.filePath} href={item.filePath} target="_blank" rel="noreferrer">{item.relativePath || item.fileName || '附件'}</a>
+                  )) : '-'}
+                </div>
               </div>
             </section>
           </div>
@@ -416,6 +432,8 @@ export function TasksPage() {
           <input id="task-title" value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} required />
           <label htmlFor="task-description">描述</label>
           <textarea id="task-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} />
+          <label htmlFor="task-attachment">附件</label>
+          <AttachmentField inputId="task-attachment" value={form.attachments} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
           <label className="required-label" htmlFor="task-project">项目</label>
           <select
             id="task-project"
