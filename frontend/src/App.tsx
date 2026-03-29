@@ -1,4 +1,4 @@
-import { lazy, ReactElement, Suspense } from 'react'
+import { lazy, ReactElement, Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 
@@ -20,6 +20,29 @@ function Guard({ children }: { children: ReactElement }) {
 }
 
 export default function App() {
+  useEffect(() => {
+    const resolveTheme = () => {
+      const saved = localStorage.getItem('theme')
+      if (saved === 'light' || saved === 'dark') return saved
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    }
+
+    const applyTheme = () => {
+      document.documentElement.setAttribute('data-theme', resolveTheme())
+    }
+
+    applyTheme()
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleSystemThemeChange = () => {
+      const saved = localStorage.getItem('theme')
+      if (saved === 'light' || saved === 'dark') return
+      applyTheme()
+    }
+
+    mediaQuery.addEventListener('change', handleSystemThemeChange)
+    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange)
+  }, [])
+
   return (
     <Suspense fallback={<div className="card">页面加载中...</div>}>
       <Routes>
