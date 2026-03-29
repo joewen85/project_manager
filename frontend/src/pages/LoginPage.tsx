@@ -4,8 +4,8 @@ import { api, setPermissions, setToken } from '../services/api'
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('admin123')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
   const onSubmit = async (event: FormEvent) => {
