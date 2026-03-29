@@ -1,6 +1,6 @@
 ARG NODE_BUILDER_IMAGE=node:22-alpine
 ARG NGINX_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/nginx:alpine
-ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG NPM_REGISTRY=https://registry.npmmirror.com
 
 FROM ${NODE_BUILDER_IMAGE} AS builder
 ARG NPM_REGISTRY
