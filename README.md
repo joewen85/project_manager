@@ -42,7 +42,7 @@ cp .env.template .env
 ```
 如前后端端口不是默认值，记得在 `.env` 配置：
 - `VITE_API_BASE_URL`（容器部署建议 `/api/v1`）
-- `CORS_ALLOW_ORIGINS`（仅前后端跨域直连时需要）
+- `CORS_ALLOW_ORIGINS`（HTTPS 入口默认需包含 `https://localhost:5443`）
 - `UPLOAD_DIR`（本地开发建议 `../static/uploads`，容器由 compose 固定到 `/app/static/uploads`）
 - `UPLOAD_PUBLIC_BASE`（默认 `/static/uploads`）
 - `FRONTEND_HTTPS_PORT`（线上建议 `443`）
@@ -56,6 +56,10 @@ docker compose up -d --build
 - Backend: `http://localhost:8080`
 - Frontend HTTP: `http://localhost:5173`（自动跳转 HTTPS）
 - Frontend HTTPS: `https://localhost:5443`
+
+若登录接口返回 `POST 403`，请检查：
+- `.env` 中 `VITE_API_BASE_URL` 建议为 `/api/v1`
+- `.env` 中 `CORS_ALLOW_ORIGINS` 包含 `https://localhost:5443`
 
 默认管理员：
 - `admin / admin123`

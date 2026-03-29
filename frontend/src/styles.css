@@ -1,6 +1,6 @@
 :root {
-  --font-sans: 'Open Sans', system-ui, -apple-system, sans-serif;
-  --font-heading: 'Poppins', system-ui, -apple-system, sans-serif;
+  --font-sans: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-heading: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --color-bg: #f8fafc;
   --color-surface: #ffffff;
   --color-surface-muted: #f1f5f9;
@@ -39,7 +39,7 @@
   --duration-base: 220ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   color-scheme: light;
-  font-family: 'Open Sans', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
   color: var(--color-text);
   background: var(--color-bg);
 }
