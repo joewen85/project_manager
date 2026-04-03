@@ -190,7 +190,7 @@ export function ProjectsPage() {
         actions={<button className="btn" onClick={openCreateModal}>新增项目</button>}
         bodyClassName="toolbar-grid"
       >
-        <SearchField aria-label="搜索项目" value={keyword} placeholder="搜索：编码/名称/描述" onChange={(value) => { setKeyword(value); setPage(1) }} />
+        <SearchField className="toolbar-search-field" aria-label="搜索项目" value={keyword} placeholder="搜索：编码/名称/描述" onChange={(value) => { setKeyword(value); setPage(1) }} />
         <select aria-label="项目排序字段" value={sortKey} onChange={(e) => { setSortKey(e.target.value as SortKey); setPage(1) }}>
           <option value="createdAt">按创建时间</option>
           <option value="code">按编码</option>

@@ -6,6 +6,7 @@ import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
 import { FilterPanel } from '../components/FilterPanel'
 import { SearchField } from '../components/SearchField'
+import { SearchableSelect } from '../components/SearchableSelect'
 import { formatDateTime } from '../utils/datetime'
 import { Project, Task, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { AttachmentField } from '../components/AttachmentField'
@@ -263,6 +264,14 @@ export function TasksPage() {
     )
   }, [parentTaskOptions, parentTaskInput])
 
+  const projectFilterOptions = useMemo(() => (
+    projects.map((project) => ({
+      value: String(project.id),
+      label: `${project.code} - ${project.name}`,
+      keywords: [project.code, project.name, project.description || '']
+    }))
+  ), [projects])
+
   const selectNoParent = () => {
     setForm((prev) => ({ ...prev, parentId: undefined }))
     setParentTaskInput(noParentLabel)
@@ -342,15 +351,23 @@ export function TasksPage() {
         actions={<button className="btn" onClick={openCreateModal}>新增任务</button>}
         bodyClassName="toolbar-grid"
       >
-        <SearchField aria-label="搜索任务" value={keyword} placeholder="搜索：编号/标题/描述" onChange={(value) => { setKeyword(value); setPage(1) }} />
+        <SearchField className="toolbar-search-field" aria-label="搜索任务" value={keyword} placeholder="搜索：编号/标题/描述" onChange={(value) => { setKeyword(value); setPage(1) }} />
         <select aria-label="任务状态筛选" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }}>
           <option value="">全部状态</option>
           {Object.keys(statusLabel).map((key) => <option key={key} value={key}>{statusLabel[key]}</option>)}
         </select>
-        <select aria-label="任务项目筛选" value={projectFilter} onChange={(e) => { setProjectFilter(e.target.value); setPage(1) }}>
-          <option value="">全部项目</option>
-          {projects.map((project) => <option key={project.id} value={project.id}>{project.code} - {project.name}</option>)}
-        </select>
+        <SearchableSelect
+          ariaLabel="任务项目筛选"
+          value={projectFilter}
+          options={projectFilterOptions}
+          defaultOptionLabel="全部项目"
+          placeholder="搜索项目：编码/名称/描述"
+          noResultsText="没有匹配的项目"
+          onChange={(value) => {
+            setProjectFilter(value)
+            setPage(1)
+          }}
+        />
         <select aria-label="任务优先级排序" value={prioritySortOrder} onChange={(e) => { setPrioritySortOrder(e.target.value as PrioritySortOrder); setPage(1) }}>
           <option value="high">高→中→低</option>
           <option value="medium">中→高→低</option>

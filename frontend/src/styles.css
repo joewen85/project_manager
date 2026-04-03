@@ -638,6 +638,37 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .combo-wrap {
   position: relative;
 }
+.searchable-select-field {
+  position: relative;
+}
+.searchable-select-field input {
+  padding-right: 40px;
+}
+.searchable-select-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.searchable-select-toggle:hover {
+  background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+  color: var(--color-text);
+}
+.searchable-select-toggle-icon {
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+.searchable-select-toggle-icon.open {
+  transform: rotate(180deg);
+}
 .combo-menu {
   position: absolute;
   z-index: 70;
@@ -679,6 +710,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .row-actions { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 8px; }
 td .btn + .btn { margin-left: 3px; }
 .toolbar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2); align-items: end; }
+.toolbar-grid .toolbar-search-field { grid-column: span 2; }
 .toolbar-grid .btn { min-height: 42px; }
 .login .btn { margin-top: 10px; }
 .pagination-row { display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
@@ -908,6 +940,7 @@ td .btn + .btn { margin-left: 3px; }
   }
   .gantt-row { grid-template-columns: 1fr; }
   .toolbar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .toolbar-grid .toolbar-search-field { grid-column: span 1; }
   .charts { grid-template-columns: 1fr; }
   .gantt-control-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .gantt-module-page .cards { grid-template-columns: 1fr 1fr; }
