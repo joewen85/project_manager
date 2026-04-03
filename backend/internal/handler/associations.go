@@ -50,6 +50,17 @@ func findPermissionsByIDs(tx *gorm.DB, ids []uint) ([]model.Permission, error) {
 	return permissions, nil
 }
 
+func findTagsByIDs(tx *gorm.DB, ids []uint) ([]model.Tag, error) {
+	var tags []model.Tag
+	if len(ids) == 0 {
+		return tags, nil
+	}
+	if err := tx.Where("id IN ?", ids).Find(&tags).Error; err != nil {
+		return nil, err
+	}
+	return tags, nil
+}
+
 func replaceAssociation(tx *gorm.DB, owner interface{}, association string, values interface{}) error {
 	return tx.Model(owner).Association(association).Replace(values)
 }

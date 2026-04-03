@@ -25,6 +25,12 @@ export interface Department {
   users?: User[]
 }
 
+export interface Tag {
+  id: number
+  name: string
+  taskCount?: number
+}
+
 export interface Project {
   id: number
   code: string
@@ -61,6 +67,7 @@ export interface Task {
   creatorId?: number
   creator?: User
   assignees?: User[]
+  tags?: Tag[]
   dependencies?: TaskDependency[]
   createdAt?: string
 }

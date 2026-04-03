@@ -18,6 +18,7 @@ func Migrate(db *gorm.DB) error {
 		&model.Role{},
 		&model.Permission{},
 		&model.Department{},
+		&model.Tag{},
 		&model.Project{},
 		&model.Task{},
 		&model.TaskDependency{},

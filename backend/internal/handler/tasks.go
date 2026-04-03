@@ -28,6 +28,7 @@ type taskRequest struct {
 	ProjectID    uint                     `json:"projectId" binding:"required"`
 	ParentID     *uint                    `json:"parentId"`
 	AssigneeIDs  []uint                   `json:"assigneeIds"`
+	TagIDs       []uint                   `json:"tagIds"`
 	Dependencies *[]taskDependencyRequest `json:"dependencies"`
 }
 
@@ -297,7 +298,11 @@ func toGanttItems(tasks []model.Task, projectMeta map[uint]projectLite) []ganttI
 func (h *Handler) ListTasks(c *gin.Context) {
 	page, pageSize := parsePage(c)
 	var tasks []model.Task
-	query := h.DB.Model(&model.Task{}).Preload("Assignees").Preload("Creator").Preload("Dependencies")
+	query := h.DB.Model(&model.Task{}).
+		Preload("Assignees").
+		Preload("Creator").
+		Preload("Dependencies").
+		Preload("Tags", func(db *gorm.DB) *gorm.DB { return db.Order("tags.name asc") })
 	query = h.scopeTasksQuery(c, query)
 	if projectID := c.Query("projectId"); projectID != "" {
 		query = query.Where("project_id = ?", projectID)
@@ -410,6 +415,13 @@ func (h *Handler) CreateTask(c *gin.Context) {
 				return err
 			}
 		}
+		tags, err := findTagsByIDs(tx, req.TagIDs)
+		if err != nil {
+			return err
+		}
+		if err := replaceAssociation(tx, &item, "Tags", &tags); err != nil {
+			return err
+		}
 		dependencies := []taskDependencyRequest{}
 		if req.Dependencies != nil {
 			dependencies = *req.Dependencies
@@ -421,7 +433,11 @@ func (h *Handler) CreateTask(c *gin.Context) {
 			return err
 		}
 
-		if err := tx.Preload("Assignees").Preload("Creator").Preload("Dependencies").First(&item, item.ID).Error; err != nil {
+		if err := tx.Preload("Assignees").
+			Preload("Creator").
+			Preload("Dependencies").
+			Preload("Tags", func(db *gorm.DB) *gorm.DB { return db.Order("tags.name asc") }).
+			First(&item, item.ID).Error; err != nil {
 			return err
 		}
 		return h.writeAuditWithDB(c, tx, "tasks", "create", item.ID, true, auditDetailf("创建任务(id=%d)", item.ID))
@@ -500,6 +516,13 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 		if err := replaceAssociation(tx, &item, "Assignees", &users); err != nil {
 			return err
 		}
+		tags, err := findTagsByIDs(tx, req.TagIDs)
+		if err != nil {
+			return err
+		}
+		if err := replaceAssociation(tx, &item, "Tags", &tags); err != nil {
+			return err
+		}
 		if req.Dependencies != nil {
 			if err := h.syncTaskDependencies(tx, item.ID, item.ProjectID, *req.Dependencies); err != nil {
 				return err
@@ -515,7 +538,11 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 		if err := h.triggerFailpoint("tasks.update.after_assignees"); err != nil {
 			return err
 		}
-		if err := tx.Preload("Assignees").Preload("Creator").Preload("Dependencies").First(&item, item.ID).Error; err != nil {
+		if err := tx.Preload("Assignees").
+			Preload("Creator").
+			Preload("Dependencies").
+			Preload("Tags", func(db *gorm.DB) *gorm.DB { return db.Order("tags.name asc") }).
+			First(&item, item.ID).Error; err != nil {
 			return err
 		}
 		return h.writeAuditWithDB(c, tx, "tasks", "update", item.ID, true, auditDetailf("更新任务(id=%d)", item.ID))
@@ -535,6 +562,9 @@ func (h *Handler) DeleteTask(c *gin.Context) {
 	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := clearAssociation(tx, &item, "Assignees"); err != nil {
+			return err
+		}
+		if err := clearAssociation(tx, &item, "Tags"); err != nil {
 			return err
 		}
 		if err := tx.Delete(&item).Error; err != nil {

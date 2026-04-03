@@ -752,6 +752,42 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .gantt-project-multi-select {
   grid-column: span 2;
 }
+.task-tag-stack {
+  display: grid;
+  gap: 6px;
+}
+.task-tag-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.multi-check-action {
+  width: 100%;
+  border: 1px dashed color-mix(in oklab, var(--color-primary) 42%, var(--color-border));
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--color-primary) 8%, transparent);
+  color: var(--color-primary);
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.multi-check-action:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-primary) 14%, transparent);
+}
+.multi-check-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
 .combo-menu {
   position: absolute;
   z-index: 70;

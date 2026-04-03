@@ -7,6 +7,7 @@ const DepartmentsPage = lazy(async () => import('./pages/DepartmentsPage').then(
 const LoginPage = lazy(async () => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })))
 const MyWorkPage = lazy(async () => import('./pages/MyWorkPage').then((module) => ({ default: module.MyWorkPage })))
 const NotificationsPage = lazy(async () => import('./pages/NotificationsPage').then((module) => ({ default: module.NotificationsPage })))
+const TagsPage = lazy(async () => import('./pages/TagsPage').then((module) => ({ default: module.TagsPage })))
 const ProjectsPage = lazy(async () => import('./pages/ProjectsPage').then((module) => ({ default: module.ProjectsPage })))
 const GanttPage = lazy(async () => import('./pages/GanttPage').then((module) => ({ default: module.GanttPage })))
 const RbacPage = lazy(async () => import('./pages/RbacPage').then((module) => ({ default: module.RbacPage })))
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="rbac" element={<RbacPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="departments" element={<DepartmentsPage />} />
+          <Route path="tags" element={<TagsPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="gantt" element={<GanttPage />} />
           <Route path="tasks" element={<TasksPage />} />

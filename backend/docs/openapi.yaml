@@ -367,6 +367,100 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: deleteDepartmentsById
+  /tags:
+    get:
+      summary: 标签列表
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getTags
+    post:
+      summary: 创建标签
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postTags
+  /tags/{id}:
+    get:
+      summary: 标签详情
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getTagsById
+    put:
+      summary: 更新标签
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putTagsById
+    delete:
+      summary: 删除标签
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteTagsById
   /projects:
     get:
       summary: 项目列表
@@ -1130,6 +1224,23 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UserLite'
+    Tag:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        taskCount:
+          type: integer
+          format: int64
+    TagUpsertRequest:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
     DepartmentUpsertRequest:
       type: object
       properties:
@@ -1260,6 +1371,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TaskDependency'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
         createdAt:
           type: string
           format: date-time
@@ -1405,6 +1520,10 @@ components:
           type: integer
           nullable: true
         assigneeIds:
+          type: array
+          items:
+            type: integer
+        tagIds:
           type: array
           items:
             type: integer
@@ -1711,6 +1830,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Department'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    TagPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
         total:
           type: integer
           format: int64

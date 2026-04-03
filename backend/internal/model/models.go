@@ -68,6 +68,13 @@ type Department struct {
 	Projects    []Project `gorm:"many2many:project_departments;" json:"projects,omitempty"`
 }
 
+type Tag struct {
+	BaseModel
+	Name      string `gorm:"size:100;uniqueIndex;not null" json:"name"`
+	TaskCount int64  `gorm:"->;column:task_count;-:migration" json:"taskCount"`
+	Tasks     []Task `gorm:"many2many:task_tags;" json:"tasks,omitempty"`
+}
+
 type Project struct {
 	BaseModel
 	Code        string       `gorm:"size:64;uniqueIndex;not null" json:"code"`
@@ -102,6 +109,7 @@ type Task struct {
 	ParentID     *uint            `gorm:"index" json:"parentId"`
 	Children     []Task           `gorm:"foreignKey:ParentID" json:"children,omitempty"`
 	Assignees    []User           `gorm:"many2many:task_users;" json:"assignees,omitempty"`
+	Tags         []Tag            `gorm:"many2many:task_tags;" json:"tags,omitempty"`
 	Dependencies []TaskDependency `gorm:"foreignKey:TaskID" json:"dependencies,omitempty"`
 }
 

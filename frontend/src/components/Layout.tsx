@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Building2, CalendarRange, FolderKanban, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, Shield, Sun, UserCircle2, Users, X } from 'lucide-react'
+import { BarChart3, Bell, Building2, CalendarRange, FolderKanban, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, Shield, Sun, Tag, UserCircle2, Users, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchData, fetchPage, getPermissions, readApiError, setPermissions } from '../services/api'
@@ -11,6 +11,7 @@ const menus = [
   { to: '/rbac', label: 'RBAC权限', icon: Shield, permission: 'rbac.manage' },
   { to: '/users', label: '用户管理', icon: Users, permission: 'users.read' },
   { to: '/departments', label: '部门管理', icon: Building2, permission: 'departments.read' },
+  { to: '/tags', label: '标签管理', icon: Tag, permission: 'tags.read' },
   { to: '/projects', label: '项目列表', icon: FolderKanban, permission: 'projects.read' },
   { to: '/gantt', label: '甘特模块', icon: CalendarRange, permission: 'projects.read' },
   { to: '/tasks', label: '任务列表', icon: ListChecks, permission: 'tasks.read' },
@@ -432,6 +433,7 @@ export function Layout() {
     ['/rbac', 'RBAC 权限管理'],
     ['/users', '用户管理'],
     ['/departments', '部门管理'],
+    ['/tags', '标签管理'],
     ['/projects', '项目列表'],
     ['/gantt', '甘特图模块'],
     ['/tasks', '任务列表'],

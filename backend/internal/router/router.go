@@ -80,6 +80,16 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			departments.DELETE("/:id", middleware.RequirePermission(h.DB, "departments.write"), h.DeleteDepartment)
 		}
 
+		tags := authGroup.Group("/tags")
+		tags.Use(middleware.RequirePermission(h.DB, "tags.read"))
+		{
+			tags.GET("", h.ListTags)
+			tags.GET("/:id", h.GetTag)
+			tags.POST("", middleware.RequirePermission(h.DB, "tags.write"), h.CreateTag)
+			tags.PUT("/:id", middleware.RequirePermission(h.DB, "tags.write"), h.UpdateTag)
+			tags.DELETE("/:id", middleware.RequirePermission(h.DB, "tags.write"), h.DeleteTag)
+		}
+
 		projects := authGroup.Group("/projects")
 		projects.Use(middleware.RequirePermission(h.DB, "projects.read"))
 		{

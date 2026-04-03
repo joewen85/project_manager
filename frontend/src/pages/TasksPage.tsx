@@ -8,7 +8,7 @@ import { FilterPanel } from '../components/FilterPanel'
 import { SearchField } from '../components/SearchField'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { formatDateTime } from '../utils/datetime'
-import { Project, Task, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
+import { Project, Tag, Task, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { AttachmentField } from '../components/AttachmentField'
 
 const statusLabel: Record<string, string> = {
@@ -39,6 +39,7 @@ interface TaskForm {
   projectId: number
   parentId?: number
   assigneeIds: number[]
+  tagIds: number[]
 }
 
 const normalizeAttachments = (item: { attachments?: UploadAttachment[]; attachment?: UploadAttachment }) => {
@@ -59,7 +60,8 @@ const initialForm: TaskForm = {
   endAt: '',
   attachments: emptyUploadAttachments(),
   projectId: 0,
-  assigneeIds: []
+  assigneeIds: [],
+  tagIds: []
 }
 
 type PrioritySortOrder = TaskPriority
@@ -71,6 +73,7 @@ export function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
   const [parentTasks, setParentTasks] = useState<Task[]>([])
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState('')
@@ -89,6 +92,8 @@ export function TasksPage() {
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
   const [assigneeKeyword, setAssigneeKeyword] = useState('')
+  const [tagKeyword, setTagKeyword] = useState('')
+  const [creatingTag, setCreatingTag] = useState(false)
   const [parentTaskInput, setParentTaskInput] = useState(noParentLabel)
   const [parentDropdownOpen, setParentDropdownOpen] = useState(false)
   const [parentHighlightIndex, setParentHighlightIndex] = useState(0)
@@ -146,12 +151,16 @@ export function TasksPage() {
   useEffect(() => {
     if (!modalOpen) return
     const timer = window.setTimeout(() => {
-      void fetchPage<User>('/users', { page: 1, pageSize: 200, keyword: assigneeKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true })
-        .then((res) => setUsers(res.list))
-        .catch(() => setUsers([]))
+      void Promise.all([
+        fetchPage<User>('/users', { page: 1, pageSize: 200, keyword: assigneeKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 })),
+        fetchPage<Tag>('/tags', { page: 1, pageSize: 200, keyword: tagKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 }))
+      ]).then(([userPage, tagPage]) => {
+        setUsers(userPage.list)
+        setTags(tagPage.list)
+      })
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [modalOpen, assigneeKeyword])
+  }, [modalOpen, assigneeKeyword, tagKeyword])
 
   useEffect(() => {
     if (!modalOpen || !form.projectId) return
@@ -165,6 +174,7 @@ export function TasksPage() {
     setFormError('')
     setFormSuccess('')
     setAssigneeKeyword('')
+    setTagKeyword('')
     setParentTaskInput(noParentLabel)
     setModalOpen(true)
   }
@@ -213,14 +223,37 @@ export function TasksPage() {
       attachments: normalizeAttachments(item),
       projectId: item.projectId,
       parentId: item.parentId,
-      assigneeIds: (item.assignees || []).map((user) => user.id)
+      assigneeIds: (item.assignees || []).map((user) => user.id),
+      tagIds: (item.tags || []).map((tag) => tag.id)
     })
     setFormError('')
     setFormSuccess('')
     setAssigneeKeyword('')
+    setTagKeyword('')
     const parent = parentTasks.find((task) => task.id === item.parentId) || tasks.find((task) => task.id === item.parentId)
     setParentTaskInput(parent ? `${parent.taskNo}｜${parent.title}` : noParentLabel)
     setModalOpen(true)
+  }
+
+  const createTagInline = async (rawName?: string) => {
+    const name = (rawName ?? tagKeyword).trim()
+    if (!name) {
+      setFormError('请输入标签名称')
+      return
+    }
+    try {
+      setCreatingTag(true)
+      setFormError('')
+      const response = await api.post<Tag>('/tags', { name })
+      const created = response.data
+      setTags((prev) => [created, ...prev.filter((item) => item.id !== created.id)])
+      setForm((prev) => ({ ...prev, tagIds: prev.tagIds.includes(created.id) ? prev.tagIds : [...prev.tagIds, created.id] }))
+      setTagKeyword(created.name)
+    } catch (error) {
+      setFormError(readApiError(error, '新增标签失败'))
+    } finally {
+      setCreatingTag(false)
+    }
   }
 
   const onDelete = async (id: number) => {
@@ -271,6 +304,21 @@ export function TasksPage() {
       keywords: [project.code, project.name, project.description || '']
     }))
   ), [projects])
+
+  const normalizedTagKeyword = tagKeyword.trim().toLowerCase()
+  const canCreateTagFromKeyword = Boolean(normalizedTagKeyword) && !tags.some((tag) => tag.name.trim().toLowerCase() === normalizedTagKeyword)
+  const hasTagSearchKeyword = Boolean(tagKeyword.trim())
+  const allSearchedTagsSelected = tags.length > 0 && tags.every((tag) => form.tagIds.includes(tag.id))
+
+  const toggleSelectAllSearchedTags = (checked: boolean) => {
+    const searchedTagIds = tags.map((tag) => tag.id)
+    setForm((prev) => {
+      if (checked) {
+        return { ...prev, tagIds: Array.from(new Set([...prev.tagIds, ...searchedTagIds])) }
+      }
+      return { ...prev, tagIds: prev.tagIds.filter((id) => !searchedTagIds.includes(id)) }
+    })
+  }
 
   const selectNoParent = () => {
     setForm((prev) => ({ ...prev, parentId: undefined }))
@@ -378,7 +426,7 @@ export function TasksPage() {
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && tasks.length === 0} emptyText="暂无匹配的任务" onRetry={() => { void load() }} />
         {!loading && !error && tasks.length > 0 && (
-          <table className="responsive-table"><thead><tr><th>任务编号</th><th>标题</th><th>优先级</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
+          <table className="responsive-table"><thead><tr><th>任务编号</th><th>标题</th><th>优先级</th><th>状态</th><th>进度</th><th>标签</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
             {tasks.map((task) => (
               <tr key={task.id} id={`task-row-${task.id}`} className={focusedTaskId === task.id ? 'task-row-focused' : ''}>
                 <td data-label="任务编号">{task.taskNo}</td>
@@ -386,6 +434,13 @@ export function TasksPage() {
                 <td data-label="优先级">{priorityLabel[(task.priority || 'high') as TaskPriority]}</td>
                 <td data-label="状态">{statusLabel[task.status]}</td>
                 <td data-label="进度">{task.progress}%</td>
+                <td data-label="标签">
+                  <div className="task-tag-stack">
+                    {(task.tags || []).length > 0 ? (task.tags || []).map((tag) => (
+                      <span key={tag.id} className="task-tag-badge">{tag.name}</span>
+                    )) : <span>-</span>}
+                  </div>
+                </td>
                 <td data-label="开始">{formatDateTime(task.startAt)}</td>
                 <td data-label="结束">{formatDateTime(task.endAt)}</td>
                 <td data-label="执行人">{(task.assignees || []).length}</td>
@@ -428,6 +483,7 @@ export function TasksPage() {
                 <div><strong>进度：</strong>{Number(detailTask.progress || 0)}%</div>
                 <div><strong>项目ID：</strong>{detailTask.projectId || '-'}</div>
                 <div><strong>父任务ID：</strong>{detailTask.parentId || '-'}</div>
+                <div className="detail-time-line"><strong>标签：</strong>{(detailTask.tags || []).map((tag) => tag.name).join('，') || '-'}</div>
               </div>
             </section>
             <section className="detail-section">
@@ -557,17 +613,8 @@ export function TasksPage() {
             <option value="medium">中</option>
             <option value="low">低</option>
           </select>
-          <label htmlFor="task-milestone">里程碑</label>
-          <select id="task-milestone" value={form.isMilestone ? '1' : '0'} onChange={(e) => setForm((prev) => ({ ...prev, isMilestone: e.target.value === '1' }))}>
-            <option value="0">否</option>
-            <option value="1">是</option>
-          </select>
           <label htmlFor="task-progress">进度</label>
           <input id="task-progress" type="number" inputMode="numeric" min={0} max={100} value={form.progress} onChange={(e) => setForm((prev) => ({ ...prev, progress: Number(e.target.value) }))} />
-          <label htmlFor="task-start">开始时间</label>
-          <input id="task-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} />
-          <label htmlFor="task-end">结束时间</label>
-          <input id="task-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} />
           <label htmlFor="task-assignees">执行人（多人）</label>
           <SearchField aria-label="搜索执行人" placeholder="搜索执行人：姓名/用户名/邮箱" value={assigneeKeyword} onChange={setAssigneeKeyword} />
           <div id="task-assignees" className="multi-checklist">
@@ -578,6 +625,58 @@ export function TasksPage() {
               </label>
             ))}
           </div>
+          <label htmlFor="task-tags">标签（多选）</label>
+          <SearchField
+            id="task-tags"
+            aria-label="搜索标签"
+            placeholder="搜索标签名称；没有则可直接新增"
+            value={tagKeyword}
+            onChange={setTagKeyword}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && canCreateTagFromKeyword) {
+                event.preventDefault()
+                void createTagInline(tagKeyword)
+              }
+            }}
+          />
+          <div className="multi-checklist">
+            {hasTagSearchKeyword && tags.length > 0 && (
+              <label className="multi-check-item multi-check-item-action">
+                <input
+                  type="checkbox"
+                  checked={allSearchedTagsSelected}
+                  onChange={(event) => toggleSelectAllSearchedTags(event.target.checked)}
+                />
+                <span>全选搜索到的标签（{tags.length}）</span>
+              </label>
+            )}
+            {canCreateTagFromKeyword && (
+              <button
+                type="button"
+                className="multi-check-action"
+                onClick={() => { void createTagInline(tagKeyword) }}
+                disabled={creatingTag}
+              >
+                {creatingTag ? '新增中...' : `新增标签「${tagKeyword.trim()}」`}
+              </button>
+            )}
+            {tags.map((tag) => (
+              <label key={tag.id} className="multi-check-item">
+                <input type="checkbox" checked={form.tagIds.includes(tag.id)} onChange={() => setForm((prev) => ({ ...prev, tagIds: toggleNumber(prev.tagIds, tag.id) }))} />
+                <span>{tag.name}</span>
+              </label>
+            ))}
+            {!canCreateTagFromKeyword && tags.length === 0 && <p className="inline-tip">暂无匹配标签，请输入名称后直接新增。</p>}
+          </div>
+          <label htmlFor="task-start">开始时间</label>
+          <input id="task-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} />
+          <label htmlFor="task-end">结束时间</label>
+          <input id="task-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} />
+          <label htmlFor="task-milestone">里程碑</label>
+          <select id="task-milestone" value={form.isMilestone ? '1' : '0'} onChange={(e) => setForm((prev) => ({ ...prev, isMilestone: e.target.value === '1' }))}>
+            <option value="0">否</option>
+            <option value="1">是</option>
+          </select>
           <div className="row-actions">
             <button type="submit" className="btn" disabled={submitting}>{submitting ? '保存中...' : '保存任务'}</button>
             <button type="button" className="btn secondary" onClick={() => setForm(initialForm)}>重置</button>

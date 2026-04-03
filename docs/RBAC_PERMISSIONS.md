@@ -22,10 +22,12 @@
 | `users.write` | 用户 | 新增/编辑/删除用户 |
 | `departments.read` | 部门 | 查看部门列表 |
 | `departments.write` | 部门 | 新增/编辑/删除部门 |
+| `tags.read` | 标签 | 查看标签列表、标签统计 |
+| `tags.write` | 标签 | 新增/编辑/删除标签 |
 | `projects.read` | 项目 | 查看项目、项目详情、甘特图、任务树、项目导出 |
 | `projects.write` | 项目 | 新增/编辑/删除项目 |
 | `tasks.read` | 任务 | 查看任务、进度列表、我的任务、任务导出 |
-| `tasks.write` | 任务 | 新增/编辑/删除任务 |
+| `tasks.write` | 任务 | 新增/编辑/删除任务、维护任务标签关联 |
 | `notifications.read` | 通知 | 查看通知、未读数、标记已读 |
 | `notifications.write` | 通知 | 预留写权限（当前核心接口可由 `read` 完成） |
 | `stats.read` | 统计 | 查看统计分析 |
@@ -40,6 +42,7 @@
 | `/rbac/*` | `rbac.manage` |
 | `/users/*` | `users.read`（写操作再校验 `users.write`） |
 | `/departments/*` | `departments.read`（写操作再校验 `departments.write`） |
+| `/tags/*` | `tags.read`（写操作再校验 `tags.write`） |
 | `/projects/*` | `projects.read`（写操作再校验 `projects.write`） |
 | `/tasks/*` | `tasks.read`（写操作再校验 `tasks.write`） |
 | `/stats/*` | `stats.read` |
@@ -56,6 +59,7 @@
 | RBAC 权限 | `rbac.manage` |
 | 用户管理 | `users.read` |
 | 部门管理 | `departments.read` |
+| 标签管理 | `tags.read` |
 | 项目列表 | `projects.read` |
 | 任务列表 | `tasks.read` |
 | 站内通知 | `notifications.read` |

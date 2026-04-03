@@ -49,6 +49,23 @@ Base URL: `http://localhost:8080/api/v1`
 ### PUT `/departments/:id`
 ### DELETE `/departments/:id`
 
+## 标签管理
+### GET `/tags`
+- Query: `page` `pageSize` `keyword`
+- 权限: `tags.read`
+- 响应中的每个标签包含：`taskCount`（关联任务数量）
+### GET `/tags/:id`
+- 权限: `tags.read`
+- 响应包含：`id` `name` `taskCount`
+### POST `/tags`
+- 请求体: `{ name }`
+- 权限: `tags.write`
+### PUT `/tags/:id`
+- 请求体: `{ name }`
+- 权限: `tags.write`
+### DELETE `/tags/:id`
+- 权限: `tags.write`
+
 ## 项目管理
 ### GET `/projects`
 - Query: `page` `pageSize` `keyword`
@@ -95,13 +112,16 @@ Base URL: `http://localhost:8080/api/v1`
 - 响应: `{ users: [{ id, name, username, email }] }`
 
 ### POST `/tasks`
-- 请求体: `{ taskNo?, title, description, status, priority, isMilestone, progress, startAt, endAt, attachments?, projectId, parentId, assigneeIds, dependencies? }`
+- 请求体: `{ taskNo?, title, description, status, priority, isMilestone, progress, startAt, endAt, attachments?, projectId, parentId, assigneeIds, tagIds, dependencies? }`
+- 权限: `tasks.write`
 - `dependencies` 格式: `[{ dependsOnTaskId, lagDays, type }]`
 - 约束:
   - `creatorId` 默认使用当前登录用户
   - `taskNo` 唯一（为空自动生成）
   - `status` 支持 `pending|queued|processing|completed`
   - `priority` 支持 `high|medium|low`（默认 `high`）
+  - `tagIds` 为标签 ID 数组；返回任务详情/列表时会包含 `tags`
+  - 维护任务标签关联时，无需额外 `tags.write`，沿用 `tasks.write`
 
 ### GET `/tasks/progress-list`
 - 进度列表统计

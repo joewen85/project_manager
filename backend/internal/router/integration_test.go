@@ -510,6 +510,82 @@ func TestAuthCRUDAndAuditFlow(t *testing.T) {
 	}
 }
 
+func TestTagCRUDAndTaskRelationFlow(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+
+	tagResp, tagBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tags", token, map[string]any{
+		"name": "后端",
+	})
+	if tagResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create tag status expected 201 got %d, body=%v", tagResp.StatusCode, tagBody)
+	}
+	tagID := int(tagBody["id"].(float64))
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", token, map[string]any{
+		"code": "TAG-PROJ-1",
+		"name": "标签项目",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create project status expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", token, map[string]any{
+		"title":     "标签任务",
+		"projectId": projectID,
+		"tagIds":    []int{tagID},
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create task with tags status expected 201 got %d, body=%v", taskResp.StatusCode, taskBody)
+	}
+	taskTags, _ := taskBody["tags"].([]any)
+	if len(taskTags) != 1 {
+		t.Fatalf("task tags expected 1 got %v", taskBody["tags"])
+	}
+
+	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tags?page=1&pageSize=20", token, nil)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list tags status expected 200 got %d", listResp.StatusCode)
+	}
+	list, _ := listBody["list"].([]any)
+	if len(list) == 0 {
+		t.Fatalf("tags list should not be empty")
+	}
+	firstTag, _ := list[0].(map[string]any)
+	if int(firstTag["taskCount"].(float64)) != 1 {
+		t.Fatalf("tag taskCount expected 1 got %v", firstTag["taskCount"])
+	}
+
+	detailResp, detailBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tags/"+strconv.Itoa(tagID), token, nil)
+	if detailResp.StatusCode != http.StatusOK {
+		t.Fatalf("get tag status expected 200 got %d", detailResp.StatusCode)
+	}
+	if detailBody["name"] != "后端" {
+		t.Fatalf("tag detail name unexpected: %v", detailBody["name"])
+	}
+	if int(detailBody["taskCount"].(float64)) != 1 {
+		t.Fatalf("tag detail taskCount expected 1 got %v", detailBody["taskCount"])
+	}
+
+	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/tags/"+strconv.Itoa(tagID), token, map[string]any{
+		"name": "后端标签",
+	})
+	if updateResp.StatusCode != http.StatusOK {
+		t.Fatalf("update tag status expected 200 got %d, body=%v", updateResp.StatusCode, updateBody)
+	}
+	if updateBody["name"] != "后端标签" {
+		t.Fatalf("updated tag name unexpected: %v", updateBody["name"])
+	}
+
+	deleteResp, _ := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/tags/"+strconv.Itoa(tagID), token, nil)
+	if deleteResp.StatusCode != http.StatusOK {
+		t.Fatalf("delete tag status expected 200 got %d", deleteResp.StatusCode)
+	}
+}
+
 func TestGanttAndTaskTreeConsistency(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

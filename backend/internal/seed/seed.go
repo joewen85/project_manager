@@ -13,6 +13,7 @@ var permissionCodes = []string{
 	"departments.read", "departments.write",
 	"projects.read", "projects.write",
 	"tasks.read", "tasks.write",
+	"tags.read", "tags.write",
 	"notifications.read", "notifications.write",
 	"stats.read",
 	"audit.read",
