@@ -534,9 +534,12 @@ func TestTagCRUDAndTaskRelationFlow(t *testing.T) {
 	projectID := int(projectBody["id"].(float64))
 
 	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", token, map[string]any{
-		"title":     "标签任务",
-		"projectId": projectID,
-		"tagIds":    []int{tagID},
+		"title":        "标签任务",
+		"projectId":    projectID,
+		"tagIds":       []int{tagID},
+		"customField1": "扩展内容1",
+		"customField2": "扩展内容2",
+		"customField3": "扩展内容3",
 	})
 	if taskResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create task with tags status expected 201 got %d, body=%v", taskResp.StatusCode, taskBody)
@@ -544,6 +547,9 @@ func TestTagCRUDAndTaskRelationFlow(t *testing.T) {
 	taskTags, _ := taskBody["tags"].([]any)
 	if len(taskTags) != 1 {
 		t.Fatalf("task tags expected 1 got %v", taskBody["tags"])
+	}
+	if taskBody["customField1"] != "扩展内容1" || taskBody["customField2"] != "扩展内容2" || taskBody["customField3"] != "扩展内容3" {
+		t.Fatalf("task custom fields unexpected: %v %v %v", taskBody["customField1"], taskBody["customField2"], taskBody["customField3"])
 	}
 
 	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tags?page=1&pageSize=20", token, nil)

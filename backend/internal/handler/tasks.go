@@ -17,6 +17,9 @@ type taskRequest struct {
 	TaskNo       string                   `json:"taskNo"`
 	Title        string                   `json:"title" binding:"required"`
 	Description  string                   `json:"description"`
+	CustomField1 string                   `json:"customField1"`
+	CustomField2 string                   `json:"customField2"`
+	CustomField3 string                   `json:"customField3"`
 	Status       string                   `json:"status"`
 	Priority     string                   `json:"priority"`
 	IsMilestone  bool                     `json:"isMilestone"`
@@ -397,20 +400,23 @@ func (h *Handler) CreateTask(c *gin.Context) {
 	modelAttachments := toModelAttachments(attachments)
 
 	item := model.Task{
-		TaskNo:      taskNo,
-		Title:       req.Title,
-		Description: req.Description,
-		Status:      normalizeStatus(req.Status),
-		Priority:    normalizePriority(req.Priority),
-		IsMilestone: req.IsMilestone,
-		Progress:    req.Progress,
-		StartAt:     startAt,
-		EndAt:       endAt,
-		Attachment:  firstModelAttachment(modelAttachments),
-		Attachments: modelAttachments,
-		CreatorID:   creatorID,
-		ProjectID:   req.ProjectID,
-		ParentID:    req.ParentID,
+		TaskNo:       taskNo,
+		Title:        req.Title,
+		Description:  req.Description,
+		CustomField1: req.CustomField1,
+		CustomField2: req.CustomField2,
+		CustomField3: req.CustomField3,
+		Status:       normalizeStatus(req.Status),
+		Priority:     normalizePriority(req.Priority),
+		IsMilestone:  req.IsMilestone,
+		Progress:     req.Progress,
+		StartAt:      startAt,
+		EndAt:        endAt,
+		Attachment:   firstModelAttachment(modelAttachments),
+		Attachments:  modelAttachments,
+		CreatorID:    creatorID,
+		ProjectID:    req.ProjectID,
+		ParentID:     req.ParentID,
 	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&item).Error; err != nil {
@@ -496,6 +502,9 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	}
 	item.Title = req.Title
 	item.Description = req.Description
+	item.CustomField1 = req.CustomField1
+	item.CustomField2 = req.CustomField2
+	item.CustomField3 = req.CustomField3
 	item.Status = normalizeStatus(req.Status)
 	item.Priority = normalizePriority(req.Priority)
 	item.IsMilestone = req.IsMilestone

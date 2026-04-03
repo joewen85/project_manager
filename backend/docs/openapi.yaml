@@ -1323,6 +1323,12 @@ components:
           type: string
         description:
           type: string
+        customField1:
+          type: string
+        customField2:
+          type: string
+        customField3:
+          type: string
         status:
           type: string
           enum:
@@ -1480,6 +1486,12 @@ components:
         title:
           type: string
         description:
+          type: string
+        customField1:
+          type: string
+        customField2:
+          type: string
+        customField3:
           type: string
         status:
           type: string

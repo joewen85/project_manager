@@ -51,6 +51,9 @@ export interface Task {
   taskNo: string
   title: string
   description: string
+  customField1?: string
+  customField2?: string
+  customField3?: string
   status: Status
   priority?: TaskPriority
   isMilestone?: boolean

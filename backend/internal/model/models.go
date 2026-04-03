@@ -94,6 +94,9 @@ type Task struct {
 	TaskNo       string           `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`
 	Title        string           `gorm:"size:150;not null" json:"title"`
 	Description  string           `gorm:"type:text" json:"description"`
+	CustomField1 string           `gorm:"type:text" json:"customField1"`
+	CustomField2 string           `gorm:"type:text" json:"customField2"`
+	CustomField3 string           `gorm:"type:text" json:"customField3"`
 	Status       TaskStatus       `gorm:"size:20;default:'pending';index" json:"status"`
 	Priority     TaskPriority     `gorm:"size:20;default:'high';index" json:"priority"`
 	IsMilestone  bool             `gorm:"default:false;index" json:"isMilestone"`

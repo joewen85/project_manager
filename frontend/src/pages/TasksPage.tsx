@@ -29,6 +29,9 @@ interface TaskForm {
   taskNo: string
   title: string
   description: string
+  customField1: string
+  customField2: string
+  customField3: string
   status: string
   priority: TaskPriority
   isMilestone: boolean
@@ -52,6 +55,9 @@ const initialForm: TaskForm = {
   taskNo: '',
   title: '',
   description: '',
+  customField1: '',
+  customField2: '',
+  customField3: '',
   status: 'pending',
   priority: 'high',
   isMilestone: false,
@@ -224,6 +230,9 @@ export function TasksPage() {
       taskNo: item.taskNo,
       title: item.title,
       description: item.description,
+      customField1: item.customField1 || '',
+      customField2: item.customField2 || '',
+      customField3: item.customField3 || '',
       status: item.status,
       priority: item.priority || 'high',
       progress: item.progress,
@@ -512,6 +521,18 @@ export function TasksPage() {
                 <strong>描述</strong>
                 <p>{detailTask.description || '-'}</p>
               </div>
+              <div className="detail-description-card">
+                <strong>自定义内容 1</strong>
+                <p>{detailTask.customField1 || '-'}</p>
+              </div>
+              <div className="detail-description-card">
+                <strong>自定义内容 2</strong>
+                <p>{detailTask.customField2 || '-'}</p>
+              </div>
+              <div className="detail-description-card">
+                <strong>自定义内容 3</strong>
+                <p>{detailTask.customField3 || '-'}</p>
+              </div>
             </section>
             <section className="detail-section">
               <h4>状态与进度</h4>
@@ -716,6 +737,12 @@ export function TasksPage() {
             <option value="0">否</option>
             <option value="1">是</option>
           </select>
+          <label htmlFor="task-custom-field-1">自定义内容 1</label>
+          <textarea id="task-custom-field-1" rows={4} value={form.customField1} onChange={(e) => setForm((prev) => ({ ...prev, customField1: e.target.value }))} />
+          <label htmlFor="task-custom-field-2">自定义内容 2</label>
+          <textarea id="task-custom-field-2" rows={4} value={form.customField2} onChange={(e) => setForm((prev) => ({ ...prev, customField2: e.target.value }))} />
+          <label htmlFor="task-custom-field-3">自定义内容 3</label>
+          <textarea id="task-custom-field-3" rows={4} value={form.customField3} onChange={(e) => setForm((prev) => ({ ...prev, customField3: e.target.value }))} />
           <div className="row-actions">
             <button type="submit" className="btn" disabled={submitting}>{submitting ? '保存中...' : '保存任务'}</button>
             <button type="button" className="btn secondary" onClick={() => setForm(initialForm)}>重置</button>
