@@ -705,6 +705,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .searchable-multi-select-menu {
   display: grid;
   gap: 10px;
+  max-height: none;
+  overflow: visible;
 }
 .searchable-multi-select-search {
   padding: 4px 4px 0;
@@ -722,6 +724,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .searchable-multi-select-list {
   max-height: 220px;
   padding: 4px;
+}
+.gantt-control-grid .searchable-multi-select-list {
+  max-height: 220px;
 }
 .searchable-multi-select-tags {
   display: flex;

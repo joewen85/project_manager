@@ -6,8 +6,8 @@ import { api, fetchArray, fetchPage, readApiError } from '../../services/api'
 import { STATUS_META } from '../../constants/status'
 import { Project, Task, TaskDependency } from '../../types'
 import { DataState } from '../../components/DataState'
-import { SearchableMultiSelect } from '../../components/SearchableMultiSelect'
-import { SearchableSelect } from '../../components/SearchableSelect'
+import { RemoteProjectMultiSelect } from '../../components/RemoteProjectMultiSelect'
+import { RemoteProjectSelect } from '../../components/RemoteProjectSelect'
 
 interface Props {
   initialProjectId?: number
@@ -83,7 +83,6 @@ const formatTaskName = (task: Task) => {
 export function GanttModule({ initialProjectId }: Props) {
   const [scopeMode, setScopeMode] = useState<ScopeMode>('single')
   const [timelineMode, setTimelineMode] = useState<TimelineMode>('Week')
-  const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>(initialProjectId ? [initialProjectId] : [])
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(false)
@@ -99,28 +98,10 @@ export function GanttModule({ initialProjectId }: Props) {
   const taskMapRef = useRef<Map<number, Task>>(new Map())
 
   const activeProjectId = selectedProjectIds[0]
-  const projectSelectOptions = useMemo(() => (
-    projects.map((project) => ({
-      value: String(project.id),
-      label: `${project.code} - ${project.name}`,
-      keywords: [project.code, project.name, project.description || '']
-    }))
-  ), [projects])
   const selectedProjectValues = useMemo(
     () => selectedProjectIds.map((projectId) => String(projectId)),
     [selectedProjectIds]
   )
-
-  const loadProjects = useCallback(async () => {
-    const page = await fetchPage<Project>('/projects', { page: 1, pageSize: 200 }, { page: 1, pageSize: 200 }, { silent: true })
-    setProjects(page.list)
-    if (!selectedProjectIds.length && page.list.length > 0) {
-      const fallbackProjectId = initialProjectId && page.list.some((project) => project.id === initialProjectId)
-        ? initialProjectId
-        : page.list[0].id
-      setSelectedProjectIds([fallbackProjectId])
-    }
-  }, [initialProjectId, selectedProjectIds.length])
 
   const loadGanttTasks = useCallback(async () => {
     if (scopeMode === 'single' && !activeProjectId) {
@@ -154,8 +135,19 @@ export function GanttModule({ initialProjectId }: Props) {
   }, [scopeMode, activeProjectId, selectedProjectIds])
 
   useEffect(() => {
-    void loadProjects().catch(() => {})
-  }, [loadProjects])
+    if (scopeMode !== 'single' || selectedProjectIds.length > 0) return
+    let cancelled = false
+    void fetchPage<Project>('/projects', { page: 1, pageSize: 1 }, { page: 1, pageSize: 1 }, { silent: true })
+      .then((response) => {
+        if (cancelled) return
+        const fallbackProjectId = response.list[0]?.id
+        if (fallbackProjectId) setSelectedProjectIds([fallbackProjectId])
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [scopeMode, selectedProjectIds.length])
 
   useEffect(() => {
     void loadGanttTasks()
@@ -421,10 +413,9 @@ export function GanttModule({ initialProjectId }: Props) {
         </select>
 
         {scopeMode === 'single' && (
-          <SearchableSelect
+          <RemoteProjectSelect
             ariaLabel="选择项目"
             value={activeProjectId ? String(activeProjectId) : ''}
-            options={projectSelectOptions}
             defaultOptionLabel="请选择项目"
             placeholder="搜索项目：编码/名称/描述"
             noResultsText="没有匹配的项目"
@@ -433,10 +424,9 @@ export function GanttModule({ initialProjectId }: Props) {
         )}
 
         {scopeMode === 'portfolio' && (
-          <SearchableMultiSelect
+          <RemoteProjectMultiSelect
             ariaLabel="选择项目集"
             values={selectedProjectValues}
-            options={projectSelectOptions}
             summaryNoun="项目"
             placeholder="搜索项目：编码/名称/描述"
             noResultsText="没有匹配的项目"
