@@ -322,14 +322,14 @@ func (h *Handler) ListTasks(c *gin.Context) {
 		Preload("Tags", func(db *gorm.DB) *gorm.DB { return db.Order("tags.name asc") })
 	query = h.scopeTasksQuery(c, query)
 	if projectID := c.Query("projectId"); projectID != "" {
-		query = query.Where("project_id = ?", projectID)
+		query = query.Where("tasks.project_id = ?", projectID)
 	}
 	if status := c.Query("status"); status != "" {
-		query = query.Where("status = ?", status)
+		query = query.Where("tasks.status = ?", status)
 	}
 	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
 		like := "%" + keyword + "%"
-		query = query.Where("task_no LIKE ? OR title LIKE ? OR description LIKE ?", like, like, like)
+		query = query.Where("tasks.task_no LIKE ? OR tasks.title LIKE ? OR tasks.description LIKE ?", like, like, like)
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
