@@ -6,6 +6,8 @@ import { api, fetchArray, fetchPage, readApiError } from '../../services/api'
 import { STATUS_META } from '../../constants/status'
 import { Project, Task, TaskDependency } from '../../types'
 import { DataState } from '../../components/DataState'
+import { SearchableMultiSelect } from '../../components/SearchableMultiSelect'
+import { SearchableSelect } from '../../components/SearchableSelect'
 
 interface Props {
   initialProjectId?: number
@@ -97,6 +99,17 @@ export function GanttModule({ initialProjectId }: Props) {
   const taskMapRef = useRef<Map<number, Task>>(new Map())
 
   const activeProjectId = selectedProjectIds[0]
+  const projectSelectOptions = useMemo(() => (
+    projects.map((project) => ({
+      value: String(project.id),
+      label: `${project.code} - ${project.name}`,
+      keywords: [project.code, project.name, project.description || '']
+    }))
+  ), [projects])
+  const selectedProjectValues = useMemo(
+    () => selectedProjectIds.map((projectId) => String(projectId)),
+    [selectedProjectIds]
+  )
 
   const loadProjects = useCallback(async () => {
     const page = await fetchPage<Project>('/projects', { page: 1, pageSize: 200 }, { page: 1, pageSize: 200 }, { silent: true })
@@ -408,32 +421,28 @@ export function GanttModule({ initialProjectId }: Props) {
         </select>
 
         {scopeMode === 'single' && (
-          <select
-            aria-label="选择项目"
-            value={activeProjectId || ''}
-            onChange={(event) => setSelectedProjectIds(event.target.value ? [Number(event.target.value)] : [])}
-          >
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>{project.code} - {project.name}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            ariaLabel="选择项目"
+            value={activeProjectId ? String(activeProjectId) : ''}
+            options={projectSelectOptions}
+            defaultOptionLabel="请选择项目"
+            placeholder="搜索项目：编码/名称/描述"
+            noResultsText="没有匹配的项目"
+            onChange={(value) => setSelectedProjectIds(value ? [Number(value)] : [])}
+          />
         )}
 
         {scopeMode === 'portfolio' && (
-          <div className="multi-checklist compact">
-            {projects.map((project) => (
-              <label key={project.id} className="multi-check-item">
-                <input
-                  type="checkbox"
-                  checked={selectedProjectIds.includes(project.id)}
-                  onChange={() => {
-                    setSelectedProjectIds((prev) => prev.includes(project.id) ? prev.filter((item) => item !== project.id) : [...prev, project.id])
-                  }}
-                />
-                <span>{project.code}</span>
-              </label>
-            ))}
-          </div>
+          <SearchableMultiSelect
+            ariaLabel="选择项目集"
+            values={selectedProjectValues}
+            options={projectSelectOptions}
+            summaryNoun="项目"
+            placeholder="搜索项目：编码/名称/描述"
+            noResultsText="没有匹配的项目"
+            className="gantt-project-multi-select"
+            onChange={(values) => setSelectedProjectIds(values.map((value) => Number(value)).filter((value) => Number.isFinite(value)))}
+          />
         )}
 
         <select

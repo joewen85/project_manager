@@ -669,6 +669,84 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .searchable-select-toggle-icon.open {
   transform: rotate(180deg);
 }
+.searchable-multi-select {
+  min-width: 0;
+}
+.searchable-multi-select-trigger {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 160ms, box-shadow 160ms;
+}
+.searchable-multi-select-trigger:hover,
+.searchable-multi-select-trigger.open {
+  border-color: var(--color-primary);
+}
+.searchable-multi-select-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+.searchable-multi-select-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.searchable-multi-select-menu {
+  display: grid;
+  gap: 10px;
+}
+.searchable-multi-select-search {
+  padding: 4px 4px 0;
+}
+.searchable-multi-select-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+.searchable-multi-select-actions .btn.secondary {
+  min-height: 34px;
+}
+.searchable-multi-select-list {
+  max-height: 220px;
+  padding: 4px;
+}
+.searchable-multi-select-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.searchable-multi-select-tag {
+  max-width: 100%;
+  border: 1px solid color-mix(in oklab, var(--color-primary) 18%, var(--color-border));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+  color: var(--color-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.searchable-multi-select-tag:hover {
+  background: color-mix(in oklab, var(--color-primary) 16%, transparent);
+}
+.gantt-project-multi-select {
+  grid-column: span 2;
+}
 .combo-menu {
   position: absolute;
   z-index: 70;
@@ -943,6 +1021,7 @@ td .btn + .btn { margin-left: 3px; }
   .toolbar-grid .toolbar-search-field { grid-column: span 1; }
   .charts { grid-template-columns: 1fr; }
   .gantt-control-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gantt-project-multi-select { grid-column: span 2; }
   .gantt-module-page .cards { grid-template-columns: 1fr 1fr; }
   .gantt-risk-grid { grid-template-columns: 1fr; }
 }
@@ -1030,6 +1109,7 @@ td .btn + .btn { margin-left: 3px; }
   .gantt-module-page .cards { grid-template-columns: 1fr; }
   .toolbar-grid { grid-template-columns: 1fr; }
   .gantt-control-grid { grid-template-columns: 1fr; }
+  .gantt-project-multi-select { grid-column: span 1; }
   table {
     display: block;
     overflow-x: auto;

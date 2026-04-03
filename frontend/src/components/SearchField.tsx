@@ -1,4 +1,4 @@
-import { InputHTMLAttributes } from 'react'
+import { forwardRef, InputHTMLAttributes } from 'react'
 import { Search, X } from 'lucide-react'
 
 interface SearchFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'type' | 'value'> {
@@ -7,12 +7,16 @@ interface SearchFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, '
   onClear?: () => void
 }
 
-export function SearchField({ value, onChange, onClear, className = '', ...props }: SearchFieldProps) {
+export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(function SearchField(
+  { value, onChange, onClear, className = '', ...props },
+  ref
+) {
   return (
     <div className={`search-field${className ? ` ${className}` : ''}`}>
       <Search className="search-field-icon" size={16} aria-hidden="true" />
       <input
         {...props}
+        ref={ref}
         type="search"
         className="search-field-input"
         value={value}
@@ -37,4 +41,4 @@ export function SearchField({ value, onChange, onClear, className = '', ...props
       )}
     </div>
   )
-}
+})
