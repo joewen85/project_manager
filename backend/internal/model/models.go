@@ -105,6 +105,7 @@ type Task struct {
 	CreatorID    uint             `gorm:"not null;index" json:"creatorId"`
 	Creator      User             `json:"creator,omitempty"`
 	ProjectID    uint             `gorm:"not null;index" json:"projectId"`
+	ProjectName  string           `gorm:"->;column:project_name;-:migration" json:"projectName,omitempty"`
 	Project      Project          `json:"project,omitempty"`
 	ParentID     *uint            `gorm:"index" json:"parentId"`
 	Children     []Task           `gorm:"foreignKey:ParentID" json:"children,omitempty"`

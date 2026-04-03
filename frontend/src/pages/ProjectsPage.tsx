@@ -35,6 +35,9 @@ type SortKey = 'code' | 'name' | 'createdAt' | 'startAt' | 'endAt'
 type SortOrder = 'asc' | 'desc'
 const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
 
+const getProjectOwnerNames = (project: Project) => (project.users || []).map((user) => user.username || user.name).filter(Boolean)
+const getProjectDepartmentNames = (project: Project) => (project.departments || []).map((department) => department.name).filter(Boolean)
+
 export function ProjectsPage() {
   const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
@@ -226,8 +229,20 @@ export function ProjectsPage() {
               <tr key={p.id}>
                 <td data-label="编码">{p.code}</td>
                 <td data-label="名称">{p.name}</td>
-                <td data-label="负责人">{(p.users || []).length}</td>
-                <td data-label="部门">{(p.departments || []).length}</td>
+                <td data-label="负责人">
+                  <div className="task-user-stack">
+                    {getProjectOwnerNames(p).length > 0 ? getProjectOwnerNames(p).map((name) => (
+                      <span key={name} className="task-user-line">{name}</span>
+                    )) : <span>-</span>}
+                  </div>
+                </td>
+                <td data-label="部门">
+                  <div className="task-user-stack">
+                    {getProjectDepartmentNames(p).length > 0 ? getProjectDepartmentNames(p).map((name) => (
+                      <span key={name} className="task-user-line">{name}</span>
+                    )) : <span>-</span>}
+                  </div>
+                </td>
                 <td data-label="操作">
                   <div className="table-actions">
                     <button className="btn secondary" onClick={() => { void viewDetail(p) }}>查看详情</button>

@@ -74,10 +74,22 @@ func prioritySortClause(order string) string {
 	}
 }
 
+func statusSortClause(order string) string {
+	switch strings.ToLower(strings.TrimSpace(order)) {
+	case "desc":
+		return "CASE tasks.status WHEN 'completed' THEN 0 WHEN 'processing' THEN 1 WHEN 'queued' THEN 2 WHEN 'pending' THEN 3 ELSE 4 END, tasks.created_at desc"
+	default:
+		return "CASE tasks.status WHEN 'pending' THEN 0 WHEN 'queued' THEN 1 WHEN 'processing' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END, tasks.created_at desc"
+	}
+}
+
 func parseTaskSort(c *gin.Context) string {
 	sortBy := strings.TrimSpace(c.Query("sortBy"))
 	if sortBy == "priority" {
 		return prioritySortClause(c.Query("sortOrder"))
+	}
+	if sortBy == "status" {
+		return statusSortClause(c.Query("sortOrder"))
 	}
 	return parseSort(c, "tasks.id desc", map[string]string{
 		"taskNo":    "tasks.task_no",
@@ -299,6 +311,8 @@ func (h *Handler) ListTasks(c *gin.Context) {
 	page, pageSize := parsePage(c)
 	var tasks []model.Task
 	query := h.DB.Model(&model.Task{}).
+		Select("tasks.*, projects.name AS project_name").
+		Joins("LEFT JOIN projects ON projects.id = tasks.project_id").
 		Preload("Assignees").
 		Preload("Creator").
 		Preload("Dependencies").

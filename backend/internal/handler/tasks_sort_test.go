@@ -66,3 +66,31 @@ func TestParseTaskSortPriority(t *testing.T) {
 		t.Fatalf("unexpected sort clause: %s", clause)
 	}
 }
+
+func TestStatusSortClause(t *testing.T) {
+	tests := []struct {
+		name   string
+		order  string
+		expect string
+	}{
+		{
+			name:   "status asc",
+			order:  "asc",
+			expect: "CASE tasks.status WHEN 'pending' THEN 0 WHEN 'queued' THEN 1 WHEN 'processing' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END, tasks.created_at desc",
+		},
+		{
+			name:   "status desc",
+			order:  "desc",
+			expect: "CASE tasks.status WHEN 'completed' THEN 0 WHEN 'processing' THEN 1 WHEN 'queued' THEN 2 WHEN 'pending' THEN 3 ELSE 4 END, tasks.created_at desc",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := statusSortClause(testCase.order)
+			if got != testCase.expect {
+				t.Fatalf("unexpected clause: %s", got)
+			}
+		})
+	}
+}

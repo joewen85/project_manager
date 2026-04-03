@@ -64,9 +64,17 @@ const initialForm: TaskForm = {
   tagIds: []
 }
 
-type PrioritySortOrder = TaskPriority
+type TaskSortKey = 'createdAt' | 'progress' | 'status' | 'priority'
+type TaskSortOrder = 'asc' | 'desc'
 const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
 const noParentLabel = '不关联父任务'
+
+const getTaskProjectName = (task: Task, projects: Project[]) => {
+  if (task.projectName) return task.projectName
+  return projects.find((project) => project.id === task.projectId)?.name || '-'
+}
+
+const getTaskAssigneeNames = (task: Task) => (task.assignees || []).map((user) => user.username || user.name).filter(Boolean)
 
 export function TasksPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -78,7 +86,8 @@ export function TasksPage() {
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState('')
   const [projectFilter, setProjectFilter] = useState('')
-  const [prioritySortOrder, setPrioritySortOrder] = useState<PrioritySortOrder>('high')
+  const [sortKey, setSortKey] = useState<TaskSortKey>('createdAt')
+  const [sortOrder, setSortOrder] = useState<TaskSortOrder>('desc')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
@@ -100,8 +109,9 @@ export function TasksPage() {
   const [focusedTaskId, setFocusedTaskId] = useState<number | null>(null)
   const [pendingOpenTaskId, setPendingOpenTaskId] = useState<number | null>(null)
   const [pendingViewTaskId, setPendingViewTaskId] = useState<number | null>(null)
+  const [expandedAssigneeTaskIds, setExpandedAssigneeTaskIds] = useState<number[]>([])
   const parentTaskWrapRef = useRef<HTMLDivElement | null>(null)
-  const activeFilterCount = Number(Boolean(keyword.trim())) + Number(Boolean(status)) + Number(Boolean(projectFilter)) + Number(prioritySortOrder !== 'high')
+  const activeFilterCount = Number(Boolean(keyword.trim())) + Number(Boolean(status)) + Number(Boolean(projectFilter)) + Number(sortKey !== 'createdAt') + Number(sortOrder !== 'desc')
 
   const load = async () => {
     try {
@@ -110,7 +120,7 @@ export function TasksPage() {
       const [taskPage, projectPage] = await Promise.all([
         fetchPage<Task>(
           '/tasks',
-          { page, pageSize, keyword, status, projectId: projectFilter, sortBy: 'priority', sortOrder: prioritySortOrder },
+          { page, pageSize, keyword, status, projectId: projectFilter, sortBy: sortKey, sortOrder },
           { page, pageSize }
         ),
         fetchPage<Project>('/projects', { page: 1, pageSize: 200 }, { page: 1, pageSize: 200 })
@@ -133,7 +143,7 @@ export function TasksPage() {
 
   useEffect(() => {
     void load()
-  }, [page, pageSize, keyword, status, projectFilter, prioritySortOrder])
+  }, [page, pageSize, keyword, status, projectFilter, sortKey, sortOrder])
 
   useEffect(() => {
     const taskId = Number(searchParams.get('taskId') || 0)
@@ -264,6 +274,10 @@ export function TasksPage() {
     } catch (deleteError) {
       setError(readApiError(deleteError, '删除任务失败'))
     }
+  }
+
+  const toggleAssigneeExpand = (taskId: number) => {
+    setExpandedAssigneeTaskIds((prev) => prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId])
   }
 
   const viewDetail = (item: Task) => {
@@ -416,43 +430,68 @@ export function TasksPage() {
             setPage(1)
           }}
         />
-        <select aria-label="任务优先级排序" value={prioritySortOrder} onChange={(e) => { setPrioritySortOrder(e.target.value as PrioritySortOrder); setPage(1) }}>
-          <option value="high">高→中→低</option>
-          <option value="medium">中→高→低</option>
-          <option value="low">低→中→高</option>
+        <select aria-label="任务排序字段" value={sortKey} onChange={(e) => { setSortKey(e.target.value as TaskSortKey); setPage(1) }}>
+          <option value="createdAt">按创建时间</option>
+          <option value="progress">按进度</option>
+          <option value="status">按状态</option>
+          <option value="priority">按优先级</option>
+        </select>
+        <select aria-label="任务排序方式" value={sortOrder} onChange={(e) => { setSortOrder(e.target.value as TaskSortOrder); setPage(1) }}>
+          <option value="desc">降序</option>
+          <option value="asc">升序</option>
         </select>
       </FilterPanel>
 
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && tasks.length === 0} emptyText="暂无匹配的任务" onRetry={() => { void load() }} />
         {!loading && !error && tasks.length > 0 && (
-          <table className="responsive-table"><thead><tr><th>任务编号</th><th>标题</th><th>优先级</th><th>状态</th><th>进度</th><th>标签</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
-            {tasks.map((task) => (
-              <tr key={task.id} id={`task-row-${task.id}`} className={focusedTaskId === task.id ? 'task-row-focused' : ''}>
-                <td data-label="任务编号">{task.taskNo}</td>
-                <td data-label="标题">{task.title}</td>
-                <td data-label="优先级">{priorityLabel[(task.priority || 'high') as TaskPriority]}</td>
-                <td data-label="状态">{statusLabel[task.status]}</td>
-                <td data-label="进度">{task.progress}%</td>
-                <td data-label="标签">
-                  <div className="task-tag-stack">
-                    {(task.tags || []).length > 0 ? (task.tags || []).map((tag) => (
-                      <span key={tag.id} className="task-tag-badge">{tag.name}</span>
-                    )) : <span>-</span>}
-                  </div>
-                </td>
-                <td data-label="开始">{formatDateTime(task.startAt)}</td>
-                <td data-label="结束">{formatDateTime(task.endAt)}</td>
-                <td data-label="执行人">{(task.assignees || []).length}</td>
-                <td data-label="操作">
-                  <div className="table-actions">
-                    <button className="btn secondary" onClick={() => viewDetail(task)}>查看详情</button>
-                    <button className="btn secondary" onClick={() => edit(task)}>编辑</button>
-                    <button className="btn danger" onClick={() => onDelete(task.id)}>删除</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+          <table className="responsive-table"><thead><tr><th>任务编号</th><th>标题</th><th>项目名称</th><th>优先级</th><th>状态</th><th>进度</th><th>标签</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
+            {tasks.map((task) => {
+              const assigneeNames = getTaskAssigneeNames(task)
+              const isExpanded = expandedAssigneeTaskIds.includes(task.id)
+              const visibleAssigneeNames = isExpanded ? assigneeNames : assigneeNames.slice(0, 3)
+
+              return (
+                <tr key={task.id} id={`task-row-${task.id}`} className={focusedTaskId === task.id ? 'task-row-focused' : ''}>
+                  <td data-label="任务编号">{task.taskNo}</td>
+                  <td data-label="标题">{task.title}</td>
+                  <td data-label="项目名称">{getTaskProjectName(task, projects)}</td>
+                  <td data-label="优先级">{priorityLabel[(task.priority || 'high') as TaskPriority]}</td>
+                  <td data-label="状态">{statusLabel[task.status]}</td>
+                  <td data-label="进度">{task.progress}%</td>
+                  <td data-label="标签">
+                    <div className="task-tag-stack">
+                      {(task.tags || []).length > 0 ? (task.tags || []).map((tag) => (
+                        <span key={tag.id} className="task-tag-badge">{tag.name}</span>
+                      )) : <span>-</span>}
+                    </div>
+                  </td>
+                  <td data-label="开始">{formatDateTime(task.startAt)}</td>
+                  <td data-label="结束">{formatDateTime(task.endAt)}</td>
+                  <td data-label="执行人">
+                    {assigneeNames.length > 0 ? (
+                      <div className="task-user-stack">
+                        {visibleAssigneeNames.map((name) => (
+                          <span key={name} className="task-user-line">{name}</span>
+                        ))}
+                        {assigneeNames.length > 3 && (
+                          <button type="button" className="task-user-more" onClick={() => toggleAssigneeExpand(task.id)}>
+                            {isExpanded ? '收起' : `显示更多（${assigneeNames.length - 3}）`}
+                          </button>
+                        )}
+                      </div>
+                    ) : '-'}
+                  </td>
+                  <td data-label="操作">
+                    <div className="table-actions">
+                      <button className="btn secondary" onClick={() => viewDetail(task)}>查看详情</button>
+                      <button className="btn secondary" onClick={() => edit(task)}>编辑</button>
+                      <button className="btn danger" onClick={() => onDelete(task.id)}>删除</button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody></table>
         )}
       </div>

@@ -769,6 +769,27 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
   font-weight: 700;
   white-space: nowrap;
 }
+.task-user-stack {
+  display: grid;
+  gap: 6px;
+}
+.task-user-line {
+  line-height: 1.4;
+  word-break: break-word;
+}
+.task-user-more {
+  width: fit-content;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.task-user-more:hover {
+  text-decoration: underline;
+}
 .multi-check-action {
   width: 100%;
   border: 1px dashed color-mix(in oklab, var(--color-primary) 42%, var(--color-border));
