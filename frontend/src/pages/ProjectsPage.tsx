@@ -6,6 +6,8 @@ import { Task, Department, Project, UploadAttachment, User, emptyUploadAttachmen
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
+import { FilterPanel } from '../components/FilterPanel'
+import { SearchField } from '../components/SearchField'
 import { formatDateTime } from '../utils/datetime'
 import { AttachmentField } from '../components/AttachmentField'
 
@@ -57,6 +59,7 @@ export function ProjectsPage() {
   const [formSuccess, setFormSuccess] = useState('')
   const [ownerKeyword, setOwnerKeyword] = useState('')
   const [departmentKeyword, setDepartmentKeyword] = useState('')
+  const activeFilterCount = Number(Boolean(keyword.trim())) + Number(sortKey !== 'createdAt') + Number(sortOrder !== 'desc')
 
   const load = async () => {
     try {
@@ -181,8 +184,13 @@ export function ProjectsPage() {
 
   return (
     <section className="page-section">
-      <div className="card toolbar-grid">
-        <input aria-label="搜索项目" value={keyword} placeholder="搜索：编码/名称/描述" onChange={(e) => { setKeyword(e.target.value); setPage(1) }} />
+      <FilterPanel
+        title="项目筛选"
+        activeCount={activeFilterCount}
+        actions={<button className="btn" onClick={openCreateModal}>新增项目</button>}
+        bodyClassName="toolbar-grid"
+      >
+        <SearchField aria-label="搜索项目" value={keyword} placeholder="搜索：编码/名称/描述" onChange={(value) => { setKeyword(value); setPage(1) }} />
         <select aria-label="项目排序字段" value={sortKey} onChange={(e) => { setSortKey(e.target.value as SortKey); setPage(1) }}>
           <option value="createdAt">按创建时间</option>
           <option value="code">按编码</option>
@@ -194,8 +202,7 @@ export function ProjectsPage() {
           <option value="desc">降序</option>
           <option value="asc">升序</option>
         </select>
-        <button className="btn" onClick={openCreateModal}>新增项目</button>
-      </div>
+      </FilterPanel>
 
       <div className="card">
         <label htmlFor="project-select">选择项目</label>
@@ -214,18 +221,20 @@ export function ProjectsPage() {
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && projects.length === 0} emptyText="暂无匹配的项目" onRetry={() => { void load() }} />
         {!loading && !error && projects.length > 0 && (
-          <table><thead><tr><th>编码</th><th>名称</th><th>描述</th><th>负责人</th><th>部门</th><th>操作</th></tr></thead><tbody>
+          <table className="responsive-table"><thead><tr><th>编码</th><th>名称</th><th>描述</th><th>负责人</th><th>部门</th><th>操作</th></tr></thead><tbody>
             {projects.map((p) => (
               <tr key={p.id}>
-                <td>{p.code}</td>
-                <td>{p.name}</td>
-                <td><span className="cell-ellipsis" title={p.description || '-'}>{p.description || '-'}</span></td>
-                <td>{(p.users || []).length}</td>
-                <td>{(p.departments || []).length}</td>
-                <td>
-                  <button className="btn secondary" onClick={() => { void viewDetail(p) }}>查看详情</button>
-                  <button className="btn secondary" onClick={() => edit(p)}>编辑</button>
-                  <button className="btn danger" onClick={() => onDelete(p.id)}>删除</button>
+                <td data-label="编码">{p.code}</td>
+                <td data-label="名称">{p.name}</td>
+                <td data-label="描述"><span className="cell-ellipsis" title={p.description || '-'}>{p.description || '-'}</span></td>
+                <td data-label="负责人">{(p.users || []).length}</td>
+                <td data-label="部门">{(p.departments || []).length}</td>
+                <td data-label="操作">
+                  <div className="table-actions">
+                    <button className="btn secondary" onClick={() => { void viewDetail(p) }}>查看详情</button>
+                    <button className="btn secondary" onClick={() => edit(p)}>编辑</button>
+                    <button className="btn danger" onClick={() => onDelete(p.id)}>删除</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -291,7 +300,7 @@ export function ProjectsPage() {
           <label htmlFor="project-end">结束时间</label>
           <input id="project-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} />
           <label htmlFor="project-users">项目负责人</label>
-          <input aria-label="搜索负责人" placeholder="搜索负责人：姓名/用户名/邮箱" value={ownerKeyword} onChange={(e) => setOwnerKeyword(e.target.value)} />
+          <SearchField aria-label="搜索负责人" placeholder="搜索负责人：姓名/用户名/邮箱" value={ownerKeyword} onChange={setOwnerKeyword} />
           <div id="project-users" className="multi-checklist">
             {users.map((user) => (
               <label key={user.id} className="multi-check-item">
@@ -301,7 +310,7 @@ export function ProjectsPage() {
             ))}
           </div>
           <label htmlFor="project-departments">参与部门</label>
-          <input aria-label="搜索部门" placeholder="搜索部门名称" value={departmentKeyword} onChange={(e) => setDepartmentKeyword(e.target.value)} />
+          <SearchField aria-label="搜索部门" placeholder="搜索部门名称" value={departmentKeyword} onChange={setDepartmentKeyword} />
           <div id="project-departments" className="multi-checklist">
             {departments.map((department) => (
               <label key={department.id} className="multi-check-item">

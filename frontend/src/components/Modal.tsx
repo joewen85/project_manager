@@ -17,7 +17,9 @@ export function Modal({ open, title, onClose, children }: ModalProps) {
           <h3>{title}</h3>
           <button className="btn secondary" onClick={onClose}>关闭</button>
         </div>
-        {children}
+        <div className="modal-body">
+          {children}
+        </div>
       </div>
     </div>
   )

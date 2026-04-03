@@ -4,6 +4,8 @@ import { api, fetchPage, readApiError } from '../services/api'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
+import { FilterPanel } from '../components/FilterPanel'
+import { SearchField } from '../components/SearchField'
 import { formatDateTime } from '../utils/datetime'
 import { Project, Task, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { AttachmentField } from '../components/AttachmentField'
@@ -93,6 +95,7 @@ export function TasksPage() {
   const [pendingOpenTaskId, setPendingOpenTaskId] = useState<number | null>(null)
   const [pendingViewTaskId, setPendingViewTaskId] = useState<number | null>(null)
   const parentTaskWrapRef = useRef<HTMLDivElement | null>(null)
+  const activeFilterCount = Number(Boolean(keyword.trim())) + Number(Boolean(status)) + Number(Boolean(projectFilter)) + Number(prioritySortOrder !== 'high')
 
   const load = async () => {
     try {
@@ -333,8 +336,13 @@ export function TasksPage() {
 
   return (
     <section className="page-section">
-      <div className="card toolbar-grid">
-        <input aria-label="搜索任务" value={keyword} placeholder="搜索：编号/标题/描述" onChange={(e) => { setKeyword(e.target.value); setPage(1) }} />
+      <FilterPanel
+        title="任务筛选"
+        activeCount={activeFilterCount}
+        actions={<button className="btn" onClick={openCreateModal}>新增任务</button>}
+        bodyClassName="toolbar-grid"
+      >
+        <SearchField aria-label="搜索任务" value={keyword} placeholder="搜索：编号/标题/描述" onChange={(value) => { setKeyword(value); setPage(1) }} />
         <select aria-label="任务状态筛选" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }}>
           <option value="">全部状态</option>
           {Object.keys(statusLabel).map((key) => <option key={key} value={key}>{statusLabel[key]}</option>)}
@@ -348,29 +356,30 @@ export function TasksPage() {
           <option value="medium">中→高→低</option>
           <option value="low">低→中→高</option>
         </select>
-        <button className="btn" onClick={openCreateModal}>新增任务</button>
-      </div>
+      </FilterPanel>
 
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && tasks.length === 0} emptyText="暂无匹配的任务" onRetry={() => { void load() }} />
         {!loading && !error && tasks.length > 0 && (
-          <table><thead><tr><th>任务编号</th><th>标题</th><th>描述</th><th>优先级</th><th>里程碑</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
+          <table className="responsive-table"><thead><tr><th>任务编号</th><th>标题</th><th>描述</th><th>优先级</th><th>里程碑</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
             {tasks.map((task) => (
               <tr key={task.id} id={`task-row-${task.id}`} className={focusedTaskId === task.id ? 'task-row-focused' : ''}>
-                <td>{task.taskNo}</td>
-                <td>{task.title}</td>
-                <td><span className="cell-ellipsis" title={task.description || '-'}>{task.description || '-'}</span></td>
-                <td>{priorityLabel[(task.priority || 'high') as TaskPriority]}</td>
-                <td>{task.isMilestone ? '是' : '-'}</td>
-                <td>{statusLabel[task.status]}</td>
-                <td>{task.progress}%</td>
-                <td>{formatDateTime(task.startAt)}</td>
-                <td>{formatDateTime(task.endAt)}</td>
-                <td>{(task.assignees || []).length}</td>
-                <td>
-                  <button className="btn secondary" onClick={() => viewDetail(task)}>查看详情</button>
-                  <button className="btn secondary" onClick={() => edit(task)}>编辑</button>
-                  <button className="btn danger" onClick={() => onDelete(task.id)}>删除</button>
+                <td data-label="任务编号">{task.taskNo}</td>
+                <td data-label="标题">{task.title}</td>
+                <td data-label="描述"><span className="cell-ellipsis" title={task.description || '-'}>{task.description || '-'}</span></td>
+                <td data-label="优先级">{priorityLabel[(task.priority || 'high') as TaskPriority]}</td>
+                <td data-label="里程碑">{task.isMilestone ? '是' : '-'}</td>
+                <td data-label="状态">{statusLabel[task.status]}</td>
+                <td data-label="进度">{task.progress}%</td>
+                <td data-label="开始">{formatDateTime(task.startAt)}</td>
+                <td data-label="结束">{formatDateTime(task.endAt)}</td>
+                <td data-label="执行人">{(task.assignees || []).length}</td>
+                <td data-label="操作">
+                  <div className="table-actions">
+                    <button className="btn secondary" onClick={() => viewDetail(task)}>查看详情</button>
+                    <button className="btn secondary" onClick={() => edit(task)}>编辑</button>
+                    <button className="btn danger" onClick={() => onDelete(task.id)}>删除</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -539,13 +548,13 @@ export function TasksPage() {
             <option value="1">是</option>
           </select>
           <label htmlFor="task-progress">进度</label>
-          <input id="task-progress" type="number" min={0} max={100} value={form.progress} onChange={(e) => setForm((prev) => ({ ...prev, progress: Number(e.target.value) }))} />
+          <input id="task-progress" type="number" inputMode="numeric" min={0} max={100} value={form.progress} onChange={(e) => setForm((prev) => ({ ...prev, progress: Number(e.target.value) }))} />
           <label htmlFor="task-start">开始时间</label>
           <input id="task-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} />
           <label htmlFor="task-end">结束时间</label>
           <input id="task-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} />
           <label htmlFor="task-assignees">执行人（多人）</label>
-          <input aria-label="搜索执行人" placeholder="搜索执行人：姓名/用户名/邮箱" value={assigneeKeyword} onChange={(e) => setAssigneeKeyword(e.target.value)} />
+          <SearchField aria-label="搜索执行人" placeholder="搜索执行人：姓名/用户名/邮箱" value={assigneeKeyword} onChange={setAssigneeKeyword} />
           <div id="task-assignees" className="multi-checklist">
             {users.map((user) => (
               <label key={user.id} className="multi-check-item">

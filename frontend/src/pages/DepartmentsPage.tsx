@@ -1,8 +1,10 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { api, fetchPage, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
+import { FilterPanel } from '../components/FilterPanel'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
+import { SearchField } from '../components/SearchField'
 import { Department, User } from '../types'
 
 interface DepartmentForm {
@@ -29,6 +31,7 @@ export function DepartmentsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
+  const activeFilterCount = Number(Boolean(keyword.trim()))
 
   const load = async () => {
     try {
@@ -103,25 +106,45 @@ export function DepartmentsPage() {
 
   return (
     <section className="page-section">
-      <div className="card form-grid">
-        <h3>搜索</h3>
-        <input aria-label="部门关键词搜索" value={keywordInput} placeholder="名称/描述" onChange={(e) => setKeywordInput(e.target.value)} />
+      <FilterPanel
+        title="部门筛选"
+        activeCount={activeFilterCount}
+        actions={<button className="btn secondary" onClick={openCreateModal}>新增部门</button>}
+        bodyClassName="form-grid"
+      >
+        <SearchField
+          aria-label="部门关键词搜索"
+          value={keywordInput}
+          placeholder="名称/描述"
+          onChange={setKeywordInput}
+          onClear={() => {
+            setPage(1)
+            setKeyword('')
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              setPage(1)
+              setKeyword(keywordInput.trim())
+            }
+          }}
+        />
         <div className="row-actions">
           <button className="btn" onClick={() => { setPage(1); setKeyword(keywordInput.trim()) }}>查询</button>
-          <button className="btn secondary" onClick={openCreateModal}>新增部门</button>
         </div>
-      </div>
+      </FilterPanel>
 
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && items.length === 0} emptyText="暂无部门数据" onRetry={() => { void load() }} />
         {!loading && !error && items.length > 0 && (
-          <table><thead><tr><th>ID</th><th>名称</th><th>描述</th><th>成员数</th><th>操作</th></tr></thead><tbody>
+          <table className="responsive-table"><thead><tr><th>ID</th><th>名称</th><th>描述</th><th>成员数</th><th>操作</th></tr></thead><tbody>
             {items.map((item) => (
               <tr key={item.id}>
-                <td>{item.id}</td><td>{item.name}</td><td>{item.description}</td><td>{(item.users || []).length}</td>
-                <td>
-                  <button className="btn secondary" onClick={() => edit(item)}>编辑</button>
-                  <button className="btn danger" onClick={() => { void onDelete(item.id) }}>删除</button>
+                <td data-label="ID">{item.id}</td><td data-label="名称">{item.name}</td><td data-label="描述">{item.description}</td><td data-label="成员数">{(item.users || []).length}</td>
+                <td data-label="操作">
+                  <div className="table-actions">
+                    <button className="btn secondary" onClick={() => edit(item)}>编辑</button>
+                    <button className="btn danger" onClick={() => { void onDelete(item.id) }}>删除</button>
+                  </div>
                 </td>
               </tr>
             ))}

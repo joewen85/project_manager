@@ -168,15 +168,17 @@ export function RbacPage() {
         <h3>权限列表</h3>
         <DataState loading={loading} error={error} empty={!loading && !error && permissions.length === 0} emptyText="暂无权限数据" onRetry={() => { void load() }} />
         {!loading && !error && permissions.length > 0 && (
-          <table>
+          <table className="responsive-table">
             <thead><tr><th>ID</th><th>编码</th><th>名称</th><th>描述</th><th>操作</th></tr></thead>
             <tbody>
               {permissions.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.id}</td><td>{p.code}</td><td>{p.name}</td><td>{p.description}</td>
-                  <td>
-                    <button className="btn secondary" onClick={() => editPermission(p)}>编辑</button>
-                    <button className="btn danger" onClick={() => { void onDeletePermission(p.id, p.name) }}>删除</button>
+                  <td data-label="ID">{p.id}</td><td data-label="编码">{p.code}</td><td data-label="名称">{p.name}</td><td data-label="描述">{p.description}</td>
+                  <td data-label="操作">
+                    <div className="table-actions">
+                      <button className="btn secondary" onClick={() => editPermission(p)}>编辑</button>
+                      <button className="btn danger" onClick={() => { void onDeletePermission(p.id, p.name) }}>删除</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -189,13 +191,15 @@ export function RbacPage() {
         <h3>角色列表</h3>
         <DataState loading={loading} error={error} empty={!loading && !error && roles.length === 0} emptyText="暂无角色数据" onRetry={() => { void load() }} />
         {!loading && !error && roles.length > 0 && (
-          <table><thead><tr><th>ID</th><th>名称</th><th>描述</th><th>权限数</th><th>操作</th></tr></thead><tbody>
+          <table className="responsive-table"><thead><tr><th>ID</th><th>名称</th><th>描述</th><th>权限数</th><th>操作</th></tr></thead><tbody>
             {roles.map((r) => (
               <tr key={r.id}>
-                <td>{r.id}</td><td>{r.name}</td><td>{r.description}</td><td>{(r.permissions || []).length}</td>
-                <td>
-                  <button className="btn secondary" onClick={() => editRole(r)}>编辑</button>
-                  {r.name === 'admin' ? '-' : <button className="btn danger" onClick={() => { void onDeleteRole(r.id, r.name) }}>删除</button>}
+                <td data-label="ID">{r.id}</td><td data-label="名称">{r.name}</td><td data-label="描述">{r.description}</td><td data-label="权限数">{(r.permissions || []).length}</td>
+                <td data-label="操作">
+                  <div className="table-actions">
+                    <button className="btn secondary" onClick={() => editRole(r)}>编辑</button>
+                    {r.name === 'admin' ? <span>内置角色</span> : <button className="btn danger" onClick={() => { void onDeleteRole(r.id, r.name) }}>删除</button>}
+                  </div>
                 </td>
               </tr>
             ))}

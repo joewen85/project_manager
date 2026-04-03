@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, fetchPage, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
+import { FilterPanel } from '../components/FilterPanel'
+import { SearchField } from '../components/SearchField'
 import { Notification } from '../types'
 import { Pagination } from '../components/Pagination'
 import { getPermissions } from '../services/api'
@@ -23,6 +25,7 @@ export function NotificationsPage() {
     const permissions = getPermissions()
     return permissions.includes('rbac.manage')
   })
+  const activeFilterCount = Number(isReadFilter !== 'all') + Number(moduleFilter !== 'all') + Number(Boolean(keyword.trim()))
 
   const parseReadFilter = (value: string): 'all' | 'unread' | 'read' =>
     value === 'unread' || value === 'read' ? value : 'all'
@@ -94,7 +97,17 @@ export function NotificationsPage() {
 
   return (
     <section className="page-section">
-      <div className="card toolbar-grid">
+      <FilterPanel
+        title="通知筛选"
+        activeCount={activeFilterCount}
+        actions={
+          <>
+            <button className="btn secondary" onClick={() => { void load() }}>刷新</button>
+            <button className="btn" onClick={() => { void markAllRead() }}>全部已读</button>
+          </>
+        }
+        bodyClassName="toolbar-grid"
+      >
         <select value={isReadFilter} aria-label="通知筛选" onChange={(e) => { setIsReadFilter(parseReadFilter(e.target.value)); setPage(1) }}>
           <option value="all">全部通知</option>
           <option value="unread">仅未读</option>
@@ -105,10 +118,8 @@ export function NotificationsPage() {
           <option value="tasks">任务模块</option>
           <option value="projects">项目模块</option>
         </select>
-        <input aria-label="通知关键字搜索" placeholder="搜索标题/内容" value={keyword} onChange={(e) => { setKeyword(e.target.value); setPage(1) }} />
-        <button className="btn secondary" onClick={() => { void load() }}>刷新</button>
-        <button className="btn" onClick={() => { void markAllRead() }}>全部已读</button>
-      </div>
+        <SearchField aria-label="通知关键字搜索" placeholder="搜索标题/内容" value={keyword} onChange={(value) => { setKeyword(value); setPage(1) }} />
+      </FilterPanel>
 
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && items.length === 0} emptyText="暂无通知" onRetry={() => { void load() }} />
@@ -118,20 +129,27 @@ export function NotificationsPage() {
           </p>
         )}
         {!loading && !error && items.length > 0 && (
-          <table>
+          <table className="responsive-table">
             <thead>
               <tr><th>标题</th><th>内容</th><th>模块</th><th>时间</th><th>状态</th><th>操作</th></tr>
             </thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
-                  <td><button className="btn secondary" onClick={() => { void openTarget(item) }}>查看详情</button> {item.title}</td>
-                  <td>{item.content}</td>
-                  <td>{item.module}</td>
-                  <td>{formatDateTime(item.createdAt)}</td>
-                  <td>{item.isRead ? '已读' : '未读'}</td>
-                  <td>
-                    {!item.isRead && <button className="btn secondary" onClick={() => { void markRead(item.id) }}>标记已读</button>}
+                  <td data-label="标题">
+                    <div className="table-actions">
+                      <button className="btn secondary" onClick={() => { void openTarget(item) }}>查看详情</button>
+                      <span>{item.title}</span>
+                    </div>
+                  </td>
+                  <td data-label="内容">{item.content}</td>
+                  <td data-label="模块">{item.module}</td>
+                  <td data-label="时间">{formatDateTime(item.createdAt)}</td>
+                  <td data-label="状态">{item.isRead ? '已读' : '未读'}</td>
+                  <td data-label="操作">
+                    <div className="table-actions">
+                      {!item.isRead && <button className="btn secondary" onClick={() => { void markRead(item.id) }}>标记已读</button>}
+                    </div>
                   </td>
                 </tr>
               ))}

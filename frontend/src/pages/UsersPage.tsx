@@ -1,8 +1,10 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { api, fetchArray, fetchPage, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
+import { FilterPanel } from '../components/FilterPanel'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
+import { SearchField } from '../components/SearchField'
 import { Department, Role, User } from '../types'
 
 interface UserForm {
@@ -42,6 +44,7 @@ export function UsersPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
+  const activeFilterCount = Number(Boolean(keyword.trim()))
 
   const load = async () => {
     try {
@@ -136,25 +139,45 @@ export function UsersPage() {
 
   return (
     <section className="page-section">
-      <div className="card form-grid">
-        <h3>搜索</h3>
-        <input aria-label="用户关键词搜索" value={keywordInput} placeholder="用户名/姓名/邮箱" onChange={(e) => setKeywordInput(e.target.value)} />
+      <FilterPanel
+        title="用户筛选"
+        activeCount={activeFilterCount}
+        actions={<button className="btn secondary" onClick={openCreateModal}>新增用户</button>}
+        bodyClassName="form-grid"
+      >
+        <SearchField
+          aria-label="用户关键词搜索"
+          value={keywordInput}
+          placeholder="用户名/姓名/邮箱"
+          onChange={setKeywordInput}
+          onClear={() => {
+            setPage(1)
+            setKeyword('')
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              setPage(1)
+              setKeyword(keywordInput.trim())
+            }
+          }}
+        />
         <div className="row-actions">
           <button className="btn" onClick={() => { setPage(1); setKeyword(keywordInput.trim()) }}>查询</button>
-          <button className="btn secondary" onClick={openCreateModal}>新增用户</button>
         </div>
-      </div>
+      </FilterPanel>
 
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && users.length === 0} emptyText="暂无用户数据" onRetry={() => { void load() }} />
         {!loading && !error && users.length > 0 && (
-          <table><thead><tr><th>ID</th><th>用户名</th><th>姓名</th><th>邮箱</th><th>状态</th><th>操作</th></tr></thead><tbody>
+          <table className="responsive-table"><thead><tr><th>ID</th><th>用户名</th><th>姓名</th><th>邮箱</th><th>状态</th><th>操作</th></tr></thead><tbody>
             {users.map((u) => (
               <tr key={u.id}>
-                <td>{u.id}</td><td>{u.username}</td><td>{u.name}</td><td>{u.email}</td><td>{u.isActive ? '启用' : '禁用'}</td>
-                <td>
-                  <button className="btn secondary" onClick={() => edit(u)}>编辑</button>
-                  <button className="btn danger" onClick={() => { void onDelete(u.id) }}>删除</button>
+                <td data-label="ID">{u.id}</td><td data-label="用户名">{u.username}</td><td data-label="姓名">{u.name}</td><td data-label="邮箱">{u.email}</td><td data-label="状态">{u.isActive ? '启用' : '禁用'}</td>
+                <td data-label="操作">
+                  <div className="table-actions">
+                    <button className="btn secondary" onClick={() => edit(u)}>编辑</button>
+                    <button className="btn danger" onClick={() => { void onDelete(u.id) }}>删除</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -166,13 +189,13 @@ export function UsersPage() {
 
       <Modal open={modalOpen} title={form.id ? '编辑用户' : '新增用户'} onClose={() => setModalOpen(false)}>
         <form className="form-grid" onSubmit={submit}>
-          {!form.id && <><label className="required-label" htmlFor="username">用户名</label><input id="username" value={form.username} onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))} required /></>}
+          {!form.id && <><label className="required-label" htmlFor="username">用户名</label><input id="username" autoComplete="username" value={form.username} onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))} required /></>}
           <label className="required-label" htmlFor="name">姓名</label>
           <input id="name" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} required />
           <label className="required-label" htmlFor="email">邮箱</label>
-          <input id="email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} required />
+          <input id="email" type="email" inputMode="email" autoComplete="email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} required />
           <label className={!form.id ? 'required-label' : ''} htmlFor="password">密码{form.id ? '（留空不修改）' : ''}</label>
-          <input id="password" type="password" value={form.password} onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))} required={!form.id} />
+          <input id="password" type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))} required={!form.id} />
 
           <label htmlFor="roleIds">角色</label>
           <select id="roleIds" multiple value={form.roleIds.map(String)} onChange={(event) => {

@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Building2, CalendarRange, FolderKanban, ListChecks, Moon, NotebookTabs, Shield, Sun, UserCircle2, Users } from 'lucide-react'
+import { BarChart3, Bell, Building2, CalendarRange, FolderKanban, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, Shield, Sun, UserCircle2, Users, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchData, fetchPage, getPermissions, readApiError, setPermissions } from '../services/api'
@@ -70,6 +70,8 @@ export function Layout() {
   const [changePasswordError, setChangePasswordError] = useState('')
   const [changePasswordSuccess, setChangePasswordSuccess] = useState('')
   const [changePasswordForm, setChangePasswordForm] = useState<ChangePasswordForm>(createEmptyChangePasswordForm)
+  const [navOpen, setNavOpen] = useState(false)
+  const [isMobileNav, setIsMobileNav] = useState(() => window.matchMedia('(max-width: 1024px)').matches)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('theme')
     if (saved === 'light' || saved === 'dark') return saved
@@ -115,6 +117,34 @@ export function Layout() {
     }
     return true
   }, [])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 1024px)')
+    const handleMediaChange = (event: MediaQueryListEvent) => {
+      setIsMobileNav(event.matches)
+      if (!event.matches) {
+        setNavOpen(false)
+      }
+    }
+
+    setIsMobileNav(mediaQuery.matches)
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleMediaChange)
+      return () => mediaQuery.removeEventListener('change', handleMediaChange)
+    }
+
+    mediaQuery.addListener(handleMediaChange)
+    return () => mediaQuery.removeListener(handleMediaChange)
+  }, [])
+
+  useEffect(() => {
+    setNavOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    document.body.classList.toggle('nav-locked', isMobileNav && navOpen)
+    return () => document.body.classList.remove('nav-locked')
+  }, [isMobileNav, navOpen])
 
   useEffect(() => {
     permissionsRef.current = permissions
@@ -412,25 +442,75 @@ export function Layout() {
   const currentTitle = titleEntries.find(([path]) => path === '/' ? location.pathname === '/' : location.pathname.startsWith(path))?.[1] || '项目管理系统'
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <h1 className="sidebar-title">Project Manager</h1>
-        {visibleMenus.map((menu) => {
-          const Icon = menu.icon
-          const isNotification = menu.to === '/notifications'
-          return (
-            <NavLink className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} to={menu.to} key={menu.to} end={menu.to === '/'}>
-              <Icon size={16} />
-              <span>{menu.label}</span>
-              {isNotification && unreadCount > 0 && <em className="nav-badge">{unreadCount > 99 ? '99+' : unreadCount}</em>}
-            </NavLink>
-          )
-        })}
+    <div className={`app-shell${navOpen ? ' nav-open' : ''}`}>
+      {isMobileNav && (
+        <button
+          type="button"
+          className={`sidebar-backdrop${navOpen ? ' visible' : ''}`}
+          aria-label="关闭侧边导航"
+          aria-hidden={!navOpen}
+          tabIndex={navOpen ? 0 : -1}
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+      <aside className="sidebar" id="app-sidebar">
+        <div className="sidebar-header">
+          <h1 className="sidebar-title">Project Manager</h1>
+          {isMobileNav && (
+            <button
+              type="button"
+              className="icon-btn sidebar-close"
+              aria-label="关闭导航菜单"
+              onClick={() => setNavOpen(false)}
+            >
+              <X size={18} />
+            </button>
+          )}
+        </div>
+        <nav className="sidebar-nav" aria-label="主导航">
+          {visibleMenus.map((menu) => {
+            const Icon = menu.icon
+            const isNotification = menu.to === '/notifications'
+            return (
+              <NavLink
+                className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+                to={menu.to}
+                key={menu.to}
+                end={menu.to === '/'}
+                onClick={() => {
+                  if (isMobileNav) setNavOpen(false)
+                }}
+              >
+                <Icon size={18} />
+                <span>{menu.label}</span>
+                {isNotification && unreadCount > 0 && <em className="nav-badge">{unreadCount > 99 ? '99+' : unreadCount}</em>}
+              </NavLink>
+            )
+          })}
+        </nav>
       </aside>
       <main className="content" aria-live="polite">
         <header className="topbar card">
-          <h2 className="page-title">{currentTitle}</h2>
-          <div className="user-anchor">
+          <div className="topbar-heading">
+            {isMobileNav && (
+              <button
+                type="button"
+                className="icon-btn nav-toggle"
+                aria-label={navOpen ? '收起导航菜单' : '展开导航菜单'}
+                aria-controls="app-sidebar"
+                aria-expanded={navOpen}
+                onClick={() => {
+                  setNotificationMenuOpen(false)
+                  setUserMenuOpen(false)
+                  setNavOpen((prev) => !prev)
+                }}
+              >
+                <Menu size={18} />
+              </button>
+            )}
+            <h2 className="page-title">{currentTitle}</h2>
+          </div>
+          <div className="topbar-actions user-anchor">
             {hasNotificationAccess && notificationsApiReady && (
               <div className="notify-anchor" ref={notifyAnchorRef}>
                 <button
@@ -508,8 +588,18 @@ export function Layout() {
                     <p>{profile.email || '-'}</p>
                   </div>
                 </div>
-                <button className="logout-item" onClick={openChangePasswordModal}>🔐 修改密码</button>
-                <button className="logout-item" onClick={logout}>↪ 退出登录</button>
+                <button className="logout-item" onClick={openChangePasswordModal}>
+                  <span className="logout-item-label">
+                    <KeyRound size={16} />
+                    修改密码
+                  </span>
+                </button>
+                <button className="logout-item" onClick={logout}>
+                  <span className="logout-item-label">
+                    <LogOut size={16} />
+                    退出登录
+                  </span>
+                </button>
               </div>
             )}
           </div>
@@ -521,6 +611,7 @@ export function Layout() {
             <input
               id="old-password"
               type="password"
+              autoComplete="current-password"
               value={changePasswordForm.oldPassword}
               onChange={(event) => setChangePasswordForm((prev) => ({ ...prev, oldPassword: event.target.value }))}
               required
@@ -529,6 +620,7 @@ export function Layout() {
             <input
               id="new-password"
               type="password"
+              autoComplete="new-password"
               value={changePasswordForm.newPassword}
               onChange={(event) => setChangePasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))}
               minLength={6}
@@ -538,6 +630,7 @@ export function Layout() {
             <input
               id="confirm-password"
               type="password"
+              autoComplete="new-password"
               value={changePasswordForm.confirmPassword}
               onChange={(event) => setChangePasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
               minLength={6}

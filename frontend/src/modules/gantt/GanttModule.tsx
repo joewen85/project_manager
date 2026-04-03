@@ -492,10 +492,10 @@ export function GanttModule({ initialProjectId }: Props) {
         </article>
       </div>
 
-      <div className="card gantt-main-card">
+      <div className="card gantt-main-card data-viz-card">
         <h3>工程项目甘特图</h3>
         <DataState loading={loading} error={error} empty={!loading && !error && tasks.length === 0} emptyText="暂无甘特图任务" onRetry={() => { void loadGanttTasks() }} />
-        {!loading && !error && tasks.length > 0 && <div className="pm-gantt-shell" ref={ganttWrapRef} />}
+        {!loading && !error && tasks.length > 0 && <div className="pm-gantt-shell data-viz-surface" ref={ganttWrapRef} />}
       </div>
 
       {selectedTask && (
