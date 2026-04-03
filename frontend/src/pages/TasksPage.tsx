@@ -378,14 +378,12 @@ export function TasksPage() {
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && tasks.length === 0} emptyText="暂无匹配的任务" onRetry={() => { void load() }} />
         {!loading && !error && tasks.length > 0 && (
-          <table className="responsive-table"><thead><tr><th>任务编号</th><th>标题</th><th>描述</th><th>优先级</th><th>里程碑</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
+          <table className="responsive-table"><thead><tr><th>任务编号</th><th>标题</th><th>优先级</th><th>状态</th><th>进度</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
             {tasks.map((task) => (
               <tr key={task.id} id={`task-row-${task.id}`} className={focusedTaskId === task.id ? 'task-row-focused' : ''}>
                 <td data-label="任务编号">{task.taskNo}</td>
                 <td data-label="标题">{task.title}</td>
-                <td data-label="描述"><span className="cell-ellipsis" title={task.description || '-'}>{task.description || '-'}</span></td>
                 <td data-label="优先级">{priorityLabel[(task.priority || 'high') as TaskPriority]}</td>
-                <td data-label="里程碑">{task.isMilestone ? '是' : '-'}</td>
                 <td data-label="状态">{statusLabel[task.status]}</td>
                 <td data-label="进度">{task.progress}%</td>
                 <td data-label="开始">{formatDateTime(task.startAt)}</td>

@@ -221,12 +221,11 @@ export function ProjectsPage() {
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && projects.length === 0} emptyText="暂无匹配的项目" onRetry={() => { void load() }} />
         {!loading && !error && projects.length > 0 && (
-          <table className="responsive-table"><thead><tr><th>编码</th><th>名称</th><th>描述</th><th>负责人</th><th>部门</th><th>操作</th></tr></thead><tbody>
+          <table className="responsive-table"><thead><tr><th>编码</th><th>名称</th><th>负责人</th><th>部门</th><th>操作</th></tr></thead><tbody>
             {projects.map((p) => (
               <tr key={p.id}>
                 <td data-label="编码">{p.code}</td>
                 <td data-label="名称">{p.name}</td>
-                <td data-label="描述"><span className="cell-ellipsis" title={p.description || '-'}>{p.description || '-'}</span></td>
                 <td data-label="负责人">{(p.users || []).length}</td>
                 <td data-label="部门">{(p.departments || []).length}</td>
                 <td data-label="操作">
