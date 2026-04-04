@@ -144,6 +144,85 @@ func parseProjectIDs(value string) []uint {
 	return out
 }
 
+func parseCSVValues(value string) []string {
+	parts := strings.Split(strings.TrimSpace(value), ",")
+	out := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if _, ok := seen[part]; ok {
+			continue
+		}
+		seen[part] = struct{}{}
+		out = append(out, part)
+	}
+	return out
+}
+
+func parseTaskStatuses(value string) []string {
+	allowed := map[string]struct{}{
+		string(model.TaskPending):    {},
+		string(model.TaskQueued):     {},
+		string(model.TaskProcessing): {},
+		string(model.TaskCompleted):  {},
+	}
+	items := parseCSVValues(value)
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if _, ok := allowed[item]; ok {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func parseTaskPriorities(value string) []string {
+	allowed := map[string]struct{}{
+		string(model.TaskPriorityHigh):   {},
+		string(model.TaskPriorityMedium): {},
+		string(model.TaskPriorityLow):    {},
+	}
+	items := parseCSVValues(value)
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if _, ok := allowed[item]; ok {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func buildTaskKeywordQuery(keyword string, searchFields []string) (string, []interface{}) {
+	allowed := map[string]string{
+		"taskNo":       "tasks.task_no",
+		"title":        "tasks.title",
+		"description":  "tasks.description",
+		"projectName":  "projects.name",
+		"priority":     "tasks.priority",
+		"status":       "tasks.status",
+		"customField1": "tasks.custom_field1",
+		"customField2": "tasks.custom_field2",
+		"customField3": "tasks.custom_field3",
+	}
+	conditions := make([]string, 0, len(searchFields))
+	args := make([]interface{}, 0, len(searchFields))
+	for _, field := range searchFields {
+		column, ok := allowed[field]
+		if !ok {
+			continue
+		}
+		conditions = append(conditions, column+" LIKE ?")
+		args = append(args, keyword)
+	}
+	if len(conditions) == 0 {
+		return "tasks.task_no LIKE ? OR tasks.title LIKE ? OR tasks.description LIKE ?", []interface{}{keyword, keyword, keyword}
+	}
+	return strings.Join(conditions, " OR "), args
+}
+
 func diffUserIDs(newIDs []uint, oldIDs []uint) (added []uint, removed []uint) {
 	oldSet := map[uint]struct{}{}
 	for _, id := range oldIDs {
@@ -324,12 +403,21 @@ func (h *Handler) ListTasks(c *gin.Context) {
 	if projectID := c.Query("projectId"); projectID != "" {
 		query = query.Where("tasks.project_id = ?", projectID)
 	}
-	if status := c.Query("status"); status != "" {
+	if statuses := parseTaskStatuses(c.Query("statuses")); len(statuses) > 0 {
+		query = query.Where("tasks.status IN ?", statuses)
+	} else if status := c.Query("status"); status != "" {
 		query = query.Where("tasks.status = ?", status)
+	}
+	if priorities := parseTaskPriorities(c.Query("priorities")); len(priorities) > 0 {
+		query = query.Where("tasks.priority IN ?", priorities)
+	}
+	if assigneeIDs := parseProjectIDs(c.Query("assigneeIds")); len(assigneeIDs) > 0 {
+		query = query.Where("EXISTS (SELECT 1 FROM task_users task_filter_users WHERE task_filter_users.task_id = tasks.id AND task_filter_users.user_id IN ?)", assigneeIDs)
 	}
 	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
 		like := "%" + keyword + "%"
-		query = query.Where("tasks.task_no LIKE ? OR tasks.title LIKE ? OR tasks.description LIKE ?", like, like, like)
+		whereClause, args := buildTaskKeywordQuery(like, parseCSVValues(c.Query("searchFields")))
+		query = query.Where(whereClause, args...)
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {

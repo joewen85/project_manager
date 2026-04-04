@@ -68,7 +68,8 @@ Base URL: `http://localhost:8080/api/v1`
 
 ## 项目管理
 ### GET `/projects`
-- Query: `page` `pageSize` `keyword`
+- Query: `page` `pageSize` `keyword` `searchFields`
+  - `searchFields` 支持逗号分隔：`code,name,description`
 ### GET `/projects/export`
 - 用途: 导出当前可见项目为 CSV
 - Query: `keyword`
@@ -100,9 +101,13 @@ Base URL: `http://localhost:8080/api/v1`
 
 ## 任务管理
 ### GET `/tasks`
-- Query: `projectId` `status` `page` `pageSize` `keyword` `sortBy` `sortOrder`
+- Query: `projectId` `status` `statuses` `priorities` `assigneeIds` `searchFields` `page` `pageSize` `keyword` `sortBy` `sortOrder`
+  - `statuses` 支持逗号分隔的多状态筛选
+  - `priorities` 支持逗号分隔的多优先级筛选
+  - `assigneeIds` 支持逗号分隔的多人筛选
+  - `searchFields` 支持逗号分隔：`taskNo,title,description,projectName,priority,status,customField1,customField2,customField3`
   - `sortBy=priority` 时支持优先级排序
-  - `sortOrder` 支持：`high|medium|low`（默认 `high`）
+  - `sortOrder` 支持：`asc|desc`；当 `sortBy=priority` 时，后端兼容 `high|medium|low`
 ### GET `/tasks/export`
 - 用途: 导出当前可见任务为 CSV
 - Query: `projectId` `status` `keyword`

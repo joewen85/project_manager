@@ -1,12 +1,16 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { Settings2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { api, fetchPage, readApiError } from '../services/api'
+import { api, fetchData, fetchPage, readApiError } from '../services/api'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
 import { FilterPanel } from '../components/FilterPanel'
+import { FieldSettingItem, FieldSettingsModal } from '../components/FieldSettingsModal'
 import { SearchField } from '../components/SearchField'
+import { SearchableMultiSelect } from '../components/SearchableMultiSelect'
 import { SearchableSelect } from '../components/SearchableSelect'
+import { TableHeaderFilter } from '../components/TableHeaderFilter'
 import { formatDateTime } from '../utils/datetime'
 import { Project, Tag, Task, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { AttachmentField } from '../components/AttachmentField'
@@ -70,10 +74,31 @@ const initialForm: TaskForm = {
   tagIds: []
 }
 
-type TaskSortKey = 'createdAt' | 'progress' | 'status' | 'priority'
+type TaskSortKey = 'createdAt' | 'progress'
 type TaskSortOrder = 'asc' | 'desc'
+type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'tags' | 'startAt' | 'endAt' | 'assignees' | 'description' | 'customField1' | 'customField2' | 'customField3'
+interface TaskFieldSetting extends FieldSettingItem {
+  key: TaskColumnKey
+}
 const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
 const noParentLabel = '不关联父任务'
+const taskFieldSettingsStorageKey = 'tasks_field_settings'
+const taskDefaultFieldSettings: TaskFieldSetting[] = [
+  { key: 'taskNo', label: '任务编号', visible: true, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
+  { key: 'title', label: '标题', visible: true, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
+  { key: 'projectName', label: '项目名称', visible: true, editable: false, sortable: false, searchable: true, filterable: true, custom: false },
+  { key: 'priority', label: '优先级', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
+  { key: 'status', label: '状态', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
+  { key: 'progress', label: '进度', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
+  { key: 'tags', label: '标签', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'startAt', label: '开始', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'endAt', label: '结束', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'assignees', label: '执行人', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
+  { key: 'description', label: '描述', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
+  { key: 'customField1', label: '自定义内容 1', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: true },
+  { key: 'customField2', label: '自定义内容 2', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: true },
+  { key: 'customField3', label: '自定义内容 3', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: true }
+]
 
 const getTaskProjectName = (task: Task, projects: Project[]) => {
   if (task.projectName) return task.projectName
@@ -82,16 +107,51 @@ const getTaskProjectName = (task: Task, projects: Project[]) => {
 
 const getTaskAssigneeNames = (task: Task) => (task.assignees || []).map((user) => user.username || user.name).filter(Boolean)
 
+const normalizeTaskFieldSettings = (raw: unknown): TaskFieldSetting[] => {
+  const fallbackMap = new Map(taskDefaultFieldSettings.map((field) => [field.key, field]))
+  if (!Array.isArray(raw)) return taskDefaultFieldSettings
+
+  const parsed = raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const key = String((item as { key?: string }).key || '') as TaskColumnKey
+      const base = fallbackMap.get(key)
+      if (!base) return null
+      return {
+        ...base,
+        ...item,
+        key: base.key,
+        label: base.label
+      } as TaskFieldSetting
+    })
+    .filter(Boolean) as TaskFieldSetting[]
+
+  const seen = new Set(parsed.map((item) => item.key))
+  const missing = taskDefaultFieldSettings.filter((item) => !seen.has(item.key))
+  return [...parsed, ...missing]
+}
+
 export function TasksPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [filterUsers, setFilterUsers] = useState<User[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [parentTasks, setParentTasks] = useState<Task[]>([])
   const [keyword, setKeyword] = useState('')
-  const [status, setStatus] = useState('')
   const [projectFilter, setProjectFilter] = useState('')
+  const [assigneeFilters, setAssigneeFilters] = useState<string[]>([])
+  const [statusFilters, setStatusFilters] = useState<string[]>([])
+  const [priorityFilters, setPriorityFilters] = useState<string[]>([])
+  const [fieldSettingsOpen, setFieldSettingsOpen] = useState(false)
+  const [fieldSettings, setFieldSettings] = useState<TaskFieldSetting[]>(() => {
+    try {
+      return normalizeTaskFieldSettings(JSON.parse(localStorage.getItem(taskFieldSettingsStorageKey) || '[]'))
+    } catch {
+      return taskDefaultFieldSettings
+    }
+  })
   const [sortKey, setSortKey] = useState<TaskSortKey>('createdAt')
   const [sortOrder, setSortOrder] = useState<TaskSortOrder>('desc')
   const [page, setPage] = useState(1)
@@ -117,7 +177,22 @@ export function TasksPage() {
   const [pendingViewTaskId, setPendingViewTaskId] = useState<number | null>(null)
   const [expandedAssigneeTaskIds, setExpandedAssigneeTaskIds] = useState<number[]>([])
   const parentTaskWrapRef = useRef<HTMLDivElement | null>(null)
-  const activeFilterCount = Number(Boolean(keyword.trim())) + Number(Boolean(status)) + Number(Boolean(projectFilter)) + Number(sortKey !== 'createdAt') + Number(sortOrder !== 'desc')
+  const fieldSettingsMap = useMemo(() => new Map(fieldSettings.map((field) => [field.key, field])), [fieldSettings])
+  const visibleColumns = useMemo(() => fieldSettings.filter((field) => field.visible).map((field) => field.key), [fieldSettings])
+  const searchableFields = useMemo(() => fieldSettings.filter((field) => field.searchable).map((field) => field.key), [fieldSettings])
+  const isProjectFilterEnabled = fieldSettingsMap.get('projectName')?.filterable ?? true
+  const isAssigneeFilterEnabled = fieldSettingsMap.get('assignees')?.filterable ?? true
+  const isStatusFilterEnabled = fieldSettingsMap.get('status')?.filterable ?? true
+  const isPriorityFilterEnabled = fieldSettingsMap.get('priority')?.filterable ?? true
+  const isProgressSortable = fieldSettingsMap.get('progress')?.sortable ?? true
+  const isTaskFieldEditable = (key: TaskColumnKey) => fieldSettingsMap.get(key)?.editable ?? true
+  const activeFilterCount =
+    Number(Boolean(keyword.trim()) && searchableFields.length > 0) +
+    Number(Boolean(projectFilter) && isProjectFilterEnabled) +
+    Number(assigneeFilters.length > 0 && isAssigneeFilterEnabled) +
+    Number(statusFilters.length > 0 && isStatusFilterEnabled) +
+    Number(priorityFilters.length > 0 && isPriorityFilterEnabled) +
+    Number(sortKey === 'progress' && isProgressSortable)
 
   const load = async () => {
     try {
@@ -126,7 +201,18 @@ export function TasksPage() {
       const [taskPage, projectPage] = await Promise.all([
         fetchPage<Task>(
           '/tasks',
-          { page, pageSize, keyword, status, projectId: projectFilter, sortBy: sortKey, sortOrder },
+          {
+            page,
+            pageSize,
+            keyword: searchableFields.length > 0 ? keyword : '',
+            projectId: isProjectFilterEnabled ? projectFilter : '',
+            assigneeIds: isAssigneeFilterEnabled ? assigneeFilters.join(',') : '',
+            statuses: isStatusFilterEnabled ? statusFilters.join(',') : '',
+            priorities: isPriorityFilterEnabled ? priorityFilters.join(',') : '',
+            searchFields: searchableFields.join(','),
+            sortBy: sortKey,
+            sortOrder
+          },
           { page, pageSize }
         ),
         fetchPage<Project>('/projects', { page: 1, pageSize: 200 }, { page: 1, pageSize: 200 })
@@ -149,7 +235,25 @@ export function TasksPage() {
 
   useEffect(() => {
     void load()
-  }, [page, pageSize, keyword, status, projectFilter, sortKey, sortOrder])
+  }, [page, pageSize, keyword, projectFilter, assigneeFilters, statusFilters, priorityFilters, sortKey, sortOrder, searchableFields, isProjectFilterEnabled, isAssigneeFilterEnabled, isStatusFilterEnabled, isPriorityFilterEnabled])
+
+  useEffect(() => {
+    if (sortKey !== 'progress') return
+    if (!isProgressSortable) {
+      setSortKey('createdAt')
+      setSortOrder('desc')
+    }
+  }, [sortKey, isProgressSortable])
+
+  useEffect(() => {
+    void fetchData<{ users?: User[] }>('/tasks/assignee-options', { pageSize: 100 }, { silent: true })
+      .then((data) => setFilterUsers(data?.users || []))
+      .catch(() => setFilterUsers([]))
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem(taskFieldSettingsStorageKey, JSON.stringify(fieldSettings))
+  }, [fieldSettings])
 
   useEffect(() => {
     const taskId = Number(searchParams.get('taskId') || 0)
@@ -328,6 +432,22 @@ export function TasksPage() {
     }))
   ), [projects])
 
+  const assigneeFilterOptions = useMemo(() => (
+    filterUsers.map((user) => ({
+      value: String(user.id),
+      label: `${user.username}${user.name ? ` (${user.name})` : ''}`,
+      keywords: [user.username, user.name, user.email].filter(Boolean)
+    }))
+  ), [filterUsers])
+
+  const statusFilterOptions = useMemo(() => (
+    Object.entries(statusLabel).map(([value, label]) => ({ value, label }))
+  ), [])
+
+  const priorityFilterOptions = useMemo(() => (
+    Object.entries(priorityLabel).map(([value, label]) => ({ value, label }))
+  ), [])
+
   const normalizedTagKeyword = tagKeyword.trim().toLowerCase()
   const canCreateTagFromKeyword = Boolean(normalizedTagKeyword) && !tags.some((tag) => tag.name.trim().toLowerCase() === normalizedTagKeyword)
   const hasTagSearchKeyword = Boolean(tagKeyword.trim())
@@ -341,6 +461,101 @@ export function TasksPage() {
       }
       return { ...prev, tagIds: prev.tagIds.filter((id) => !searchedTagIds.includes(id)) }
     })
+  }
+
+  const toggleProgressSort = () => {
+    if (!isProgressSortable) return
+    setPage(1)
+    if (sortKey !== 'progress') {
+      setSortKey('progress')
+      setSortOrder('asc')
+      return
+    }
+    if (sortOrder === 'asc') {
+      setSortOrder('desc')
+      return
+    }
+    setSortKey('createdAt')
+    setSortOrder('desc')
+  }
+
+  const renderTaskHeaderCell = (key: TaskColumnKey) => {
+    const setting = fieldSettingsMap.get(key)
+    if (!setting) return null
+
+    let content: ReactNode = setting.label
+    if (key === 'priority' && isPriorityFilterEnabled) {
+      content = <TableHeaderFilter label="优先级" values={priorityFilters} options={priorityFilterOptions} onChange={(values) => { setPriorityFilters(values); setPage(1) }} placeholder="搜索优先级" noResultsText="没有匹配的优先级" />
+    } else if (key === 'status' && isStatusFilterEnabled) {
+      content = <TableHeaderFilter label="状态" values={statusFilters} options={statusFilterOptions} onChange={(values) => { setStatusFilters(values); setPage(1) }} placeholder="搜索状态" noResultsText="没有匹配的状态" />
+    } else if (key === 'progress' && isProgressSortable) {
+      content = (
+        <button type="button" className={`table-header-sort-trigger${sortKey === 'progress' ? ' active' : ''}`} onClick={toggleProgressSort}>
+          进度
+          <span className="table-header-sort-indicator">{sortKey === 'progress' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕'}</span>
+        </button>
+      )
+    }
+
+    return <th key={key}>{content}</th>
+  }
+
+  const renderTaskCell = (task: Task, key: TaskColumnKey, assigneeNames: string[], isExpanded: boolean, visibleAssigneeNames: string[]) => {
+    switch (key) {
+      case 'taskNo':
+        return <td key={key} data-label="任务编号">{task.taskNo}</td>
+      case 'title':
+        return <td key={key} data-label="标题">{task.title}</td>
+      case 'projectName':
+        return <td key={key} data-label="项目名称">{getTaskProjectName(task, projects)}</td>
+      case 'priority':
+        return <td key={key} data-label="优先级">{priorityLabel[(task.priority || 'high') as TaskPriority]}</td>
+      case 'status':
+        return <td key={key} data-label="状态">{statusLabel[task.status]}</td>
+      case 'progress':
+        return <td key={key} data-label="进度">{task.progress}%</td>
+      case 'tags':
+        return (
+          <td key={key} data-label="标签">
+            <div className="task-tag-stack">
+              {(task.tags || []).length > 0 ? (task.tags || []).map((tag) => (
+                <span key={tag.id} className="task-tag-badge">{tag.name}</span>
+              )) : <span>-</span>}
+            </div>
+          </td>
+        )
+      case 'startAt':
+        return <td key={key} data-label="开始">{formatDateTime(task.startAt)}</td>
+      case 'endAt':
+        return <td key={key} data-label="结束">{formatDateTime(task.endAt)}</td>
+      case 'assignees':
+        return (
+          <td key={key} data-label="执行人">
+            {assigneeNames.length > 0 ? (
+              <div className="task-user-stack">
+                {visibleAssigneeNames.map((name) => (
+                  <span key={name} className="task-user-line">{name}</span>
+                ))}
+                {assigneeNames.length > 3 && (
+                  <button type="button" className="task-user-more" onClick={() => toggleAssigneeExpand(task.id)}>
+                    {isExpanded ? '收起' : `显示更多（${assigneeNames.length - 3}）`}
+                  </button>
+                )}
+              </div>
+            ) : '-'}
+          </td>
+        )
+      case 'description':
+        return <td key={key} data-label="描述">{task.description || '-'}</td>
+      case 'customField1':
+        return <td key={key} data-label="自定义内容 1">{task.customField1 || '-'}</td>
+      case 'customField2':
+        return <td key={key} data-label="自定义内容 2">{task.customField2 || '-'}</td>
+      case 'customField3':
+        return <td key={key} data-label="自定义内容 3">{task.customField3 || '-'}</td>
+      default:
+        return null
+    }
   }
 
   const selectNoParent = () => {
@@ -422,39 +637,51 @@ export function TasksPage() {
         actions={<button className="btn" onClick={openCreateModal}>新增任务</button>}
         bodyClassName="toolbar-grid"
       >
-        <SearchField className="toolbar-search-field" aria-label="搜索任务" value={keyword} placeholder="搜索：编号/标题/描述" onChange={(value) => { setKeyword(value); setPage(1) }} />
-        <select aria-label="任务状态筛选" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }}>
-          <option value="">全部状态</option>
-          {Object.keys(statusLabel).map((key) => <option key={key} value={key}>{statusLabel[key]}</option>)}
-        </select>
-        <SearchableSelect
-          ariaLabel="任务项目筛选"
-          value={projectFilter}
-          options={projectFilterOptions}
-          defaultOptionLabel="全部项目"
-          placeholder="搜索项目：编码/名称/描述"
-          noResultsText="没有匹配的项目"
-          onChange={(value) => {
-            setProjectFilter(value)
-            setPage(1)
-          }}
-        />
-        <select aria-label="任务排序字段" value={sortKey} onChange={(e) => { setSortKey(e.target.value as TaskSortKey); setPage(1) }}>
-          <option value="createdAt">按创建时间</option>
-          <option value="progress">按进度</option>
-          <option value="status">按状态</option>
-          <option value="priority">按优先级</option>
-        </select>
-        <select aria-label="任务排序方式" value={sortOrder} onChange={(e) => { setSortOrder(e.target.value as TaskSortOrder); setPage(1) }}>
-          <option value="desc">降序</option>
-          <option value="asc">升序</option>
-        </select>
+        {searchableFields.length > 0 && <SearchField className="toolbar-search-field" aria-label="搜索任务" value={keyword} placeholder="搜索：已启用可搜索字段" onChange={(value) => { setKeyword(value); setPage(1) }} />}
+        {isProjectFilterEnabled && (
+          <SearchableSelect
+            ariaLabel="任务项目筛选"
+            value={projectFilter}
+            options={projectFilterOptions}
+            defaultOptionLabel="全部项目"
+            placeholder="搜索项目：编码/名称/描述"
+            noResultsText="没有匹配的项目"
+            onChange={(value) => {
+              setProjectFilter(value)
+              setPage(1)
+            }}
+          />
+        )}
+        {isAssigneeFilterEnabled && (
+          <SearchableMultiSelect
+            ariaLabel="任务人员筛选"
+            values={assigneeFilters}
+            options={assigneeFilterOptions}
+            onChange={(values) => {
+              setAssigneeFilters(values)
+              setPage(1)
+            }}
+            placeholder="搜索人员：用户名/姓名/邮箱"
+            noResultsText="没有匹配的人员"
+            summaryNoun="人员"
+          />
+        )}
       </FilterPanel>
 
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && tasks.length === 0} emptyText="暂无匹配的任务" onRetry={() => { void load() }} />
         {!loading && !error && tasks.length > 0 && (
-          <table className="responsive-table"><thead><tr><th>任务编号</th><th>标题</th><th>项目名称</th><th>优先级</th><th>状态</th><th>进度</th><th>标签</th><th>开始</th><th>结束</th><th>执行人</th><th>操作</th></tr></thead><tbody>
+          <table className="responsive-table"><thead><tr>
+            {visibleColumns.map((columnKey) => renderTaskHeaderCell(columnKey))}
+            <th className="field-settings-header-cell">
+              <span className="field-settings-header-inline">
+                <span>操作</span>
+                <button type="button" className="field-settings-icon-btn" aria-label="任务列表字段设置" onClick={() => setFieldSettingsOpen(true)}>
+                  <Settings2 size={16} />
+                </button>
+              </span>
+            </th>
+          </tr></thead><tbody>
             {tasks.map((task) => {
               const assigneeNames = getTaskAssigneeNames(task)
               const isExpanded = expandedAssigneeTaskIds.includes(task.id)
@@ -462,35 +689,7 @@ export function TasksPage() {
 
               return (
                 <tr key={task.id} id={`task-row-${task.id}`} className={focusedTaskId === task.id ? 'task-row-focused' : ''}>
-                  <td data-label="任务编号">{task.taskNo}</td>
-                  <td data-label="标题">{task.title}</td>
-                  <td data-label="项目名称">{getTaskProjectName(task, projects)}</td>
-                  <td data-label="优先级">{priorityLabel[(task.priority || 'high') as TaskPriority]}</td>
-                  <td data-label="状态">{statusLabel[task.status]}</td>
-                  <td data-label="进度">{task.progress}%</td>
-                  <td data-label="标签">
-                    <div className="task-tag-stack">
-                      {(task.tags || []).length > 0 ? (task.tags || []).map((tag) => (
-                        <span key={tag.id} className="task-tag-badge">{tag.name}</span>
-                      )) : <span>-</span>}
-                    </div>
-                  </td>
-                  <td data-label="开始">{formatDateTime(task.startAt)}</td>
-                  <td data-label="结束">{formatDateTime(task.endAt)}</td>
-                  <td data-label="执行人">
-                    {assigneeNames.length > 0 ? (
-                      <div className="task-user-stack">
-                        {visibleAssigneeNames.map((name) => (
-                          <span key={name} className="task-user-line">{name}</span>
-                        ))}
-                        {assigneeNames.length > 3 && (
-                          <button type="button" className="task-user-more" onClick={() => toggleAssigneeExpand(task.id)}>
-                            {isExpanded ? '收起' : `显示更多（${assigneeNames.length - 3}）`}
-                          </button>
-                        )}
-                      </div>
-                    ) : '-'}
-                  </td>
+                  {visibleColumns.map((columnKey) => renderTaskCell(task, columnKey, assigneeNames, isExpanded, visibleAssigneeNames))}
                   <td data-label="操作">
                     <div className="table-actions">
                       <button className="btn secondary" onClick={() => viewDetail(task)}>查看详情</button>
@@ -506,6 +705,18 @@ export function TasksPage() {
       </div>
 
       {!loading && !error && total > 0 && <Pagination total={total} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />}
+
+      <FieldSettingsModal
+        open={fieldSettingsOpen}
+        title="任务列表字段设置"
+        fields={fieldSettings}
+        defaultFields={taskDefaultFieldSettings}
+        onClose={() => setFieldSettingsOpen(false)}
+        onSave={(fields) => {
+          setFieldSettings(fields)
+          setFieldSettingsOpen(false)
+        }}
+      />
 
       <Modal open={detailOpen} title="任务详情" onClose={() => setDetailOpen(false)}>
         {detailTask && (
@@ -567,11 +778,11 @@ export function TasksPage() {
       <Modal open={modalOpen} title={form.id ? '编辑任务' : '新增任务'} onClose={() => setModalOpen(false)}>
         <form className="form-grid" onSubmit={submit}>
           <label htmlFor="task-no">任务编号（可空自动生成）</label>
-          <input id="task-no" value={form.taskNo} onChange={(e) => setForm((prev) => ({ ...prev, taskNo: e.target.value }))} />
+          <input id="task-no" value={form.taskNo} onChange={(e) => setForm((prev) => ({ ...prev, taskNo: e.target.value }))} disabled={!isTaskFieldEditable('taskNo')} />
           <label className="required-label" htmlFor="task-title">标题</label>
-          <input id="task-title" value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} required />
+          <input id="task-title" value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} required disabled={!isTaskFieldEditable('title')} />
           <label htmlFor="task-description">描述</label>
-          <textarea id="task-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} />
+          <textarea id="task-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!isTaskFieldEditable('description')} />
           <label htmlFor="task-attachment">附件</label>
           <AttachmentField inputId="task-attachment" value={form.attachments} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
           <label className="required-label" htmlFor="task-project">项目</label>
@@ -583,6 +794,7 @@ export function TasksPage() {
               setParentTaskInput(noParentLabel)
             }}
             required
+            disabled={!isTaskFieldEditable('projectName')}
           >
             {projects.map((project) => <option key={project.id} value={project.id}>{project.code} - {project.name}</option>)}
           </select>
@@ -593,6 +805,7 @@ export function TasksPage() {
               aria-label="搜索父任务"
               placeholder="搜索父任务：任务编号/标题/描述"
               value={parentTaskInput}
+              disabled={!isTaskFieldEditable('title')}
               onFocus={() => setParentDropdownOpen(true)}
               onKeyDown={(event) => {
                 if (!parentDropdownOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
@@ -664,23 +877,23 @@ export function TasksPage() {
             )}
           </div>
           <label htmlFor="task-status">状态</label>
-          <select id="task-status" value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}>
+          <select id="task-status" value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))} disabled={!isTaskFieldEditable('status')}>
             {Object.keys(statusLabel).map((key) => <option key={key} value={key}>{statusLabel[key]}</option>)}
           </select>
           <label htmlFor="task-priority">优先级</label>
-          <select id="task-priority" value={form.priority} onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value as TaskPriority }))}>
+          <select id="task-priority" value={form.priority} onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value as TaskPriority }))} disabled={!isTaskFieldEditable('priority')}>
             <option value="high">高</option>
             <option value="medium">中</option>
             <option value="low">低</option>
           </select>
           <label htmlFor="task-progress">进度</label>
-          <input id="task-progress" type="number" inputMode="numeric" min={0} max={100} value={form.progress} onChange={(e) => setForm((prev) => ({ ...prev, progress: Number(e.target.value) }))} />
+          <input id="task-progress" type="number" inputMode="numeric" min={0} max={100} value={form.progress} onChange={(e) => setForm((prev) => ({ ...prev, progress: Number(e.target.value) }))} disabled={!isTaskFieldEditable('progress')} />
           <label htmlFor="task-assignees">执行人（多人）</label>
-          <SearchField aria-label="搜索执行人" placeholder="搜索执行人：姓名/用户名/邮箱" value={assigneeKeyword} onChange={setAssigneeKeyword} />
+          <SearchField aria-label="搜索执行人" placeholder="搜索执行人：姓名/用户名/邮箱" value={assigneeKeyword} onChange={setAssigneeKeyword} disabled={!isTaskFieldEditable('assignees')} />
           <div id="task-assignees" className="multi-checklist">
             {users.map((user) => (
               <label key={user.id} className="multi-check-item">
-                <input type="checkbox" checked={form.assigneeIds.includes(user.id)} onChange={() => setForm((prev) => ({ ...prev, assigneeIds: toggleNumber(prev.assigneeIds, user.id) }))} />
+                <input type="checkbox" checked={form.assigneeIds.includes(user.id)} onChange={() => setForm((prev) => ({ ...prev, assigneeIds: toggleNumber(prev.assigneeIds, user.id) }))} disabled={!isTaskFieldEditable('assignees')} />
                 <span>{user.name} ({user.username})</span>
               </label>
             ))}
@@ -692,8 +905,9 @@ export function TasksPage() {
             placeholder="搜索标签名称；没有则可直接新增"
             value={tagKeyword}
             onChange={setTagKeyword}
+            disabled={!isTaskFieldEditable('tags')}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && canCreateTagFromKeyword) {
+              if (event.key === 'Enter' && canCreateTagFromKeyword && isTaskFieldEditable('tags')) {
                 event.preventDefault()
                 void createTagInline(tagKeyword)
               }
@@ -703,10 +917,11 @@ export function TasksPage() {
             {hasTagSearchKeyword && tags.length > 0 && (
               <label className="multi-check-item multi-check-item-action">
                 <input
-                  type="checkbox"
-                  checked={allSearchedTagsSelected}
-                  onChange={(event) => toggleSelectAllSearchedTags(event.target.checked)}
-                />
+                type="checkbox"
+                checked={allSearchedTagsSelected}
+                onChange={(event) => toggleSelectAllSearchedTags(event.target.checked)}
+                disabled={!isTaskFieldEditable('tags')}
+              />
                 <span>全选搜索到的标签（{tags.length}）</span>
               </label>
             )}
@@ -715,34 +930,34 @@ export function TasksPage() {
                 type="button"
                 className="multi-check-action"
                 onClick={() => { void createTagInline(tagKeyword) }}
-                disabled={creatingTag}
+                disabled={creatingTag || !isTaskFieldEditable('tags')}
               >
                 {creatingTag ? '新增中...' : `新增标签「${tagKeyword.trim()}」`}
               </button>
             )}
             {tags.map((tag) => (
               <label key={tag.id} className="multi-check-item">
-                <input type="checkbox" checked={form.tagIds.includes(tag.id)} onChange={() => setForm((prev) => ({ ...prev, tagIds: toggleNumber(prev.tagIds, tag.id) }))} />
+                <input type="checkbox" checked={form.tagIds.includes(tag.id)} onChange={() => setForm((prev) => ({ ...prev, tagIds: toggleNumber(prev.tagIds, tag.id) }))} disabled={!isTaskFieldEditable('tags')} />
                 <span>{tag.name}</span>
               </label>
             ))}
             {!canCreateTagFromKeyword && tags.length === 0 && <p className="inline-tip">暂无匹配标签，请输入名称后直接新增。</p>}
           </div>
           <label htmlFor="task-start">开始时间</label>
-          <input id="task-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} />
+          <input id="task-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} disabled={!isTaskFieldEditable('startAt')} />
           <label htmlFor="task-end">结束时间</label>
-          <input id="task-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} />
+          <input id="task-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} disabled={!isTaskFieldEditable('endAt')} />
           <label htmlFor="task-milestone">里程碑</label>
           <select id="task-milestone" value={form.isMilestone ? '1' : '0'} onChange={(e) => setForm((prev) => ({ ...prev, isMilestone: e.target.value === '1' }))}>
             <option value="0">否</option>
             <option value="1">是</option>
           </select>
           <label htmlFor="task-custom-field-1">自定义内容 1</label>
-          <textarea id="task-custom-field-1" rows={4} value={form.customField1} onChange={(e) => setForm((prev) => ({ ...prev, customField1: e.target.value }))} />
+          <textarea id="task-custom-field-1" rows={4} value={form.customField1} onChange={(e) => setForm((prev) => ({ ...prev, customField1: e.target.value }))} disabled={!isTaskFieldEditable('customField1')} />
           <label htmlFor="task-custom-field-2">自定义内容 2</label>
-          <textarea id="task-custom-field-2" rows={4} value={form.customField2} onChange={(e) => setForm((prev) => ({ ...prev, customField2: e.target.value }))} />
+          <textarea id="task-custom-field-2" rows={4} value={form.customField2} onChange={(e) => setForm((prev) => ({ ...prev, customField2: e.target.value }))} disabled={!isTaskFieldEditable('customField2')} />
           <label htmlFor="task-custom-field-3">自定义内容 3</label>
-          <textarea id="task-custom-field-3" rows={4} value={form.customField3} onChange={(e) => setForm((prev) => ({ ...prev, customField3: e.target.value }))} />
+          <textarea id="task-custom-field-3" rows={4} value={form.customField3} onChange={(e) => setForm((prev) => ({ ...prev, customField3: e.target.value }))} disabled={!isTaskFieldEditable('customField3')} />
           <div className="row-actions">
             <button type="submit" className="btn" disabled={submitting}>{submitting ? '保存中...' : '保存任务'}</button>
             <button type="button" className="btn secondary" onClick={() => setForm(initialForm)}>重置</button>

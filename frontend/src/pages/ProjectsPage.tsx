@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { Settings2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { api, fetchArray, fetchData, fetchPage, readApiError } from '../services/api'
 import { TaskTree } from '../components/TaskTree'
@@ -7,6 +8,7 @@ import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
 import { FilterPanel } from '../components/FilterPanel'
+import { FieldSettingItem, FieldSettingsModal } from '../components/FieldSettingsModal'
 import { SearchField } from '../components/SearchField'
 import { formatDateTime } from '../utils/datetime'
 import { AttachmentField } from '../components/AttachmentField'
@@ -33,10 +35,48 @@ const initialForm: ProjectForm = { code: '', name: '', description: '', startAt:
 
 type SortKey = 'code' | 'name' | 'createdAt' | 'startAt' | 'endAt'
 type SortOrder = 'asc' | 'desc'
+type ProjectColumnKey = 'code' | 'name' | 'description' | 'owners' | 'departments' | 'startAt' | 'endAt'
+interface ProjectFieldSetting extends FieldSettingItem {
+  key: ProjectColumnKey
+}
 const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
+const projectFieldSettingsStorageKey = 'projects_field_settings'
+const projectDefaultFieldSettings: ProjectFieldSetting[] = [
+  { key: 'code', label: '编码', visible: true, editable: true, sortable: true, searchable: true, filterable: false, custom: false },
+  { key: 'name', label: '名称', visible: true, editable: true, sortable: true, searchable: true, filterable: false, custom: false },
+  { key: 'description', label: '描述', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
+  { key: 'owners', label: '负责人', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'departments', label: '部门', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'startAt', label: '开始时间', visible: false, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
+  { key: 'endAt', label: '结束时间', visible: false, editable: true, sortable: true, searchable: false, filterable: false, custom: false }
+]
 
 const getProjectOwnerNames = (project: Project) => (project.users || []).map((user) => user.username || user.name).filter(Boolean)
 const getProjectDepartmentNames = (project: Project) => (project.departments || []).map((department) => department.name).filter(Boolean)
+
+const normalizeProjectFieldSettings = (raw: unknown): ProjectFieldSetting[] => {
+  const fallbackMap = new Map(projectDefaultFieldSettings.map((field) => [field.key, field]))
+  if (!Array.isArray(raw)) return projectDefaultFieldSettings
+
+  const parsed = raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const key = String((item as { key?: string }).key || '') as ProjectColumnKey
+      const base = fallbackMap.get(key)
+      if (!base) return null
+      return {
+        ...base,
+        ...item,
+        key: base.key,
+        label: base.label
+      } as ProjectFieldSetting
+    })
+    .filter(Boolean) as ProjectFieldSetting[]
+
+  const seen = new Set(parsed.map((item) => item.key))
+  const missing = projectDefaultFieldSettings.filter((item) => !seen.has(item.key))
+  return [...parsed, ...missing]
+}
 
 export function ProjectsPage() {
   const navigate = useNavigate()
@@ -47,6 +87,14 @@ export function ProjectsPage() {
   const [keyword, setKeyword] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('createdAt')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+  const [fieldSettingsOpen, setFieldSettingsOpen] = useState(false)
+  const [fieldSettings, setFieldSettings] = useState<ProjectFieldSetting[]>(() => {
+    try {
+      return normalizeProjectFieldSettings(JSON.parse(localStorage.getItem(projectFieldSettingsStorageKey) || '[]'))
+    } catch {
+      return projectDefaultFieldSettings
+    }
+  })
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
@@ -62,7 +110,12 @@ export function ProjectsPage() {
   const [formSuccess, setFormSuccess] = useState('')
   const [ownerKeyword, setOwnerKeyword] = useState('')
   const [departmentKeyword, setDepartmentKeyword] = useState('')
-  const activeFilterCount = Number(Boolean(keyword.trim())) + Number(sortKey !== 'createdAt') + Number(sortOrder !== 'desc')
+  const fieldSettingsMap = useMemo(() => new Map(fieldSettings.map((field) => [field.key, field])), [fieldSettings])
+  const visibleColumns = useMemo(() => fieldSettings.filter((field) => field.visible).map((field) => field.key), [fieldSettings])
+  const searchableFields = useMemo(() => fieldSettings.filter((field) => field.searchable).map((field) => field.key), [fieldSettings])
+  const sortableFields = useMemo(() => new Set(fieldSettings.filter((field) => field.sortable).map((field) => field.key)), [fieldSettings])
+  const isProjectFieldEditable = (key: ProjectColumnKey) => fieldSettingsMap.get(key)?.editable ?? true
+  const activeFilterCount = Number(Boolean(keyword.trim()) && searchableFields.length > 0) + Number(sortKey !== 'createdAt') + Number(sortOrder !== 'desc')
 
   const load = async () => {
     try {
@@ -70,7 +123,7 @@ export function ProjectsPage() {
       setError('')
       const projectPage = await fetchPage<Project>(
         '/projects',
-        { page, pageSize, keyword, sortBy: sortKey, sortOrder },
+        { page, pageSize, keyword: searchableFields.length > 0 ? keyword : '', searchFields: searchableFields.join(','), sortBy: sortKey, sortOrder },
         { page, pageSize }
       )
       setProjects(projectPage.list)
@@ -88,7 +141,19 @@ export function ProjectsPage() {
 
   useEffect(() => {
     void load()
-  }, [page, pageSize, keyword, sortKey, sortOrder])
+  }, [page, pageSize, keyword, sortKey, sortOrder, searchableFields])
+
+  useEffect(() => {
+    if (sortKey === 'createdAt') return
+    if (!sortableFields.has(sortKey as ProjectColumnKey)) {
+      setSortKey('createdAt')
+      setSortOrder('desc')
+    }
+  }, [sortKey, sortableFields])
+
+  useEffect(() => {
+    localStorage.setItem(projectFieldSettingsStorageKey, JSON.stringify(fieldSettings))
+  }, [fieldSettings])
 
   useEffect(() => {
     if (!selected) return
@@ -185,6 +250,48 @@ export function ProjectsPage() {
     setDetailOpen(true)
   }
 
+  const renderProjectHeaderCell = (key: ProjectColumnKey) => {
+    const label = fieldSettingsMap.get(key)?.label || key
+    return <th key={key}>{label}</th>
+  }
+
+  const renderProjectCell = (project: Project, key: ProjectColumnKey) => {
+    switch (key) {
+      case 'code':
+        return <td key={key} data-label="编码">{project.code}</td>
+      case 'name':
+        return <td key={key} data-label="名称">{project.name}</td>
+      case 'description':
+        return <td key={key} data-label="描述">{project.description || '-'}</td>
+      case 'owners':
+        return (
+          <td key={key} data-label="负责人">
+            <div className="task-user-stack">
+              {getProjectOwnerNames(project).length > 0 ? getProjectOwnerNames(project).map((name) => (
+                <span key={name} className="task-user-line">{name}</span>
+              )) : <span>-</span>}
+            </div>
+          </td>
+        )
+      case 'departments':
+        return (
+          <td key={key} data-label="部门">
+            <div className="task-user-stack">
+              {getProjectDepartmentNames(project).length > 0 ? getProjectDepartmentNames(project).map((name) => (
+                <span key={name} className="task-user-line">{name}</span>
+              )) : <span>-</span>}
+            </div>
+          </td>
+        )
+      case 'startAt':
+        return <td key={key} data-label="开始时间">{formatDateTime(project.startAt)}</td>
+      case 'endAt':
+        return <td key={key} data-label="结束时间">{formatDateTime(project.endAt)}</td>
+      default:
+        return null
+    }
+  }
+
   return (
     <section className="page-section">
       <FilterPanel
@@ -193,13 +300,13 @@ export function ProjectsPage() {
         actions={<button className="btn" onClick={openCreateModal}>新增项目</button>}
         bodyClassName="toolbar-grid"
       >
-        <SearchField className="toolbar-search-field" aria-label="搜索项目" value={keyword} placeholder="搜索：编码/名称/描述" onChange={(value) => { setKeyword(value); setPage(1) }} />
+        {searchableFields.length > 0 && <SearchField className="toolbar-search-field" aria-label="搜索项目" value={keyword} placeholder="搜索：已启用可搜索字段" onChange={(value) => { setKeyword(value); setPage(1) }} />}
         <select aria-label="项目排序字段" value={sortKey} onChange={(e) => { setSortKey(e.target.value as SortKey); setPage(1) }}>
           <option value="createdAt">按创建时间</option>
-          <option value="code">按编码</option>
-          <option value="name">按名称</option>
-          <option value="startAt">按开始时间</option>
-          <option value="endAt">按结束时间</option>
+          {sortableFields.has('code') && <option value="code">按编码</option>}
+          {sortableFields.has('name') && <option value="name">按名称</option>}
+          {sortableFields.has('startAt') && <option value="startAt">按开始时间</option>}
+          {sortableFields.has('endAt') && <option value="endAt">按结束时间</option>}
         </select>
         <select aria-label="项目排序方式" value={sortOrder} onChange={(e) => { setSortOrder(e.target.value as SortOrder); setPage(1) }}>
           <option value="desc">降序</option>
@@ -224,25 +331,20 @@ export function ProjectsPage() {
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && projects.length === 0} emptyText="暂无匹配的项目" onRetry={() => { void load() }} />
         {!loading && !error && projects.length > 0 && (
-          <table className="responsive-table"><thead><tr><th>编码</th><th>名称</th><th>负责人</th><th>部门</th><th>操作</th></tr></thead><tbody>
+          <table className="responsive-table"><thead><tr>
+            {visibleColumns.map((columnKey) => renderProjectHeaderCell(columnKey))}
+            <th className="field-settings-header-cell">
+              <span className="field-settings-header-inline">
+                <span>操作</span>
+                <button type="button" className="field-settings-icon-btn" aria-label="项目列表字段设置" onClick={() => setFieldSettingsOpen(true)}>
+                  <Settings2 size={16} />
+                </button>
+              </span>
+            </th>
+          </tr></thead><tbody>
             {projects.map((p) => (
               <tr key={p.id}>
-                <td data-label="编码">{p.code}</td>
-                <td data-label="名称">{p.name}</td>
-                <td data-label="负责人">
-                  <div className="task-user-stack">
-                    {getProjectOwnerNames(p).length > 0 ? getProjectOwnerNames(p).map((name) => (
-                      <span key={name} className="task-user-line">{name}</span>
-                    )) : <span>-</span>}
-                  </div>
-                </td>
-                <td data-label="部门">
-                  <div className="task-user-stack">
-                    {getProjectDepartmentNames(p).length > 0 ? getProjectDepartmentNames(p).map((name) => (
-                      <span key={name} className="task-user-line">{name}</span>
-                    )) : <span>-</span>}
-                  </div>
-                </td>
+                {visibleColumns.map((columnKey) => renderProjectCell(p, columnKey))}
                 <td data-label="操作">
                   <div className="table-actions">
                     <button className="btn secondary" onClick={() => { void viewDetail(p) }}>查看详情</button>
@@ -257,6 +359,18 @@ export function ProjectsPage() {
       </div>
 
       {!loading && !error && total > 0 && <Pagination total={total} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />}
+
+      <FieldSettingsModal
+        open={fieldSettingsOpen}
+        title="项目列表字段设置"
+        fields={fieldSettings}
+        defaultFields={projectDefaultFieldSettings}
+        onClose={() => setFieldSettingsOpen(false)}
+        onSave={(fields) => {
+          setFieldSettings(fields)
+          setFieldSettingsOpen(false)
+        }}
+      />
 
       <Modal open={detailOpen} title="项目详情" onClose={() => setDetailOpen(false)}>
         {detailProject && (
@@ -302,33 +416,33 @@ export function ProjectsPage() {
       <Modal open={modalOpen} title={form.id ? '编辑项目' : '新增项目'} onClose={() => setModalOpen(false)}>
         <form className="form-grid" onSubmit={submit}>
           <label htmlFor="project-code">编码（可空自动生成）</label>
-          <input id="project-code" value={form.code} onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))} />
+          <input id="project-code" value={form.code} onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))} disabled={!isProjectFieldEditable('code')} />
           <label className="required-label" htmlFor="project-name">名称</label>
-          <input id="project-name" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} required />
+          <input id="project-name" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} required disabled={!isProjectFieldEditable('name')} />
           <label htmlFor="project-description">描述</label>
-          <textarea id="project-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} />
+          <textarea id="project-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!isProjectFieldEditable('description')} />
           <label htmlFor="project-attachment">附件</label>
           <AttachmentField inputId="project-attachment" value={form.attachments} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
           <label htmlFor="project-start">开始时间</label>
-          <input id="project-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} />
+          <input id="project-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} disabled={!isProjectFieldEditable('startAt')} />
           <label htmlFor="project-end">结束时间</label>
-          <input id="project-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} />
+          <input id="project-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} disabled={!isProjectFieldEditable('endAt')} />
           <label htmlFor="project-users">项目负责人</label>
-          <SearchField aria-label="搜索负责人" placeholder="搜索负责人：姓名/用户名/邮箱" value={ownerKeyword} onChange={setOwnerKeyword} />
+          <SearchField aria-label="搜索负责人" placeholder="搜索负责人：姓名/用户名/邮箱" value={ownerKeyword} onChange={setOwnerKeyword} disabled={!isProjectFieldEditable('owners')} />
           <div id="project-users" className="multi-checklist">
             {users.map((user) => (
               <label key={user.id} className="multi-check-item">
-                <input type="checkbox" checked={form.userIds.includes(user.id)} onChange={() => setForm((prev) => ({ ...prev, userIds: toggleNumber(prev.userIds, user.id) }))} />
+                <input type="checkbox" checked={form.userIds.includes(user.id)} onChange={() => setForm((prev) => ({ ...prev, userIds: toggleNumber(prev.userIds, user.id) }))} disabled={!isProjectFieldEditable('owners')} />
                 <span>{user.name} ({user.username})</span>
               </label>
             ))}
           </div>
           <label htmlFor="project-departments">参与部门</label>
-          <SearchField aria-label="搜索部门" placeholder="搜索部门名称" value={departmentKeyword} onChange={setDepartmentKeyword} />
+          <SearchField aria-label="搜索部门" placeholder="搜索部门名称" value={departmentKeyword} onChange={setDepartmentKeyword} disabled={!isProjectFieldEditable('departments')} />
           <div id="project-departments" className="multi-checklist">
             {departments.map((department) => (
               <label key={department.id} className="multi-check-item">
-                <input type="checkbox" checked={form.departmentIds.includes(department.id)} onChange={() => setForm((prev) => ({ ...prev, departmentIds: toggleNumber(prev.departmentIds, department.id) }))} />
+                <input type="checkbox" checked={form.departmentIds.includes(department.id)} onChange={() => setForm((prev) => ({ ...prev, departmentIds: toggleNumber(prev.departmentIds, department.id) }))} disabled={!isProjectFieldEditable('departments')} />
                 <span>{department.name}</span>
               </label>
             ))}

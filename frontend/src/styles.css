@@ -343,7 +343,7 @@ button, input, select, textarea { max-width: 100%; font: inherit; }
 
 table { width: 100%; max-width: 100%; border-collapse: collapse; }
 th, td { padding: 10px 8px; border-bottom: 1px solid var(--color-border); text-align: left; font-size: 14px; vertical-align: top; }
-th { font-weight: 700; color: var(--color-text); background: var(--color-surface-muted); }
+th { font-weight: 700; color: var(--color-text); background: var(--color-surface-muted); vertical-align: middle; }
 tbody tr:hover { background: color-mix(in oklab, var(--color-primary) 10%, transparent); }
 tbody tr { transition: background-color var(--duration-fast) var(--ease-standard); }
 .table-actions {
@@ -751,6 +751,147 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 }
 .gantt-project-multi-select {
   grid-column: span 2;
+}
+.table-header-filter {
+  position: relative;
+}
+.table-header-filter-trigger,
+.table-header-sort-trigger {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.table-header-filter-trigger.active,
+.table-header-filter-trigger.open,
+.table-header-sort-trigger.active {
+  color: var(--color-primary);
+}
+.table-header-filter-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.table-header-filter-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-primary) 16%, transparent);
+  color: var(--color-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+}
+.table-header-filter-menu {
+  right: auto;
+  min-width: 240px;
+  max-width: 280px;
+  display: grid;
+  gap: 10px;
+  max-height: none;
+  overflow: visible;
+}
+.table-header-filter-search {
+  padding: 4px 4px 0;
+}
+.table-header-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 4px;
+}
+.table-header-filter-list {
+  max-height: 260px;
+  padding: 4px;
+}
+.table-header-sort-indicator {
+  font-size: 14px;
+  line-height: 1;
+}
+.filter-panel-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.column-picker {
+  width: min(240px, 80vw);
+}
+.field-settings-shell {
+  display: grid;
+  gap: 12px;
+}
+.field-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.field-settings-table-wrap {
+  overflow: auto;
+}
+.field-settings-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 840px;
+}
+.field-settings-table th,
+.field-settings-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+.field-settings-table th {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+.field-settings-table td input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+}
+.field-settings-order {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.field-settings-header-cell {
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.field-settings-header-inline {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.field-settings-icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 160ms, color 160ms;
+  vertical-align: middle;
+}
+.field-settings-icon-btn:hover {
+  color: var(--color-primary);
+  background: color-mix(in oklab, var(--color-primary) 8%, transparent);
 }
 .task-tag-stack {
   display: grid;
@@ -1232,6 +1373,9 @@ td .btn + .btn { margin-left: 3px; }
   }
   .responsive-table td[data-label='操作'] .btn {
     width: 100%;
+  }
+  .responsive-table td.field-settings-body-cell {
+    display: none;
   }
   .cell-ellipsis { max-width: 220px; }
   .pagination-shell { gap: 8px; }

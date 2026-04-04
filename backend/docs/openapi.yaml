@@ -471,6 +471,11 @@ paths:
       - $ref: '#/components/parameters/PageSize'
       - $ref: '#/components/parameters/Keyword'
       - in: query
+        name: searchFields
+        schema:
+          type: string
+        description: 逗号分隔的搜索字段列表，支持 code,name,description
+      - in: query
         name: sortBy
         schema:
           type: string
@@ -704,6 +709,11 @@ paths:
       - $ref: '#/components/parameters/PageSize'
       - $ref: '#/components/parameters/Keyword'
       - in: query
+        name: searchFields
+        schema:
+          type: string
+        description: 逗号分隔的搜索字段列表
+      - in: query
         name: status
         schema:
           type: string
@@ -712,6 +722,21 @@ paths:
           - queued
           - processing
           - completed
+      - in: query
+        name: statuses
+        schema:
+          type: string
+        description: 逗号分隔的状态列表
+      - in: query
+        name: priorities
+        schema:
+          type: string
+        description: 逗号分隔的优先级列表
+      - in: query
+        name: assigneeIds
+        schema:
+          type: string
+        description: 逗号分隔的执行人 ID 列表
       - in: query
         name: projectId
         schema:

@@ -45,6 +45,28 @@ func generateProjectCode() string {
 	return "PROJ-" + strings.ToUpper(uuid.NewString()[0:8])
 }
 
+func buildProjectKeywordQuery(keyword string, searchFields []string) (string, []interface{}) {
+	allowed := map[string]string{
+		"code":        "projects.code",
+		"name":        "projects.name",
+		"description": "projects.description",
+	}
+	conditions := make([]string, 0, len(searchFields))
+	args := make([]interface{}, 0, len(searchFields))
+	for _, field := range searchFields {
+		column, ok := allowed[field]
+		if !ok {
+			continue
+		}
+		conditions = append(conditions, column+" LIKE ?")
+		args = append(args, keyword)
+	}
+	if len(conditions) == 0 {
+		return "projects.code LIKE ? OR projects.name LIKE ? OR projects.description LIKE ?", []interface{}{keyword, keyword, keyword}
+	}
+	return strings.Join(conditions, " OR "), args
+}
+
 func (h *Handler) ListProjects(c *gin.Context) {
 	page, pageSize := parsePage(c)
 	var projects []model.Project
@@ -52,7 +74,8 @@ func (h *Handler) ListProjects(c *gin.Context) {
 	query = h.scopeProjectsQuery(c, query)
 	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
 		like := "%" + keyword + "%"
-		query = query.Where("code LIKE ? OR name LIKE ? OR description LIKE ?", like, like, like)
+		whereClause, args := buildProjectKeywordQuery(like, parseCSVValues(c.Query("searchFields")))
+		query = query.Where(whereClause, args...)
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
