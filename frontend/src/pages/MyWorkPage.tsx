@@ -3,8 +3,22 @@ import { fetchData, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
 import { MyWorkData } from '../types'
 
+const emptyMyWorkData = (): MyWorkData => ({
+  myTasks: [],
+  myCreated: [],
+  myParticipate: []
+})
+
+const normalizeTasks = (value: unknown) => Array.isArray(value) ? value : []
+
+const normalizeMyWorkData = (value: MyWorkData | null | undefined): MyWorkData => ({
+  myTasks: normalizeTasks(value?.myTasks),
+  myCreated: normalizeTasks(value?.myCreated),
+  myParticipate: normalizeTasks(value?.myParticipate)
+})
+
 export function MyWorkPage() {
-  const [data, setData] = useState<MyWorkData>({ myTasks: [], myCreated: [], myParticipate: [] })
+  const [data, setData] = useState<MyWorkData>(emptyMyWorkData())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -13,10 +27,10 @@ export function MyWorkPage() {
       setLoading(true)
       setError('')
       const payload = await fetchData<MyWorkData>('/tasks/me')
-      setData(payload)
+      setData(normalizeMyWorkData(payload))
     } catch (loadError) {
       setError(readApiError(loadError, '个人工作数据加载失败'))
-      setData({ myTasks: [], myCreated: [], myParticipate: [] })
+      setData(emptyMyWorkData())
     } finally {
       setLoading(false)
     }

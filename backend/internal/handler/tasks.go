@@ -1043,7 +1043,11 @@ func (h *Handler) MyTasks(c *gin.Context) {
 		MyCreated     []model.Task `json:"myCreated"`
 		MyParticipate []model.Task `json:"myParticipate"`
 	}
-	out := result{}
+	out := result{
+		MyTasks:       make([]model.Task, 0),
+		MyCreated:     make([]model.Task, 0),
+		MyParticipate: make([]model.Task, 0),
+	}
 
 	h.DB.Joins("JOIN task_users tu ON tu.task_id = tasks.id").Where("tu.user_id = ?", uid).Find(&out.MyTasks)
 	h.DB.Where("creator_id = ?", uid).Find(&out.MyCreated)

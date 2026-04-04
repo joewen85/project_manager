@@ -1011,6 +1011,27 @@ func TestNotificationFlowOnTaskAssign(t *testing.T) {
 	markAllResp.Body.Close()
 }
 
+func TestMyTasksReturnsEmptyArrays(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+
+	resp, body := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/me", token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("my tasks status expected 200 got %d", resp.StatusCode)
+	}
+	if _, ok := body["myTasks"].([]any); !ok {
+		t.Fatalf("myTasks should be an array, got %T", body["myTasks"])
+	}
+	if _, ok := body["myCreated"].([]any); !ok {
+		t.Fatalf("myCreated should be an array, got %T", body["myCreated"])
+	}
+	if _, ok := body["myParticipate"].([]any); !ok {
+		t.Fatalf("myParticipate should be an array, got %T", body["myParticipate"])
+	}
+}
+
 func TestTaskCreateRollbackOnFailpoint(t *testing.T) {
 	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
 		h.TxFailpoint = func(point string) error {
