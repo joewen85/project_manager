@@ -510,6 +510,34 @@ func TestAuthCRUDAndAuditFlow(t *testing.T) {
 	}
 }
 
+func TestAuditLogsDefaultPageSize(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/audit/logs", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("query audit logs failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("audit logs status expected 200 got %d", resp.StatusCode)
+	}
+
+	var page struct {
+		PageSize int `json:"pageSize"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&page); err != nil {
+		t.Fatalf("decode logs page failed: %v", err)
+	}
+	if page.PageSize != 20 {
+		t.Fatalf("audit logs default pageSize expected 20 got %d", page.PageSize)
+	}
+}
+
 func TestTagCRUDAndTaskRelationFlow(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

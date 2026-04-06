@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"project-manager/backend/internal/model"
 
@@ -11,8 +12,17 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	auditLogDefaultPageSize = 20
+	auditLogRetentionMonths = 6
+)
+
 func auditDetailf(format string, args ...interface{}) string {
 	return fmt.Sprintf(format, args...)
+}
+
+func auditRetentionCutoff(now time.Time) time.Time {
+	return now.AddDate(0, -auditLogRetentionMonths, 0)
 }
 
 func (h *Handler) writeAudit(c *gin.Context, module, action string, targetID uint, success bool, detail string) {
@@ -41,8 +51,17 @@ func (h *Handler) writeAuditWithDB(c *gin.Context, db *gorm.DB, module, action s
 	return db.Create(&log).Error
 }
 
+func (h *Handler) DeleteExpiredAuditLogs(now time.Time) (int64, error) {
+	cutoff := auditRetentionCutoff(now)
+	result := h.DB.Where("created_at < ?", cutoff).Delete(&model.AuditLog{})
+	return result.RowsAffected, result.Error
+}
+
 func (h *Handler) ListAuditLogs(c *gin.Context) {
 	page, pageSize := parsePage(c)
+	if _, hasPageSize := c.GetQuery("pageSize"); !hasPageSize {
+		pageSize = auditLogDefaultPageSize
+	}
 	query := h.DB.Model(&model.AuditLog{})
 
 	if module := c.Query("module"); module != "" {
