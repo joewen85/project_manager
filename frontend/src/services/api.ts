@@ -195,7 +195,7 @@ export const uploadAttachments = async (files: UploadSourceFile[]) => {
   if (files.length === 0) return []
   const formData = new FormData()
   files.forEach((entry) => {
-    const relativePath = (entry.relativePath || (entry.file as File & { webkitRelativePath?: string }).webkitRelativePath || entry.file.name).replaceAll('\\', '/')
+    const relativePath = (entry.relativePath || (entry.file as File & { webkitRelativePath?: string }).webkitRelativePath || entry.file.name).split('\\').join('/')
     formData.append('files', entry.file)
     formData.append('relativePaths', relativePath)
   })

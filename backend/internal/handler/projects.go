@@ -242,6 +242,9 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		respondError(c, http.StatusNotFound, "PROJECT_NOT_FOUND", "项目不存在")
 		return
 	}
+	if !h.ensureProjectVisible(c, strconv.FormatUint(uint64(item.ID), 10)) {
+		return
+	}
 	startAt, err := parseRFC3339(req.StartAt)
 	if err != nil {
 		respondError(c, http.StatusBadRequest, "INVALID_START_AT", "startAt 必须是 RFC3339 时间格式")
@@ -324,6 +327,9 @@ func (h *Handler) DeleteProject(c *gin.Context) {
 	var item model.Project
 	if err := h.DB.First(&item, c.Param("id")).Error; err != nil {
 		respondError(c, http.StatusNotFound, "PROJECT_NOT_FOUND", "项目不存在")
+		return
+	}
+	if !h.ensureProjectVisible(c, strconv.FormatUint(uint64(item.ID), 10)) {
 		return
 	}
 	var taskCount int64

@@ -172,6 +172,45 @@ func requestMultipartFiles(t *testing.T, method, url, token, fieldName string, f
 	return resp, out
 }
 
+func loginWithCredentials(t *testing.T, serverURL, username, password string) (int, map[string]any) {
+	t.Helper()
+	raw, _ := json.Marshal(map[string]string{
+		"username": username,
+		"password": password,
+	})
+	resp, err := http.Post(serverURL+"/api/v1/auth/login", "application/json", bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("login request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out
+}
+
+func permissionCodeMap(t *testing.T, serverURL, token string) map[string]uint {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodGet, serverURL+"/api/v1/rbac/permissions", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("query permissions failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("query permissions status expected 200 got %d", resp.StatusCode)
+	}
+	var permissions []map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&permissions)
+	codeToID := map[string]uint{}
+	for _, permission := range permissions {
+		code, _ := permission["code"].(string)
+		id, _ := permission["id"].(float64)
+		codeToID[code] = uint(id)
+	}
+	return codeToID
+}
+
 func TestChangeOwnPasswordFlow(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()
@@ -1060,6 +1099,80 @@ func TestMyTasksReturnsEmptyArrays(t *testing.T) {
 	}
 }
 
+func TestMyTasksWithParticipatedTask(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name": "mytasks-reader",
+		"permissionIds": []uint{
+			codeToID["tasks.read"],
+			codeToID["projects.read"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create mytasks role expected 201 got %d", roleResp.StatusCode)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "mytasks_u1",
+		"name":          "MyTasks User",
+		"email":         "mytasks_u1@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if userResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create mytasks user expected 201 got %d", userResp.StatusCode)
+	}
+	userID := uint(userBody["id"].(float64))
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "MYTASKS-P1",
+		"name":        "MyTasks Project",
+		"description": "project for mytasks",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create mytasks project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	taskResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Participated Task",
+		"projectId":   projectID,
+		"status":      "pending",
+		"progress":    0,
+		"assigneeIds": []uint{userID},
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create participated task expected 201 got %d", taskResp.StatusCode)
+	}
+
+	loginStatus, loginBody := loginWithCredentials(t, ts.URL, "mytasks_u1", "pass1234")
+	if loginStatus != http.StatusOK {
+		t.Fatalf("login mytasks user expected 200 got %d", loginStatus)
+	}
+	userToken, _ := loginBody["token"].(string)
+	if userToken == "" {
+		t.Fatalf("mytasks user token should not be empty")
+	}
+
+	resp, body := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/me", userToken, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("my tasks status expected 200 got %d", resp.StatusCode)
+	}
+	participated, ok := body["myParticipate"].([]any)
+	if !ok {
+		t.Fatalf("myParticipate should be an array, got %T", body["myParticipate"])
+	}
+	if len(participated) == 0 {
+		t.Fatalf("myParticipate should contain assigned task")
+	}
+}
+
 func TestTaskCreateRollbackOnFailpoint(t *testing.T) {
 	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
 		h.TxFailpoint = func(point string) error {
@@ -1222,5 +1335,207 @@ func TestRbacCreatePermissionRollbackOnFailpoint(t *testing.T) {
 		if permissionCode == code {
 			t.Fatalf("permission should rollback and not be persisted")
 		}
+	}
+}
+
+func TestScopedUserCannotMutateInvisibleProjectAndTask(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "scope-editor",
+		"description": "scope editor",
+		"permissionIds": []uint{
+			codeToID["projects.read"],
+			codeToID["projects.update"],
+			codeToID["projects.delete"],
+			codeToID["tasks.read"],
+			codeToID["tasks.create"],
+			codeToID["tasks.update"],
+			codeToID["tasks.delete"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create role status expected 201 got %d", roleResp.StatusCode)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "scope_editor_u1",
+		"name":          "Scope Editor",
+		"email":         "scope_editor_u1@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if userResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create user status expected 201 got %d", userResp.StatusCode)
+	}
+	userID := uint(userBody["id"].(float64))
+
+	visibleProjectResp, visibleProjectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":          "SCOPE-EDIT-P1",
+		"name":          "Visible Project",
+		"description":   "visible",
+		"userIds":       []uint{userID},
+		"departmentIds": []uint{},
+	})
+	if visibleProjectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible project status expected 201 got %d", visibleProjectResp.StatusCode)
+	}
+	visibleProjectID := int(visibleProjectBody["id"].(float64))
+
+	hiddenProjectResp, hiddenProjectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "SCOPE-EDIT-P2",
+		"name":        "Hidden Project",
+		"description": "hidden",
+	})
+	if hiddenProjectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden project status expected 201 got %d", hiddenProjectResp.StatusCode)
+	}
+	hiddenProjectID := int(hiddenProjectBody["id"].(float64))
+
+	hiddenProjectNoTaskResp, hiddenProjectNoTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "SCOPE-EDIT-P3",
+		"name":        "Hidden Project No Task",
+		"description": "hidden no task",
+	})
+	if hiddenProjectNoTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden no-task project status expected 201 got %d", hiddenProjectNoTaskResp.StatusCode)
+	}
+	hiddenProjectNoTaskID := int(hiddenProjectNoTaskBody["id"].(float64))
+
+	visibleTaskResp, visibleTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":     "Visible Task",
+		"projectId": visibleProjectID,
+		"status":    "pending",
+		"progress":  0,
+	})
+	if visibleTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible task status expected 201 got %d", visibleTaskResp.StatusCode)
+	}
+	visibleTaskID := int(visibleTaskBody["id"].(float64))
+
+	hiddenTaskResp, hiddenTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":     "Hidden Task",
+		"projectId": hiddenProjectID,
+		"status":    "pending",
+		"progress":  0,
+	})
+	if hiddenTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden task status expected 201 got %d", hiddenTaskResp.StatusCode)
+	}
+	hiddenTaskID := int(hiddenTaskBody["id"].(float64))
+
+	loginStatus, loginBody := loginWithCredentials(t, ts.URL, "scope_editor_u1", "pass1234")
+	if loginStatus != http.StatusOK {
+		t.Fatalf("login scoped editor expected 200 got %d", loginStatus)
+	}
+	editorToken, _ := loginBody["token"].(string)
+	if editorToken == "" {
+		t.Fatalf("scoped editor token should not be empty")
+	}
+
+	updateVisibleProjectResp, _ := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/projects/"+strconv.Itoa(visibleProjectID), editorToken, map[string]any{
+		"code":          "SCOPE-EDIT-P1",
+		"name":          "Visible Project Updated",
+		"description":   "updated",
+		"userIds":       []uint{userID},
+		"departmentIds": []uint{},
+	})
+	if updateVisibleProjectResp.StatusCode != http.StatusOK {
+		t.Fatalf("update visible project expected 200 got %d", updateVisibleProjectResp.StatusCode)
+	}
+
+	updateHiddenProjectResp, _ := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/projects/"+strconv.Itoa(hiddenProjectID), editorToken, map[string]any{
+		"code":          "SCOPE-EDIT-P2",
+		"name":          "Hidden Project Updated",
+		"description":   "should fail",
+		"userIds":       []uint{},
+		"departmentIds": []uint{},
+	})
+	if updateHiddenProjectResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("update hidden project expected 404 got %d", updateHiddenProjectResp.StatusCode)
+	}
+
+	deleteHiddenProjectResp, _ := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/projects/"+strconv.Itoa(hiddenProjectNoTaskID), editorToken, nil)
+	if deleteHiddenProjectResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("delete hidden project expected 404 got %d", deleteHiddenProjectResp.StatusCode)
+	}
+
+	updateVisibleTaskResp, _ := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/tasks/"+strconv.Itoa(visibleTaskID), editorToken, map[string]any{
+		"title":     "Visible Task Updated",
+		"projectId": visibleProjectID,
+		"status":    "processing",
+		"progress":  30,
+	})
+	if updateVisibleTaskResp.StatusCode != http.StatusOK {
+		t.Fatalf("update visible task expected 200 got %d", updateVisibleTaskResp.StatusCode)
+	}
+
+	updateHiddenTaskResp, _ := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/tasks/"+strconv.Itoa(hiddenTaskID), editorToken, map[string]any{
+		"title":     "Hidden Task Updated",
+		"projectId": hiddenProjectID,
+		"status":    "processing",
+		"progress":  30,
+	})
+	if updateHiddenTaskResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("update hidden task expected 404 got %d", updateHiddenTaskResp.StatusCode)
+	}
+
+	deleteHiddenTaskResp, _ := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/tasks/"+strconv.Itoa(hiddenTaskID), editorToken, nil)
+	if deleteHiddenTaskResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("delete hidden task expected 404 got %d", deleteHiddenTaskResp.StatusCode)
+	}
+
+	createHiddenTaskResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", editorToken, map[string]any{
+		"title":     "Create On Hidden Project",
+		"projectId": hiddenProjectID,
+		"status":    "pending",
+		"progress":  0,
+	})
+	if createHiddenTaskResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("create task on hidden project expected 404 got %d", createHiddenTaskResp.StatusCode)
+	}
+}
+
+func TestDisabledUserCannotLogin(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "disabled_login_u1",
+		"name":          "Disabled Login",
+		"email":         "disabled_login_u1@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{},
+		"departmentIds": []uint{},
+	})
+	if userResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create user status expected 201 got %d", userResp.StatusCode)
+	}
+	userID := int(userBody["id"].(float64))
+
+	disableResp, _ := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/users/"+strconv.Itoa(userID), adminToken, map[string]any{
+		"name":          "Disabled Login",
+		"email":         "disabled_login_u1@example.com",
+		"isActive":      false,
+		"roleIds":       []uint{},
+		"departmentIds": []uint{},
+	})
+	if disableResp.StatusCode != http.StatusOK {
+		t.Fatalf("disable user status expected 200 got %d", disableResp.StatusCode)
+	}
+
+	loginStatus, loginBody := loginWithCredentials(t, ts.URL, "disabled_login_u1", "pass1234")
+	if loginStatus != http.StatusForbidden {
+		t.Fatalf("disabled user login expected 403 got %d", loginStatus)
+	}
+	if loginBody["code"] != "USER_DISABLED" {
+		t.Fatalf("disabled user login expected USER_DISABLED code got %v", loginBody["code"])
 	}
 }

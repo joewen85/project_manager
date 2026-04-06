@@ -39,6 +39,10 @@ func (h *Handler) Login(c *gin.Context) {
 		respondError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "用户名或密码错误")
 		return
 	}
+	if !user.IsActive {
+		respondError(c, http.StatusForbidden, "USER_DISABLED", "账号已禁用")
+		return
+	}
 
 	permissionSet := map[string]struct{}{}
 	for _, role := range user.Roles {

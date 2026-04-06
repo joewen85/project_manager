@@ -479,6 +479,9 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "INVALID_ATTACHMENT", err.Error())
 		return
 	}
+	if !h.ensureProjectVisible(c, strconv.FormatUint(uint64(req.ProjectID), 10)) {
+		return
+	}
 
 	creatorID := c.GetUint("userId")
 	taskNo := req.TaskNo
@@ -569,6 +572,9 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 		respondError(c, http.StatusNotFound, "TASK_NOT_FOUND", "任务不存在")
 		return
 	}
+	if !h.ensureProjectVisible(c, strconv.FormatUint(uint64(item.ProjectID), 10)) {
+		return
+	}
 	startAt, err := parseRFC3339(req.StartAt)
 	if err != nil {
 		respondError(c, http.StatusBadRequest, "INVALID_START_AT", "startAt 必须是 RFC3339 时间格式")
@@ -606,6 +612,9 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	}
 	item.ProjectID = req.ProjectID
 	item.ParentID = req.ParentID
+	if !h.ensureProjectVisible(c, strconv.FormatUint(uint64(item.ProjectID), 10)) {
+		return
+	}
 
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		var oldAssignees []model.User
@@ -669,6 +678,9 @@ func (h *Handler) DeleteTask(c *gin.Context) {
 	var item model.Task
 	if err := h.DB.First(&item, c.Param("id")).Error; err != nil {
 		respondError(c, http.StatusNotFound, "TASK_NOT_FOUND", "任务不存在")
+		return
+	}
+	if !h.ensureProjectVisible(c, strconv.FormatUint(uint64(item.ProjectID), 10)) {
 		return
 	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
