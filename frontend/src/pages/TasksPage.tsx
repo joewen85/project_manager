@@ -1,7 +1,7 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Settings2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { api, fetchData, fetchPage, readApiError } from '../services/api'
+import { api, fetchData, fetchPage, hasPermission, readApiError } from '../services/api'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
@@ -15,6 +15,7 @@ import { RemoteProjectSelect } from '../components/RemoteProjectSelect'
 import { formatDateTime } from '../utils/datetime'
 import { Project, Tag, Task, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { AttachmentField } from '../components/AttachmentField'
+import { usePermissions } from '../hooks/usePermissions'
 
 const statusLabel: Record<string, string> = {
   pending: '待处理',
@@ -135,6 +136,12 @@ const normalizeTaskFieldSettings = (raw: unknown): TaskFieldSetting[] => {
 }
 
 export function TasksPage() {
+  const permissions = usePermissions()
+  const canCreateTask = hasPermission('tasks.create', permissions)
+  const canUpdateTask = hasPermission('tasks.update', permissions)
+  const canDeleteTask = hasPermission('tasks.delete', permissions)
+  const canCreateTag = hasPermission('tags.create', permissions)
+  const canUploadAttachment = hasPermission('uploads.create', permissions)
   const [searchParams, setSearchParams] = useSearchParams()
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -293,6 +300,7 @@ export function TasksPage() {
   }, [modalOpen, form.projectId])
 
   const openCreateModal = () => {
+    if (!canCreateTask) return
     setForm((prev) => ({ ...initialForm, projectId: prev.projectId || projects[0]?.id || 0 }))
     setFormError('')
     setFormSuccess('')
@@ -304,6 +312,8 @@ export function TasksPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (form.id && !canUpdateTask) return
+    if (!form.id && !canCreateTask) return
     if (!form.projectId) {
       setFormError('请选择项目')
       return
@@ -336,6 +346,7 @@ export function TasksPage() {
   }
 
   const edit = (item: Task) => {
+    if (!canUpdateTask) return
     setForm({
       id: item.id,
       taskNo: item.taskNo,
@@ -366,6 +377,8 @@ export function TasksPage() {
   }
 
   const createTagInline = async (rawName?: string) => {
+    const canMutateCurrentTask = form.id ? canUpdateTask : canCreateTask
+    if (!canCreateTag || !canMutateCurrentTask) return
     const name = (rawName ?? tagKeyword).trim()
     if (!name) {
       setFormError('请输入标签名称')
@@ -387,6 +400,7 @@ export function TasksPage() {
   }
 
   const onDelete = async (id: number) => {
+    if (!canDeleteTask) return
     if (!confirm('确认删除该任务？')) return
     try {
       await api.delete(`/tasks/${id}`)
@@ -641,7 +655,7 @@ export function TasksPage() {
       <FilterPanel
         title="任务筛选"
         activeCount={activeFilterCount}
-        actions={<button className="btn" onClick={openCreateModal}>新增任务</button>}
+        actions={canCreateTask ? <button className="btn" onClick={openCreateModal}>新增任务</button> : undefined}
         bodyClassName="toolbar-grid"
       >
         {searchableFields.length > 0 && <SearchField className="toolbar-search-field" aria-label="搜索任务" value={keyword} placeholder="搜索：已启用可搜索字段" onChange={(value) => { setKeyword(value); setPage(1) }} />}
@@ -700,8 +714,8 @@ export function TasksPage() {
                   <td data-label="操作">
                     <div className="table-actions">
                       <button className="btn secondary" onClick={() => viewDetail(task)}>查看详情</button>
-                      <button className="btn secondary" onClick={() => edit(task)}>编辑</button>
-                      <button className="btn danger" onClick={() => onDelete(task.id)}>删除</button>
+                      {canUpdateTask && <button className="btn secondary" onClick={() => edit(task)}>编辑</button>}
+                      {canDeleteTask && <button className="btn danger" onClick={() => onDelete(task.id)}>删除</button>}
                     </div>
                   </td>
                 </tr>
@@ -791,7 +805,7 @@ export function TasksPage() {
           <label htmlFor="task-description">描述</label>
           <textarea id="task-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!isTaskFieldEditable('description')} />
           <label htmlFor="task-attachment">附件</label>
-          <AttachmentField inputId="task-attachment" value={form.attachments} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
+          <AttachmentField inputId="task-attachment" value={form.attachments} disabled={!canUploadAttachment} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
           <label className="required-label">项目</label>
           <RemoteProjectSelect
             ariaLabel="任务所属项目"
@@ -919,7 +933,8 @@ export function TasksPage() {
             onChange={setTagKeyword}
             disabled={!isTaskFieldEditable('tags')}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && canCreateTagFromKeyword && isTaskFieldEditable('tags')) {
+              const canMutateCurrentTask = form.id ? canUpdateTask : canCreateTask
+              if (event.key === 'Enter' && canCreateTagFromKeyword && canCreateTag && canMutateCurrentTask && isTaskFieldEditable('tags')) {
                 event.preventDefault()
                 void createTagInline(tagKeyword)
               }
@@ -937,7 +952,7 @@ export function TasksPage() {
                 <span>全选搜索到的标签（{tags.length}）</span>
               </label>
             )}
-            {canCreateTagFromKeyword && (
+            {canCreateTagFromKeyword && canCreateTag && (form.id ? canUpdateTask : canCreateTask) && (
               <button
                 type="button"
                 className="multi-check-action"
@@ -971,7 +986,7 @@ export function TasksPage() {
           <label htmlFor="task-custom-field-3">自定义内容 3</label>
           <textarea id="task-custom-field-3" rows={4} value={form.customField3} onChange={(e) => setForm((prev) => ({ ...prev, customField3: e.target.value }))} disabled={!isTaskFieldEditable('customField3')} />
           <div className="row-actions">
-            <button type="submit" className="btn" disabled={submitting}>{submitting ? '保存中...' : '保存任务'}</button>
+            <button type="submit" className="btn" disabled={submitting || (form.id ? !canUpdateTask : !canCreateTask)}>{submitting ? '保存中...' : '保存任务'}</button>
             <button type="button" className="btn secondary" onClick={() => setForm(initialForm)}>重置</button>
           </div>
           {formError && <p className="error">{formError}</p>}

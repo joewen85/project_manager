@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Settings2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { api, fetchArray, fetchData, fetchPage, readApiError } from '../services/api'
+import { api, fetchArray, fetchData, fetchPage, hasPermission, readApiError } from '../services/api'
 import { TaskTree } from '../components/TaskTree'
 import { Task, Department, Project, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { Modal } from '../components/Modal'
@@ -12,6 +12,7 @@ import { FieldSettingItem, FieldSettingsModal } from '../components/FieldSetting
 import { SearchField } from '../components/SearchField'
 import { formatDateTime } from '../utils/datetime'
 import { AttachmentField } from '../components/AttachmentField'
+import { usePermissions } from '../hooks/usePermissions'
 
 interface ProjectForm {
   id?: number
@@ -80,6 +81,11 @@ const normalizeProjectFieldSettings = (raw: unknown): ProjectFieldSetting[] => {
 
 export function ProjectsPage() {
   const navigate = useNavigate()
+  const permissions = usePermissions()
+  const canCreateProject = hasPermission('projects.create', permissions)
+  const canUpdateProject = hasPermission('projects.update', permissions)
+  const canDeleteProject = hasPermission('projects.delete', permissions)
+  const canUploadAttachment = hasPermission('uploads.create', permissions)
   const [projects, setProjects] = useState<Project[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -175,6 +181,7 @@ export function ProjectsPage() {
   }, [modalOpen, ownerKeyword, departmentKeyword])
 
   const openCreateModal = () => {
+    if (!canCreateProject) return
     setForm(initialForm)
     setFormError('')
     setFormSuccess('')
@@ -184,6 +191,7 @@ export function ProjectsPage() {
   }
 
   const edit = (item: Project) => {
+    if (!canUpdateProject) return
     setForm({
       id: item.id,
       code: item.code,
@@ -204,6 +212,8 @@ export function ProjectsPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (form.id && !canUpdateProject) return
+    if (!form.id && !canCreateProject) return
     if (form.startAt && form.endAt && new Date(form.startAt) > new Date(form.endAt)) {
       setFormError('结束时间必须晚于开始时间')
       return
@@ -231,6 +241,7 @@ export function ProjectsPage() {
   }
 
   const onDelete = async (id: number) => {
+    if (!canDeleteProject) return
     if (!confirm('确认删除该项目？')) return
     try {
       await api.delete(`/projects/${id}`)
@@ -297,7 +308,7 @@ export function ProjectsPage() {
       <FilterPanel
         title="项目筛选"
         activeCount={activeFilterCount}
-        actions={<button className="btn" onClick={openCreateModal}>新增项目</button>}
+        actions={canCreateProject ? <button className="btn" onClick={openCreateModal}>新增项目</button> : undefined}
         bodyClassName="toolbar-grid"
       >
         {searchableFields.length > 0 && <SearchField className="toolbar-search-field" aria-label="搜索项目" value={keyword} placeholder="搜索：已启用可搜索字段" onChange={(value) => { setKeyword(value); setPage(1) }} />}
@@ -348,8 +359,8 @@ export function ProjectsPage() {
                 <td data-label="操作">
                   <div className="table-actions">
                     <button className="btn secondary" onClick={() => { void viewDetail(p) }}>查看详情</button>
-                    <button className="btn secondary" onClick={() => edit(p)}>编辑</button>
-                    <button className="btn danger" onClick={() => onDelete(p.id)}>删除</button>
+                    {canUpdateProject && <button className="btn secondary" onClick={() => edit(p)}>编辑</button>}
+                    {canDeleteProject && <button className="btn danger" onClick={() => onDelete(p.id)}>删除</button>}
                   </div>
                 </td>
               </tr>
@@ -422,7 +433,7 @@ export function ProjectsPage() {
           <label htmlFor="project-description">描述</label>
           <textarea id="project-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!isProjectFieldEditable('description')} />
           <label htmlFor="project-attachment">附件</label>
-          <AttachmentField inputId="project-attachment" value={form.attachments} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
+          <AttachmentField inputId="project-attachment" value={form.attachments} disabled={!canUploadAttachment} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
           <label htmlFor="project-start">开始时间</label>
           <input id="project-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} disabled={!isProjectFieldEditable('startAt')} />
           <label htmlFor="project-end">结束时间</label>
@@ -448,7 +459,7 @@ export function ProjectsPage() {
             ))}
           </div>
           <div className="row-actions">
-            <button type="submit" className="btn" disabled={submitting}>{submitting ? '保存中...' : '保存项目'}</button>
+            <button type="submit" className="btn" disabled={submitting || (form.id ? !canUpdateProject : !canCreateProject)}>{submitting ? '保存中...' : '保存项目'}</button>
             <button type="button" className="btn secondary" onClick={() => setForm(initialForm)}>重置</button>
           </div>
           {formError && <p className="error">{formError}</p>}

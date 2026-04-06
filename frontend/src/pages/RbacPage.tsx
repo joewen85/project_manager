@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { api, fetchArray, readApiError } from '../services/api'
+import { api, fetchArray, hasPermission, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
 import { Modal } from '../components/Modal'
 import { Permission, Role } from '../types'
+import { usePermissions } from '../hooks/usePermissions'
 
 interface RoleForm {
   id?: number
@@ -22,6 +23,10 @@ const initialRoleForm: RoleForm = { name: '', description: '', permissionIds: []
 const initialPermissionForm: PermissionForm = { code: '', name: '', description: '' }
 
 export function RbacPage() {
+  const permissionsState = usePermissions()
+  const canCreateRBAC = hasPermission('rbac.create', permissionsState)
+  const canUpdateRBAC = hasPermission('rbac.update', permissionsState)
+  const canDeleteRBAC = hasPermission('rbac.delete', permissionsState)
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [roleForm, setRoleForm] = useState<RoleForm>(initialRoleForm)
@@ -62,6 +67,8 @@ export function RbacPage() {
 
   const submitRole = async (event: FormEvent) => {
     event.preventDefault()
+    if (roleForm.id && !canUpdateRBAC) return
+    if (!roleForm.id && !canCreateRBAC) return
     try {
       setSubmittingRole(true)
       setRoleFormError('')
@@ -83,6 +90,8 @@ export function RbacPage() {
 
   const submitPermission = async (event: FormEvent) => {
     event.preventDefault()
+    if (permissionForm.id && !canUpdateRBAC) return
+    if (!permissionForm.id && !canCreateRBAC) return
     try {
       setSubmittingPermission(true)
       setPermissionFormError('')
@@ -103,6 +112,7 @@ export function RbacPage() {
   }
 
   const editRole = (role: Role) => {
+    if (!canUpdateRBAC) return
     setRoleForm({
       id: role.id,
       name: role.name,
@@ -115,6 +125,7 @@ export function RbacPage() {
   }
 
   const editPermission = (permission: Permission) => {
+    if (!canUpdateRBAC) return
     setPermissionForm({
       id: permission.id,
       code: permission.code,
@@ -127,6 +138,7 @@ export function RbacPage() {
   }
 
   const openCreateRoleModal = () => {
+    if (!canCreateRBAC) return
     setRoleForm(initialRoleForm)
     setRoleFormError('')
     setRoleFormSuccess('')
@@ -134,6 +146,7 @@ export function RbacPage() {
   }
 
   const openCreatePermissionModal = () => {
+    if (!canCreateRBAC) return
     setPermissionForm(initialPermissionForm)
     setPermissionFormError('')
     setPermissionFormSuccess('')
@@ -141,12 +154,14 @@ export function RbacPage() {
   }
 
   const onDeleteRole = async (id: number, name: string) => {
+    if (!canDeleteRBAC) return
     if (!confirm(`确认删除角色 ${name}？`)) return
     await api.delete(`/rbac/roles/${id}`)
     await load()
   }
 
   const onDeletePermission = async (id: number, name: string) => {
+    if (!canDeleteRBAC) return
     if (!confirm(`确认删除权限 ${name}？`)) return
     await api.delete(`/rbac/permissions/${id}`)
     await load()
@@ -160,8 +175,8 @@ export function RbacPage() {
       </div>
 
       <div className="card row-actions">
-        <button className="btn" onClick={openCreatePermissionModal}>新增权限</button>
-        <button className="btn secondary" onClick={openCreateRoleModal}>新增角色</button>
+        {canCreateRBAC && <button className="btn" onClick={openCreatePermissionModal}>新增权限</button>}
+        {canCreateRBAC && <button className="btn secondary" onClick={openCreateRoleModal}>新增角色</button>}
       </div>
 
       <div className="card">
@@ -176,8 +191,8 @@ export function RbacPage() {
                   <td data-label="ID">{p.id}</td><td data-label="编码">{p.code}</td><td data-label="名称">{p.name}</td><td data-label="描述">{p.description}</td>
                   <td data-label="操作">
                     <div className="table-actions">
-                      <button className="btn secondary" onClick={() => editPermission(p)}>编辑</button>
-                      <button className="btn danger" onClick={() => { void onDeletePermission(p.id, p.name) }}>删除</button>
+                      {canUpdateRBAC && <button className="btn secondary" onClick={() => editPermission(p)}>编辑</button>}
+                      {canDeleteRBAC && <button className="btn danger" onClick={() => { void onDeletePermission(p.id, p.name) }}>删除</button>}
                     </div>
                   </td>
                 </tr>
@@ -197,8 +212,10 @@ export function RbacPage() {
                 <td data-label="ID">{r.id}</td><td data-label="名称">{r.name}</td><td data-label="描述">{r.description}</td><td data-label="权限数">{(r.permissions || []).length}</td>
                 <td data-label="操作">
                   <div className="table-actions">
-                    <button className="btn secondary" onClick={() => editRole(r)}>编辑</button>
-                    {r.name === 'admin' ? <span>内置角色</span> : <button className="btn danger" onClick={() => { void onDeleteRole(r.id, r.name) }}>删除</button>}
+                    {canUpdateRBAC && <button className="btn secondary" onClick={() => editRole(r)}>编辑</button>}
+                    {r.name === 'admin'
+                      ? <span>内置角色</span>
+                      : (canDeleteRBAC && <button className="btn danger" onClick={() => { void onDeleteRole(r.id, r.name) }}>删除</button>)}
                   </div>
                 </td>
               </tr>
@@ -216,7 +233,7 @@ export function RbacPage() {
           <label htmlFor="permission-desc">描述</label>
           <input id="permission-desc" value={permissionForm.description} onChange={(e) => setPermissionForm((prev) => ({ ...prev, description: e.target.value }))} />
           <div className="row-actions">
-            <button type="submit" className="btn" disabled={submittingPermission}>{submittingPermission ? '保存中...' : '保存权限'}</button>
+            <button type="submit" className="btn" disabled={submittingPermission || (permissionForm.id ? !canUpdateRBAC : !canCreateRBAC)}>{submittingPermission ? '保存中...' : '保存权限'}</button>
             <button type="button" className="btn secondary" onClick={() => setPermissionForm(initialPermissionForm)}>重置</button>
           </div>
           {permissionFormError && <p className="error">{permissionFormError}</p>}
@@ -243,7 +260,7 @@ export function RbacPage() {
             {permissions.map((permission) => <option key={permission.id} value={permission.id}>{permission.code}</option>)}
           </select>
           <div className="row-actions">
-            <button type="submit" className="btn" disabled={submittingRole}>{submittingRole ? '保存中...' : '保存角色'}</button>
+            <button type="submit" className="btn" disabled={submittingRole || (roleForm.id ? !canUpdateRBAC : !canCreateRBAC)}>{submittingRole ? '保存中...' : '保存角色'}</button>
             <button type="button" className="btn secondary" onClick={() => setRoleForm(initialRoleForm)}>重置</button>
           </div>
           {roleFormError && <p className="error">{roleFormError}</p>}

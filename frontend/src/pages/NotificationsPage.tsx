@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, fetchPage, readApiError } from '../services/api'
+import { api, fetchPage, hasPermission, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
 import { FilterPanel } from '../components/FilterPanel'
 import { SearchField } from '../components/SearchField'
 import { Notification } from '../types'
 import { Pagination } from '../components/Pagination'
-import { getPermissions } from '../services/api'
 import { formatDateTime } from '../utils/datetime'
+import { usePermissions } from '../hooks/usePermissions'
 
 export function NotificationsPage() {
   const navigate = useNavigate()
+  const permissions = usePermissions()
+  const canManageRBAC = hasPermission('rbac.update', permissions) || hasPermission('rbac.manage', permissions)
+  const canUpdateNotifications = hasPermission('notifications.update', permissions) || hasPermission('notifications.write', permissions)
   const [items, setItems] = useState<Notification[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -21,10 +24,6 @@ export function NotificationsPage() {
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
   const [forbidden, setForbidden] = useState(false)
-  const [canManageRBAC] = useState(() => {
-    const permissions = getPermissions()
-    return permissions.includes('rbac.manage')
-  })
   const activeFilterCount = Number(isReadFilter !== 'all') + Number(moduleFilter !== 'all') + Number(Boolean(keyword.trim()))
 
   const parseReadFilter = (value: string): 'all' | 'unread' | 'read' =>
@@ -70,19 +69,21 @@ export function NotificationsPage() {
   }, [page, pageSize, isReadFilter, moduleFilter, keyword])
 
   const markRead = async (id: number) => {
+    if (!canUpdateNotifications) return
     await api.patch(`/notifications/${id}/read`)
     await load()
     window.dispatchEvent(new Event('notifications:changed'))
   }
 
   const markAllRead = async () => {
+    if (!canUpdateNotifications) return
     await api.patch('/notifications/read-all')
     await load()
     window.dispatchEvent(new Event('notifications:changed'))
   }
 
   const openTarget = async (item: Notification) => {
-    if (!item.isRead) {
+    if (!item.isRead && canUpdateNotifications) {
       await markRead(item.id)
     }
     if (item.module === 'tasks' && item.targetId) {
@@ -103,7 +104,7 @@ export function NotificationsPage() {
         actions={
           <>
             <button className="btn secondary" onClick={() => { void load() }}>刷新</button>
-            <button className="btn" onClick={() => { void markAllRead() }}>全部已读</button>
+            {canUpdateNotifications && <button className="btn" onClick={() => { void markAllRead() }}>全部已读</button>}
           </>
         }
         bodyClassName="toolbar-grid"
@@ -148,7 +149,7 @@ export function NotificationsPage() {
                   <td data-label="状态">{item.isRead ? '已读' : '未读'}</td>
                   <td data-label="操作">
                     <div className="table-actions">
-                      {!item.isRead && <button className="btn secondary" onClick={() => { void markRead(item.id) }}>标记已读</button>}
+                      {!item.isRead && canUpdateNotifications && <button className="btn secondary" onClick={() => { void markRead(item.id) }}>标记已读</button>}
                     </div>
                   </td>
                 </tr>

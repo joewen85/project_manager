@@ -1,10 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { fetchArray, fetchData, readApiError } from '../services/api'
+import { fetchArray, fetchData, hasAnyPermission, readApiError } from '../services/api'
 import { STATUS_META, STATUS_ORDER } from '../constants/status'
 import { Status } from '../types'
 import { DataState } from '../components/DataState'
-import { getPermissions } from '../services/api'
 import type { DashboardProgressItem } from '../components/DashboardCharts'
+import { usePermissions } from '../hooks/usePermissions'
 
 const DashboardCharts = lazy(async () => import('../components/DashboardCharts').then((module) => ({ default: module.DashboardCharts })))
 
@@ -22,14 +22,13 @@ interface DashboardProgressRaw {
 }
 
 export function DashboardPage() {
+  const permissions = usePermissions()
+
   const [stats, setStats] = useState<DashboardStats>()
   const [progress, setProgress] = useState<DashboardProgressItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [canViewUsers, setCanViewUsers] = useState(() => {
-    const permissions = getPermissions()
-    return permissions.includes('rbac.manage') || permissions.includes('users.read') || permissions.includes('users.write')
-  })
+  const canViewUsers = hasAnyPermission(['users.read', 'users.create', 'users.update', 'users.delete', 'users.write', 'rbac.manage'], permissions)
 
   const load = async () => {
     try {
@@ -68,14 +67,6 @@ export function DashboardPage() {
 
   useEffect(() => {
     void load()
-  }, [])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const permissions = getPermissions()
-      setCanViewUsers(permissions.includes('rbac.manage') || permissions.includes('users.read') || permissions.includes('users.write'))
-    }, 5000)
-    return () => window.clearInterval(timer)
   }, [])
 
   return (

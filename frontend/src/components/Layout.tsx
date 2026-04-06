@@ -1,14 +1,13 @@
 import { BarChart3, Bell, Building2, CalendarRange, FolderKanban, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, Shield, Sun, Tag, UserCircle2, Users, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { fetchData, fetchPage, getPermissions, readApiError, setPermissions } from '../services/api'
-import { api } from '../services/api'
+import { api, clearPermissions, fetchData, fetchPage, getPermissions, hasPermission, readApiError, setPermissions } from '../services/api'
 import { Modal } from './Modal'
 import { Notification, Role } from '../types'
 
 const menus = [
   { to: '/', label: '统计分析', icon: BarChart3, permission: 'stats.read' },
-  { to: '/rbac', label: 'RBAC权限', icon: Shield, permission: 'rbac.manage' },
+  { to: '/rbac', label: 'RBAC权限', icon: Shield, permission: 'rbac.read' },
   { to: '/users', label: '用户管理', icon: Users, permission: 'users.read' },
   { to: '/departments', label: '部门管理', icon: Building2, permission: 'departments.read' },
   { to: '/tags', label: '标签管理', icon: Tag, permission: 'tags.read' },
@@ -60,7 +59,7 @@ export function Layout() {
     localStorage.removeItem(`notifications_${type}_last_probe_at`)
   }
   const [profile, setProfile] = useState<{ name?: string; username?: string; email?: string }>({})
-  const [permissions, setPermissionState] = useState<string[]>(getPermissions())
+  const [permissions, setPermissionState] = useState<string[]>(() => getPermissions())
   const [unreadCount, setUnreadCount] = useState(0)
   const [latestNotifications, setLatestNotifications] = useState<Notification[]>([])
   const [notificationMenuOpen, setNotificationMenuOpen] = useState(false)
@@ -81,16 +80,12 @@ export function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const canAccess = useCallback((permission: string, permissionList: string[]) => {
-    if (permissionList.includes(permission)) return true
-    if (permission.endsWith('.read')) {
-      const writePermission = permission.replace(/\.read$/, '.write')
-      return permissionList.includes(writePermission)
-    }
-    return false
+    return hasPermission(permission, permissionList)
   }, [])
   const visibleMenus = menus.filter((item) => canAccess(item.permission, permissions))
   const hasNotificationAccess = canAccess('notifications.read', permissions)
-  const canManageRBAC = canAccess('rbac.manage', permissions)
+  const canUpdateNotifications = canAccess('notifications.update', permissions)
+  const canManageRBAC = canAccess('rbac.update', permissions)
   const notifyAnchorRef = useRef<HTMLDivElement | null>(null)
   const notifyButtonRef = useRef<HTMLButtonElement | null>(null)
   const notifyMenuRef = useRef<HTMLDivElement | null>(null)
@@ -191,16 +186,6 @@ export function Layout() {
   }, [canAccess])
 
   useEffect(() => {
-    const expandPermissions = (codes: string[]) => {
-      const next = new Set(codes)
-      for (const code of codes) {
-        if (code.endsWith('.write')) {
-          next.add(code.replace(/\.write$/, '.read'))
-        }
-      }
-      return Array.from(next)
-    }
-
     const refreshProfile = async () => {
       if (document.visibilityState !== 'visible') return
       const profileData = await fetchData<ProfileResponse>('/auth/profile')
@@ -212,7 +197,7 @@ export function Layout() {
       const rolePermissions = (profileData?.roles || []).flatMap((role) =>
         (role.permissions || []).map((permission) => String(permission.code))
       )
-      const merged = normalizePermissions(expandPermissions(rolePermissions))
+      const merged = normalizePermissions(rolePermissions)
       setPermissionState((prev) => {
         const prevNormalized = normalizePermissions(prev)
         if (isSamePermissions(prevNormalized, merged)) {
@@ -272,6 +257,7 @@ export function Layout() {
   }, [notificationMenuOpen, permissions, refreshLatestNotifications, refreshUnreadCount])
 
   const markNotificationRead = async (id: number) => {
+    if (!canUpdateNotifications) return
     await api.patch(`/notifications/${id}/read`)
     await refreshUnreadCount(permissions)
     await refreshLatestNotifications(permissions)
@@ -279,7 +265,7 @@ export function Layout() {
   }
 
   const openNotificationTarget = async (item: Notification) => {
-    if (!item.isRead) {
+    if (!item.isRead && canUpdateNotifications) {
       await markNotificationRead(item.id)
     }
     if (item.module === 'tasks' && item.targetId) {
@@ -377,7 +363,7 @@ export function Layout() {
 
   const logout = () => {
     localStorage.removeItem('token')
-    localStorage.removeItem('permissions')
+    clearPermissions()
     window.location.href = '/login'
   }
 
@@ -540,7 +526,7 @@ export function Layout() {
                           <strong>{item.title}</strong>
                           <p>{item.content}</p>
                         </button>
-                        {!item.isRead && <button className="btn secondary" role="menuitem" tabIndex={0} onClick={() => { void markNotificationRead(item.id) }}>已读</button>}
+                        {!item.isRead && canUpdateNotifications && <button className="btn secondary" role="menuitem" tabIndex={0} onClick={() => { void markNotificationRead(item.id) }}>已读</button>}
                       </div>
                     ))}
                     {groupedNotifications.earlier.length > 0 && <p className="notify-group-title">更早</p>}
@@ -550,7 +536,7 @@ export function Layout() {
                           <strong>{item.title}</strong>
                           <p>{item.content}</p>
                         </button>
-                        {!item.isRead && <button className="btn secondary" role="menuitem" tabIndex={0} onClick={() => { void markNotificationRead(item.id) }}>已读</button>}
+                        {!item.isRead && canUpdateNotifications && <button className="btn secondary" role="menuitem" tabIndex={0} onClick={() => { void markNotificationRead(item.id) }}>已读</button>}
                       </div>
                     ))}
                     <NavLink to="/notifications" role="menuitem" tabIndex={0} className="notify-more" onClick={() => setNotificationMenuOpen(false)}>

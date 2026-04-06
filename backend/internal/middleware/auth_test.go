@@ -64,9 +64,9 @@ func TestPermissionForbidden(t *testing.T) {
 	}
 }
 
-func TestWritePermissionImpliesRead(t *testing.T) {
+func TestUpdatePermissionDoesNotImplyRead(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	token, err := auth.GenerateToken("secret", 1, "user", []string{"projects.write"})
+	token, err := auth.GenerateToken("secret", 1, "user", []string{"projects.update"})
 	if err != nil {
 		t.Fatalf("generate token failed: %v", err)
 	}
@@ -79,8 +79,8 @@ func TestWritePermissionImpliesRead(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", w.Code)
 	}
 }
 

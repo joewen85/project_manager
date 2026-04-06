@@ -22,14 +22,6 @@ func hasPermission(granted []string, required string) bool {
 			return true
 		}
 	}
-	if strings.HasSuffix(required, ".read") {
-		writePerm := strings.TrimSuffix(required, ".read") + ".write"
-		for _, item := range granted {
-			if item == writePerm {
-				return true
-			}
-		}
-	}
 	return false
 }
 

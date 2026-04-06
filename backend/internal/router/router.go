@@ -47,99 +47,90 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 	{
 		authGroup.GET("/auth/profile", h.Profile)
 		authGroup.POST("/auth/change-password", h.ChangePassword)
-		authGroup.POST("/uploads", h.UploadFile)
+		authGroup.POST("/uploads", middleware.RequirePermission(h.DB, "uploads.create"), h.UploadFile)
 
 		rbac := authGroup.Group("/rbac")
-		rbac.Use(middleware.RequirePermission(h.DB, "rbac.manage"))
 		{
-			rbac.GET("/permissions", h.ListPermissions)
-			rbac.POST("/permissions", h.CreatePermission)
-			rbac.PUT("/permissions/:id", h.UpdatePermission)
-			rbac.DELETE("/permissions/:id", h.DeletePermission)
-			rbac.GET("/roles", h.ListRoles)
-			rbac.POST("/roles", h.CreateRole)
-			rbac.PUT("/roles/:id", h.UpdateRole)
-			rbac.DELETE("/roles/:id", h.DeleteRole)
+			rbac.GET("/permissions", middleware.RequirePermission(h.DB, "rbac.read"), h.ListPermissions)
+			rbac.POST("/permissions", middleware.RequirePermission(h.DB, "rbac.create"), h.CreatePermission)
+			rbac.PUT("/permissions/:id", middleware.RequirePermission(h.DB, "rbac.update"), h.UpdatePermission)
+			rbac.DELETE("/permissions/:id", middleware.RequirePermission(h.DB, "rbac.delete"), h.DeletePermission)
+			rbac.GET("/roles", middleware.RequirePermission(h.DB, "rbac.read"), h.ListRoles)
+			rbac.POST("/roles", middleware.RequirePermission(h.DB, "rbac.create"), h.CreateRole)
+			rbac.PUT("/roles/:id", middleware.RequirePermission(h.DB, "rbac.update"), h.UpdateRole)
+			rbac.DELETE("/roles/:id", middleware.RequirePermission(h.DB, "rbac.delete"), h.DeleteRole)
 		}
 
 		users := authGroup.Group("/users")
-		users.Use(middleware.RequirePermission(h.DB, "users.read"))
 		{
-			users.GET("", h.ListUsers)
-			users.POST("", middleware.RequirePermission(h.DB, "users.write"), h.CreateUser)
-			users.PUT("/:id", middleware.RequirePermission(h.DB, "users.write"), h.UpdateUser)
-			users.DELETE("/:id", middleware.RequirePermission(h.DB, "users.write"), h.DeleteUser)
+			users.GET("", middleware.RequirePermission(h.DB, "users.read"), h.ListUsers)
+			users.POST("", middleware.RequirePermission(h.DB, "users.create"), h.CreateUser)
+			users.PUT("/:id", middleware.RequirePermission(h.DB, "users.update"), h.UpdateUser)
+			users.DELETE("/:id", middleware.RequirePermission(h.DB, "users.delete"), h.DeleteUser)
 		}
 
 		departments := authGroup.Group("/departments")
-		departments.Use(middleware.RequirePermission(h.DB, "departments.read"))
 		{
-			departments.GET("", h.ListDepartments)
-			departments.POST("", middleware.RequirePermission(h.DB, "departments.write"), h.CreateDepartment)
-			departments.PUT("/:id", middleware.RequirePermission(h.DB, "departments.write"), h.UpdateDepartment)
-			departments.DELETE("/:id", middleware.RequirePermission(h.DB, "departments.write"), h.DeleteDepartment)
+			departments.GET("", middleware.RequirePermission(h.DB, "departments.read"), h.ListDepartments)
+			departments.POST("", middleware.RequirePermission(h.DB, "departments.create"), h.CreateDepartment)
+			departments.PUT("/:id", middleware.RequirePermission(h.DB, "departments.update"), h.UpdateDepartment)
+			departments.DELETE("/:id", middleware.RequirePermission(h.DB, "departments.delete"), h.DeleteDepartment)
 		}
 
 		tags := authGroup.Group("/tags")
-		tags.Use(middleware.RequirePermission(h.DB, "tags.read"))
 		{
-			tags.GET("", h.ListTags)
-			tags.GET("/:id", h.GetTag)
-			tags.POST("", middleware.RequirePermission(h.DB, "tags.write"), h.CreateTag)
-			tags.PUT("/:id", middleware.RequirePermission(h.DB, "tags.write"), h.UpdateTag)
-			tags.DELETE("/:id", middleware.RequirePermission(h.DB, "tags.write"), h.DeleteTag)
+			tags.GET("", middleware.RequirePermission(h.DB, "tags.read"), h.ListTags)
+			tags.GET("/:id", middleware.RequirePermission(h.DB, "tags.read"), h.GetTag)
+			tags.POST("", middleware.RequirePermission(h.DB, "tags.create"), h.CreateTag)
+			tags.PUT("/:id", middleware.RequirePermission(h.DB, "tags.update"), h.UpdateTag)
+			tags.DELETE("/:id", middleware.RequirePermission(h.DB, "tags.delete"), h.DeleteTag)
 		}
 
 		projects := authGroup.Group("/projects")
-		projects.Use(middleware.RequirePermission(h.DB, "projects.read"))
 		{
-			projects.GET("", h.ListProjects)
-			projects.GET("/export", h.ExportProjectsCSV)
-			projects.GET("/editor-options", h.ProjectEditorOptions)
-			projects.GET("/gantt-portfolio", h.GanttPortfolio)
-			projects.POST("", middleware.RequirePermission(h.DB, "projects.write"), h.CreateProject)
-			projects.PUT("/:id", middleware.RequirePermission(h.DB, "projects.write"), h.UpdateProject)
-			projects.DELETE("/:id", middleware.RequirePermission(h.DB, "projects.write"), h.DeleteProject)
-			projects.GET("/:id/gantt", h.Gantt)
-			projects.POST("/:id/gantt/auto-resolve", middleware.RequirePermission(h.DB, "projects.write"), h.AutoResolveProjectDependencies)
-			projects.GET("/:id/task-tree", h.TaskTree)
-			projects.GET("/:id", h.ProjectDetail)
+			projects.GET("", middleware.RequirePermission(h.DB, "projects.read"), h.ListProjects)
+			projects.GET("/export", middleware.RequirePermission(h.DB, "projects.read"), h.ExportProjectsCSV)
+			projects.GET("/editor-options", middleware.RequirePermission(h.DB, "projects.read"), h.ProjectEditorOptions)
+			projects.GET("/gantt-portfolio", middleware.RequirePermission(h.DB, "projects.read"), h.GanttPortfolio)
+			projects.POST("", middleware.RequirePermission(h.DB, "projects.create"), h.CreateProject)
+			projects.PUT("/:id", middleware.RequirePermission(h.DB, "projects.update"), h.UpdateProject)
+			projects.DELETE("/:id", middleware.RequirePermission(h.DB, "projects.delete"), h.DeleteProject)
+			projects.GET("/:id/gantt", middleware.RequirePermission(h.DB, "projects.read"), h.Gantt)
+			projects.POST("/:id/gantt/auto-resolve", middleware.RequirePermission(h.DB, "projects.update"), h.AutoResolveProjectDependencies)
+			projects.GET("/:id/task-tree", middleware.RequirePermission(h.DB, "projects.read"), h.TaskTree)
+			projects.GET("/:id", middleware.RequirePermission(h.DB, "projects.read"), h.ProjectDetail)
 		}
 
 		tasks := authGroup.Group("/tasks")
-		tasks.Use(middleware.RequirePermission(h.DB, "tasks.read"))
 		{
-			tasks.GET("", h.ListTasks)
-			tasks.GET("/export", h.ExportTasksCSV)
-			tasks.GET("/assignee-options", h.TaskAssigneeOptions)
-			tasks.POST("", middleware.RequirePermission(h.DB, "tasks.write"), h.CreateTask)
-			tasks.PUT("/:id", middleware.RequirePermission(h.DB, "tasks.write"), h.UpdateTask)
-			tasks.PUT("/:id/dependencies", middleware.RequirePermission(h.DB, "tasks.write"), h.UpdateTaskDependencies)
-			tasks.PATCH("/:id/schedule", middleware.RequirePermission(h.DB, "tasks.write"), h.UpdateTaskSchedule)
-			tasks.DELETE("/:id", middleware.RequirePermission(h.DB, "tasks.write"), h.DeleteTask)
-			tasks.GET("/progress-list", h.ProgressList)
-			tasks.GET("/me", h.MyTasks)
+			tasks.GET("", middleware.RequirePermission(h.DB, "tasks.read"), h.ListTasks)
+			tasks.GET("/export", middleware.RequirePermission(h.DB, "tasks.read"), h.ExportTasksCSV)
+			tasks.GET("/assignee-options", middleware.RequirePermission(h.DB, "tasks.read"), h.TaskAssigneeOptions)
+			tasks.POST("", middleware.RequirePermission(h.DB, "tasks.create"), h.CreateTask)
+			tasks.PUT("/:id", middleware.RequirePermission(h.DB, "tasks.update"), h.UpdateTask)
+			tasks.PUT("/:id/dependencies", middleware.RequirePermission(h.DB, "tasks.update"), h.UpdateTaskDependencies)
+			tasks.PATCH("/:id/schedule", middleware.RequirePermission(h.DB, "tasks.update"), h.UpdateTaskSchedule)
+			tasks.DELETE("/:id", middleware.RequirePermission(h.DB, "tasks.delete"), h.DeleteTask)
+			tasks.GET("/progress-list", middleware.RequirePermission(h.DB, "tasks.read"), h.ProgressList)
+			tasks.GET("/me", middleware.RequirePermission(h.DB, "tasks.read"), h.MyTasks)
 		}
 
 		stats := authGroup.Group("/stats")
-		stats.Use(middleware.RequirePermission(h.DB, "stats.read"))
 		{
-			stats.GET("/dashboard", h.DashboardStats)
+			stats.GET("/dashboard", middleware.RequirePermission(h.DB, "stats.read"), h.DashboardStats)
 		}
 
 		notifications := authGroup.Group("/notifications")
-		notifications.Use(middleware.RequirePermission(h.DB, "notifications.read"))
 		{
-			notifications.GET("", h.ListNotifications)
-			notifications.GET("/unread-count", h.UnreadNotificationCount)
-			notifications.PATCH("/:id/read", h.MarkNotificationRead)
-			notifications.PATCH("/read-all", h.MarkAllNotificationsRead)
+			notifications.GET("", middleware.RequirePermission(h.DB, "notifications.read"), h.ListNotifications)
+			notifications.GET("/unread-count", middleware.RequirePermission(h.DB, "notifications.read"), h.UnreadNotificationCount)
+			notifications.PATCH("/:id/read", middleware.RequirePermission(h.DB, "notifications.update"), h.MarkNotificationRead)
+			notifications.PATCH("/read-all", middleware.RequirePermission(h.DB, "notifications.update"), h.MarkAllNotificationsRead)
 		}
 
 		audit := authGroup.Group("/audit")
-		audit.Use(middleware.RequirePermission(h.DB, "audit.read"))
 		{
-			audit.GET("/logs", h.ListAuditLogs)
+			audit.GET("/logs", middleware.RequirePermission(h.DB, "audit.read"), h.ListAuditLogs)
 		}
 	}
 

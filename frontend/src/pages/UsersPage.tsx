@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { api, fetchArray, fetchPage, readApiError } from '../services/api'
+import { api, fetchArray, fetchPage, hasPermission, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
 import { FilterPanel } from '../components/FilterPanel'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { SearchField } from '../components/SearchField'
 import { Department, Role, User } from '../types'
+import { usePermissions } from '../hooks/usePermissions'
 
 interface UserForm {
   id?: number
@@ -29,6 +30,10 @@ const initialForm: UserForm = {
 }
 
 export function UsersPage() {
+  const permissions = usePermissions()
+  const canCreateUser = hasPermission('users.create', permissions)
+  const canUpdateUser = hasPermission('users.update', permissions)
+  const canDeleteUser = hasPermission('users.delete', permissions)
   const [users, setUsers] = useState<User[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -50,10 +55,10 @@ export function UsersPage() {
     try {
       setLoading(true)
       setError('')
-      const [usersPage, rolesList, departmentsPage] = await Promise.all([
-        fetchPage<User>('/users', { page, pageSize, keyword }, { page, pageSize }),
-        fetchArray<Role>('/rbac/roles'),
-        fetchPage<Department>('/departments', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 })
+      const usersPage = await fetchPage<User>('/users', { page, pageSize, keyword }, { page, pageSize })
+      const [rolesList, departmentsPage] = await Promise.all([
+        fetchArray<Role>('/rbac/roles', undefined, { silent: true }).catch(() => []),
+        fetchPage<Department>('/departments', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as Department[], total: 0, page: 1, pageSize: 100 }))
       ])
       setUsers(usersPage.list)
       setTotal(usersPage.total)
@@ -71,6 +76,8 @@ export function UsersPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (form.id && !canUpdateUser) return
+    if (!form.id && !canCreateUser) return
     try {
       setSubmitting(true)
       setFormError('')
@@ -105,6 +112,7 @@ export function UsersPage() {
   }
 
   const edit = (item: User) => {
+    if (!canUpdateUser) return
     setForm({
       id: item.id,
       username: item.username,
@@ -121,6 +129,7 @@ export function UsersPage() {
   }
 
   const openCreateModal = () => {
+    if (!canCreateUser) return
     setForm(initialForm)
     setFormError('')
     setFormSuccess('')
@@ -128,6 +137,7 @@ export function UsersPage() {
   }
 
   const onDelete = async (id: number) => {
+    if (!canDeleteUser) return
     if (!confirm('确认删除该用户？')) return
     try {
       await api.delete(`/users/${id}`)
@@ -142,7 +152,7 @@ export function UsersPage() {
       <FilterPanel
         title="用户筛选"
         activeCount={activeFilterCount}
-        actions={<button className="btn secondary" onClick={openCreateModal}>新增用户</button>}
+        actions={canCreateUser ? <button className="btn secondary" onClick={openCreateModal}>新增用户</button> : undefined}
         bodyClassName="form-grid"
       >
         <SearchField
@@ -175,8 +185,8 @@ export function UsersPage() {
                 <td data-label="ID">{u.id}</td><td data-label="用户名">{u.username}</td><td data-label="姓名">{u.name}</td><td data-label="邮箱">{u.email}</td><td data-label="状态">{u.isActive ? '启用' : '禁用'}</td>
                 <td data-label="操作">
                   <div className="table-actions">
-                    <button className="btn secondary" onClick={() => edit(u)}>编辑</button>
-                    <button className="btn danger" onClick={() => { void onDelete(u.id) }}>删除</button>
+                    {canUpdateUser && <button className="btn secondary" onClick={() => edit(u)}>编辑</button>}
+                    {canDeleteUser && <button className="btn danger" onClick={() => { void onDelete(u.id) }}>删除</button>}
                   </div>
                 </td>
               </tr>
@@ -220,7 +230,7 @@ export function UsersPage() {
           )}
 
           <div className="row-actions">
-            <button type="submit" className="btn" disabled={submitting}>{submitting ? '保存中...' : '保存'}</button>
+            <button type="submit" className="btn" disabled={submitting || (form.id ? !canUpdateUser : !canCreateUser)}>{submitting ? '保存中...' : '保存'}</button>
             <button type="button" className="btn secondary" onClick={() => setForm(initialForm)}>重置</button>
           </div>
           {formError && <p className="error">{formError}</p>}

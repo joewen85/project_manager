@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { api, fetchPage, readApiError } from '../services/api'
+import { api, fetchPage, hasPermission, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
 import { FilterPanel } from '../components/FilterPanel'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { SearchField } from '../components/SearchField'
 import { Tag } from '../types'
+import { usePermissions } from '../hooks/usePermissions'
 
 interface TagForm {
   id?: number
@@ -15,6 +16,10 @@ interface TagForm {
 const initialForm: TagForm = { name: '' }
 
 export function TagsPage() {
+  const permissions = usePermissions()
+  const canCreateTag = hasPermission('tags.create', permissions)
+  const canUpdateTag = hasPermission('tags.update', permissions)
+  const canDeleteTag = hasPermission('tags.delete', permissions)
   const [items, setItems] = useState<Tag[]>([])
   const [keywordInput, setKeywordInput] = useState('')
   const [keyword, setKeyword] = useState('')
@@ -49,6 +54,7 @@ export function TagsPage() {
   useEffect(() => { void load() }, [page, pageSize, keyword])
 
   const openCreateModal = () => {
+    if (!canCreateTag) return
     setForm(initialForm)
     setFormError('')
     setFormSuccess('')
@@ -56,6 +62,7 @@ export function TagsPage() {
   }
 
   const edit = (item: Tag) => {
+    if (!canUpdateTag) return
     setForm({ id: item.id, name: item.name })
     setFormError('')
     setFormSuccess('')
@@ -64,6 +71,8 @@ export function TagsPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (form.id && !canUpdateTag) return
+    if (!form.id && !canCreateTag) return
     try {
       setSubmitting(true)
       setFormError('')
@@ -81,6 +90,7 @@ export function TagsPage() {
   }
 
   const onDelete = async (id: number) => {
+    if (!canDeleteTag) return
     if (!confirm('确认删除该标签？')) return
     try {
       await api.delete(`/tags/${id}`)
@@ -95,7 +105,7 @@ export function TagsPage() {
       <FilterPanel
         title="标签筛选"
         activeCount={activeFilterCount}
-        actions={<button className="btn secondary" onClick={openCreateModal}>新增标签</button>}
+        actions={canCreateTag ? <button className="btn secondary" onClick={openCreateModal}>新增标签</button> : undefined}
         bodyClassName="form-grid"
       >
         <SearchField
@@ -130,8 +140,8 @@ export function TagsPage() {
                 <td data-label="关联任务数">{Number(item.taskCount || 0)}</td>
                 <td data-label="操作">
                   <div className="table-actions">
-                    <button className="btn secondary" onClick={() => edit(item)}>编辑</button>
-                    <button className="btn danger" onClick={() => { void onDelete(item.id) }}>删除</button>
+                    {canUpdateTag && <button className="btn secondary" onClick={() => edit(item)}>编辑</button>}
+                    {canDeleteTag && <button className="btn danger" onClick={() => { void onDelete(item.id) }}>删除</button>}
                   </div>
                 </td>
               </tr>
@@ -147,7 +157,7 @@ export function TagsPage() {
           <label className="required-label" htmlFor="tag-name">标签名称</label>
           <input id="tag-name" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} required />
           <div className="row-actions">
-            <button type="submit" className="btn" disabled={submitting}>{submitting ? '保存中...' : '保存'}</button>
+            <button type="submit" className="btn" disabled={submitting || (form.id ? !canUpdateTag : !canCreateTag)}>{submitting ? '保存中...' : '保存'}</button>
             <button type="button" className="btn secondary" onClick={() => setForm(initialForm)}>重置</button>
           </div>
           {formError && <p className="error">{formError}</p>}

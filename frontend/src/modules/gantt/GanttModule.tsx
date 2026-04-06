@@ -2,12 +2,13 @@ import dayjs from 'dayjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Gantt, { GanttTask } from 'frappe-gantt'
 import '../../vendor/frappe-gantt.css'
-import { api, fetchArray, fetchPage, readApiError } from '../../services/api'
+import { api, fetchArray, fetchPage, hasPermission, readApiError } from '../../services/api'
 import { STATUS_META } from '../../constants/status'
 import { Project, Task, TaskDependency } from '../../types'
 import { DataState } from '../../components/DataState'
 import { RemoteProjectMultiSelect } from '../../components/RemoteProjectMultiSelect'
 import { RemoteProjectSelect } from '../../components/RemoteProjectSelect'
+import { usePermissions } from '../../hooks/usePermissions'
 
 interface Props {
   initialProjectId?: number
@@ -81,6 +82,10 @@ const formatTaskName = (task: Task) => {
 }
 
 export function GanttModule({ initialProjectId }: Props) {
+  const permissions = usePermissions()
+  const canUpdateSchedule = hasPermission('tasks.update', permissions)
+  const canAutoResolveDependencies = hasPermission('projects.update', permissions)
+  const canEditDependencies = canUpdateSchedule && canAutoResolveDependencies
   const [scopeMode, setScopeMode] = useState<ScopeMode>('single')
   const [timelineMode, setTimelineMode] = useState<TimelineMode>('Week')
   const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>(initialProjectId ? [initialProjectId] : [])
@@ -283,6 +288,10 @@ export function GanttModule({ initialProjectId }: Props) {
   }, [tasks, scheduledTasks])
 
   const handleDateChange = useCallback((task: GanttTask, start: Date, end: Date) => {
+    if (!canUpdateSchedule) {
+      setActionError('当前账号无任务排期更新权限（tasks.update）')
+      return
+    }
     const taskId = Number(task.id)
     if (!Number.isFinite(taskId)) return
     setActionError('')
@@ -297,9 +306,13 @@ export function GanttModule({ initialProjectId }: Props) {
       })
       .catch((updateError) => setActionError(readApiError(updateError, '任务改期失败')))
       .finally(() => setSyncing(false))
-  }, [loadGanttTasks])
+  }, [canUpdateSchedule, loadGanttTasks])
 
   const handleAutoResolve = useCallback(async () => {
+    if (!canAutoResolveDependencies) {
+      setActionError('当前账号无项目更新权限（projects.update）')
+      return
+    }
     const projectIds = scopeMode === 'single'
       ? (activeProjectId ? [activeProjectId] : [])
       : Array.from(new Set(tasks.map((task) => task.projectId)))
@@ -320,9 +333,13 @@ export function GanttModule({ initialProjectId }: Props) {
     } finally {
       setSyncing(false)
     }
-  }, [scopeMode, activeProjectId, tasks, loadGanttTasks])
+  }, [canAutoResolveDependencies, scopeMode, activeProjectId, tasks, loadGanttTasks])
 
   const handleDropDependency = useCallback(async (targetTaskId: number, sourceTaskId: number) => {
+    if (!canEditDependencies) {
+      setActionError('当前账号无依赖维护权限（tasks.update + projects.update）')
+      return
+    }
     if (!targetTaskId || !sourceTaskId || targetTaskId === sourceTaskId) return
     const target = taskMapRef.current.get(targetTaskId)
     if (!target) return
@@ -349,9 +366,13 @@ export function GanttModule({ initialProjectId }: Props) {
       setSyncing(false)
       setDraggingTaskId(undefined)
     }
-  }, [loadGanttTasks])
+  }, [canEditDependencies, loadGanttTasks])
 
   const handleRemoveDependency = useCallback(async (targetTaskId: number, dependsOnTaskId: number) => {
+    if (!canEditDependencies) {
+      setActionError('当前账号无依赖维护权限（tasks.update + projects.update）')
+      return
+    }
     const target = taskMapRef.current.get(targetTaskId)
     if (!target) return
     const nextDependencies = toDependencyPayload(target.dependencies, targetTaskId)
@@ -369,7 +390,7 @@ export function GanttModule({ initialProjectId }: Props) {
     } finally {
       setSyncing(false)
     }
-  }, [loadGanttTasks])
+  }, [canEditDependencies, loadGanttTasks])
 
   useEffect(() => {
     const wrapper = ganttWrapRef.current
@@ -446,7 +467,7 @@ export function GanttModule({ initialProjectId }: Props) {
         </select>
 
         <button className="btn secondary" disabled={syncing} onClick={() => { void loadGanttTasks() }}>刷新数据</button>
-        <button className="btn" disabled={syncing} onClick={() => { void handleAutoResolve() }}>
+        <button className="btn" disabled={syncing || !canAutoResolveDependencies} onClick={() => { void handleAutoResolve() }}>
           {syncing ? '处理中...' : '自动同步依赖'}
         </button>
       </div>
@@ -535,6 +556,7 @@ export function GanttModule({ initialProjectId }: Props) {
           onDrop={(event) => {
             event.preventDefault()
             if (!dependencyTargetId || !draggingTaskId) return
+            if (!canEditDependencies) return
             void handleDropDependency(dependencyTargetId, draggingTaskId)
           }}
         >
@@ -550,8 +572,11 @@ export function GanttModule({ initialProjectId }: Props) {
                 key={task.id}
                 type="button"
                 className="btn secondary dependency-source"
-                draggable
-                onDragStart={() => setDraggingTaskId(task.id)}
+                draggable={canEditDependencies}
+                onDragStart={() => {
+                  if (!canEditDependencies) return
+                  setDraggingTaskId(task.id)
+                }}
                 onClick={() => setSelectedTaskId(task.id)}
               >
                 {task.taskNo}
@@ -570,6 +595,7 @@ export function GanttModule({ initialProjectId }: Props) {
                   type="button"
                   key={`${dependencyTarget.id}-${dependency.dependsOnTaskId}`}
                   className="btn danger"
+                  disabled={!canEditDependencies}
                   onClick={() => { void handleRemoveDependency(dependencyTarget.id, dependency.dependsOnTaskId) }}
                 >
                   解除 {dependencyTask ? `${dependencyTask.taskNo} ${dependencyTask.title}` : `#${dependency.dependsOnTaskId}`}

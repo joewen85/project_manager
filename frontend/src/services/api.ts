@@ -10,6 +10,8 @@ declare module 'axios' {
 }
 
 const token = localStorage.getItem('token') || ''
+const permissionsEventName = 'permissions:changed'
+let runtimePermissions: string[] = []
 
 export interface ApiErrorBody {
   code?: string
@@ -32,16 +34,64 @@ export const setToken = (value: string) => {
   api.defaults.headers.Authorization = `Bearer ${value}`
 }
 
+const normalizePermissionCodes = (values: string[]) => {
+  const next = new Set(values.map((item) => String(item || '').trim()).filter(Boolean))
+  for (const code of Array.from(next)) {
+    if (code.endsWith('.write')) {
+      const module = code.replace(/\.write$/, '')
+      next.add(`${module}.create`)
+      next.add(`${module}.read`)
+      next.add(`${module}.update`)
+      next.add(`${module}.delete`)
+    }
+    if (code === 'rbac.manage') {
+      next.add('rbac.create')
+      next.add('rbac.read')
+      next.add('rbac.update')
+      next.add('rbac.delete')
+    }
+    if (code === 'notifications.write') {
+      next.add('notifications.update')
+    }
+  }
+  return Array.from(next).sort()
+}
+
+export const clearPermissions = () => {
+  runtimePermissions = []
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(permissionsEventName, { detail: [] }))
+  }
+}
+
 export const setPermissions = (values: string[]) => {
-  localStorage.setItem('permissions', JSON.stringify(values))
+  runtimePermissions = normalizePermissionCodes(values)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(permissionsEventName, { detail: [...runtimePermissions] }))
+  }
 }
 
 export const getPermissions = (): string[] => {
-  try {
-    return JSON.parse(localStorage.getItem('permissions') || '[]')
-  } catch {
-    return []
+  return [...runtimePermissions]
+}
+
+export const onPermissionsChange = (listener: (permissions: string[]) => void) => {
+  if (typeof window === 'undefined') return () => {}
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent<string[]>).detail
+    listener(Array.isArray(detail) ? detail : getPermissions())
   }
+  window.addEventListener(permissionsEventName, handler as EventListener)
+  return () => window.removeEventListener(permissionsEventName, handler as EventListener)
+}
+
+export const hasPermission = (permission: string, permissions = getPermissions()) => permissions.includes(permission)
+
+export const hasAnyPermission = (candidates: string[], permissions = getPermissions()) => {
+  for (const candidate of candidates) {
+    if (permissions.includes(candidate)) return true
+  }
+  return false
 }
 
 export const buildQuery = (params: Record<string, QueryPrimitive>) => {
@@ -167,7 +217,7 @@ api.interceptors.response.use(
 
     if (status === 401) {
       localStorage.removeItem('token')
-      localStorage.removeItem('permissions')
+      clearPermissions()
       window.location.href = '/login'
       return Promise.reject(error)
     }

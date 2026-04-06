@@ -950,7 +950,7 @@ func TestNotificationFlowOnTaskAssign(t *testing.T) {
 		"name":        "notify-reader",
 		"description": "notify reader",
 		"permissionIds": []uint{
-			codeToID["projects.read"], codeToID["tasks.read"], codeToID["notifications.read"], codeToID["notifications.write"],
+			codeToID["projects.read"], codeToID["tasks.read"], codeToID["notifications.read"], codeToID["notifications.update"],
 		},
 	})
 	if roleResp.StatusCode != http.StatusCreated {
