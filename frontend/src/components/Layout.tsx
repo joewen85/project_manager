@@ -198,15 +198,12 @@ export function Layout() {
         (role.permissions || []).map((permission) => String(permission.code))
       )
       const merged = normalizePermissions(rolePermissions)
-      setPermissionState((prev) => {
-        const prevNormalized = normalizePermissions(prev)
-        if (isSamePermissions(prevNormalized, merged)) {
-          return prev
-        }
-        setPermissions(merged)
+      const current = normalizePermissions(permissionsRef.current)
+      if (!isSamePermissions(current, merged)) {
         permissionsRef.current = merged
-        return merged
-      })
+        setPermissionState(merged)
+        setPermissions(merged)
+      }
       await refreshUnreadCount(merged)
     }
 
