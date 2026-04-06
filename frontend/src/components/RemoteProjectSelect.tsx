@@ -10,6 +10,7 @@ interface RemoteProjectSelectProps {
   defaultOptionLabel?: string
   noResultsText?: string
   className?: string
+  disabled?: boolean
 }
 
 export function RemoteProjectSelect({
@@ -19,7 +20,8 @@ export function RemoteProjectSelect({
   placeholder = '',
   defaultOptionLabel = '全部项目',
   noResultsText = '没有匹配的项目',
-  className = ''
+  className = '',
+  disabled = false
 }: RemoteProjectSelectProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -44,6 +46,10 @@ export function RemoteProjectSelect({
   }, [open, resetQuery])
 
   useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
+
+  useEffect(() => {
     if (!open) return
     const handleOutside = (event: MouseEvent) => {
       const target = event.target as Node
@@ -61,6 +67,7 @@ export function RemoteProjectSelect({
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return
     const maxIndex = options.length
     if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
       setOpen(true)
@@ -111,16 +118,20 @@ export function RemoteProjectSelect({
           aria-autocomplete="list"
           value={open ? query : selectedLabel}
           placeholder={placeholder || defaultOptionLabel}
+          disabled={disabled}
           onFocus={() => {
+            if (disabled) return
             setOpen(true)
             window.requestAnimationFrame(() => inputRef.current?.select())
           }}
           onClick={() => {
+            if (disabled) return
             setOpen(true)
             window.requestAnimationFrame(() => inputRef.current?.select())
           }}
           onKeyDown={handleKeyDown}
           onChange={(event) => {
+            if (disabled) return
             setQuery(event.target.value)
             setOpen(true)
           }}
@@ -131,7 +142,9 @@ export function RemoteProjectSelect({
           aria-label={`${ariaLabel}下拉`}
           aria-haspopup="listbox"
           aria-expanded={open}
+          disabled={disabled}
           onClick={() => {
+            if (disabled) return
             if (open) {
               setOpen(false)
               return
@@ -144,7 +157,7 @@ export function RemoteProjectSelect({
         </button>
       </div>
 
-      {open && (
+      {open && !disabled && (
         <div id={listboxId} role="listbox" className="combo-menu remote-project-menu" onScroll={handleListScroll}>
           <button
             type="button"

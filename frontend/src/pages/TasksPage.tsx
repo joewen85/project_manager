@@ -11,6 +11,7 @@ import { SearchField } from '../components/SearchField'
 import { SearchableMultiSelect } from '../components/SearchableMultiSelect'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { TableHeaderFilter } from '../components/TableHeaderFilter'
+import { RemoteProjectSelect } from '../components/RemoteProjectSelect'
 import { formatDateTime } from '../utils/datetime'
 import { Project, Tag, Task, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { AttachmentField } from '../components/AttachmentField'
@@ -86,7 +87,7 @@ const taskFieldSettingsStorageKey = 'tasks_field_settings'
 const taskDefaultFieldSettings: TaskFieldSetting[] = [
   { key: 'taskNo', label: '任务编号', visible: true, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
   { key: 'title', label: '标题', visible: true, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
-  { key: 'projectName', label: '项目名称', visible: true, editable: false, sortable: false, searchable: true, filterable: true, custom: false },
+  { key: 'projectName', label: '项目名称', visible: true, editable: true, sortable: false, searchable: true, filterable: true, custom: false },
   { key: 'priority', label: '优先级', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'status', label: '状态', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'progress', label: '进度', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
@@ -117,12 +118,14 @@ const normalizeTaskFieldSettings = (raw: unknown): TaskFieldSetting[] => {
       const key = String((item as { key?: string }).key || '') as TaskColumnKey
       const base = fallbackMap.get(key)
       if (!base) return null
-      return {
+      const normalized = {
         ...base,
         ...item,
         key: base.key,
         label: base.label
       } as TaskFieldSetting
+      if (base.key === 'projectName') normalized.editable = true
+      return normalized
     })
     .filter(Boolean) as TaskFieldSetting[]
 
@@ -301,6 +304,10 @@ export function TasksPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    if (!form.projectId) {
+      setFormError('请选择项目')
+      return
+    }
     if (form.startAt && form.endAt && new Date(form.startAt) > new Date(form.endAt)) {
       setFormError('结束时间必须晚于开始时间')
       return
@@ -785,19 +792,24 @@ export function TasksPage() {
           <textarea id="task-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!isTaskFieldEditable('description')} />
           <label htmlFor="task-attachment">附件</label>
           <AttachmentField inputId="task-attachment" value={form.attachments} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
-          <label className="required-label" htmlFor="task-project">项目</label>
-          <select
-            id="task-project"
-            value={form.projectId}
-            onChange={(e) => {
-              setForm((prev) => ({ ...prev, projectId: Number(e.target.value), parentId: undefined }))
+          <label className="required-label">项目</label>
+          <RemoteProjectSelect
+            ariaLabel="任务所属项目"
+            value={form.projectId ? String(form.projectId) : ''}
+            defaultOptionLabel="请选择项目"
+            placeholder="搜索项目：编码/名称/描述"
+            noResultsText="没有匹配的项目"
+            disabled={!isTaskFieldEditable('projectName')}
+            onChange={(value) => {
+              const projectId = Number(value)
+              setForm((prev) => ({
+                ...prev,
+                projectId: Number.isFinite(projectId) && projectId > 0 ? projectId : 0,
+                parentId: undefined
+              }))
               setParentTaskInput(noParentLabel)
             }}
-            required
-            disabled={!isTaskFieldEditable('projectName')}
-          >
-            {projects.map((project) => <option key={project.id} value={project.id}>{project.code} - {project.name}</option>)}
-          </select>
+          />
           <label htmlFor="task-parent">父任务（同项目，可选）</label>
           <div className="combo-wrap" ref={parentTaskWrapRef}>
             <input
