@@ -1049,9 +1049,30 @@ func (h *Handler) MyTasks(c *gin.Context) {
 		MyParticipate: make([]model.Task, 0),
 	}
 
-	h.DB.Joins("JOIN task_users tu ON tu.task_id = tasks.id").Where("tu.user_id = ?", uid).Find(&out.MyTasks)
-	h.DB.Where("creator_id = ?", uid).Find(&out.MyCreated)
-	h.DB.Joins("JOIN task_users tu ON tu.task_id = tasks.id").Where("tu.user_id = ? AND creator_id <> ?", uid, uid).Find(&out.MyParticipate)
+	base := h.DB.Model(&model.Task{}).
+		Select("tasks.*, projects.name AS project_name").
+		Joins("LEFT JOIN projects ON projects.id = tasks.project_id")
+
+	if err := base.Session(&gorm.Session{}).
+		Joins("JOIN task_users tu ON tu.task_id = tasks.id").
+		Where("tu.user_id = ?", uid).
+		Find(&out.MyTasks).Error; err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_MY_TASKS_FAILED", err)
+		return
+	}
+	if err := base.Session(&gorm.Session{}).
+		Where("tasks.creator_id = ?", uid).
+		Find(&out.MyCreated).Error; err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_MY_TASKS_FAILED", err)
+		return
+	}
+	if err := base.Session(&gorm.Session{}).
+		Joins("JOIN task_users tu ON tu.task_id = tasks.id").
+		Where("tu.user_id = ? AND tasks.creator_id <> ?", uid, uid).
+		Find(&out.MyParticipate).Error; err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_MY_TASKS_FAILED", err)
+		return
+	}
 
 	c.JSON(http.StatusOK, out)
 }
