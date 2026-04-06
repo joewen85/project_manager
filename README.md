@@ -128,6 +128,101 @@ npm run dev
 开发模式下，`/static/uploads` 会由 Vite 代理到后端；容器模式下 `./static/uploads` 会挂载到后端容器 `/app/static/uploads`。
 项目与任务编辑表单支持：上传多个文件、上传文件夹、拖放上传；上传文件夹时会自动压缩为 ZIP 附件。
 
+## 任务通知配置（企业微信 / 钉钉 / 邮件 / 飞书）
+系统已支持任务通知多渠道推送：
+- 邮件通知（SMTP）
+- 企业微信任务通知（应用消息）
+- 钉钉任务通知（机器人 Webhook）
+- 飞书任务通知（服务端发送消息）
+
+配置原则：
+- 邮件通知可单独开启，也可与其它渠道同时开启。
+- 企业微信 / 钉钉 / 飞书 三者只能配置一种（多配时将跳过非邮件渠道发送）。
+- 任何渠道若所需环境变量缺失或为空，则该渠道不会发送通知。
+- 可通过 `TASK_NOTIFY_PROVIDER` 显式指定非邮件渠道（推荐）。
+
+推荐先配置：
+```bash
+TASK_NOTIFY_PROVIDER=wecom
+# 可选值：wecom / dingtalk / feishu / none
+# 留空时为自动识别（如同时配置多个非邮件渠道会跳过发送）
+```
+
+### 1) 邮件通知
+在 `.env` 配置：
+```bash
+SMTP_HOST=smtp.example.com
+SMTP_PORT=25
+SMTP_USERNAME=your_user
+SMTP_PASSWORD=your_password
+SMTP_FROM=no-reply@example.com
+```
+说明：
+- 仅当 `SMTP_HOST`、`SMTP_PORT`、`SMTP_FROM` 非空时启用。
+- 默认按任务执行人的用户邮箱发送。
+
+### 2) 企业微信任务通知（应用消息）
+在 `.env` 配置：
+```bash
+WECOM_CORP_ID=wwxxxxxxxxxxxxxxxx
+WECOM_CORP_SECRET=xxxxxxxxxxxxxxxx
+WECOM_AGENT_ID=1000002
+WECOM_TO_USER=@all
+```
+说明：
+- `WECOM_TO_USER` 支持 `@all` 或 `userid1|userid2`。
+- 仅当 `WECOM_CORP_ID`、`WECOM_CORP_SECRET`、`WECOM_AGENT_ID` 非空时启用。
+
+### 3) 钉钉任务通知（机器人 Webhook）
+在 `.env` 配置：
+```bash
+DINGTALK_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=xxxx
+DINGTALK_SECRET=SECxxxxxxxxxxxxxxxx
+```
+说明：
+- `DINGTALK_SECRET` 可选；如果机器人开启加签，必须配置。
+- 仅当 `DINGTALK_WEBHOOK` 非空时启用。
+
+### 4) 飞书任务通知（服务端消息）
+在 `.env` 配置：
+```bash
+FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
+FEISHU_APP_SECRET=xxxxxxxxxxxxxxxx
+FEISHU_RECEIVE_ID_TYPE=email
+FEISHU_RECEIVE_ID=
+```
+说明：
+- 仅当 `FEISHU_APP_ID`、`FEISHU_APP_SECRET` 非空时启用。
+- `FEISHU_RECEIVE_ID` 留空且 `FEISHU_RECEIVE_ID_TYPE=email` 时，按任务执行人邮箱逐个发送。
+- 若需固定接收者（如群），可设置 `FEISHU_RECEIVE_ID`（并将 `FEISHU_RECEIVE_ID_TYPE` 设为对应类型，如 `chat_id`）。
+
+### 通知自检（推荐）
+配置完 `.env` 后，可直接执行：
+```bash
+bash scripts/test-task-notify.sh auto
+```
+或使用 Make 一键执行：
+```bash
+make notify-test
+```
+也可按渠道单测：
+```bash
+bash scripts/test-task-notify.sh email
+bash scripts/test-task-notify.sh wecom
+bash scripts/test-task-notify.sh dingtalk
+bash scripts/test-task-notify.sh feishu
+```
+或：
+```bash
+make notify-test PROVIDER=email
+make notify-test PROVIDER=wecom
+make notify-test PROVIDER=dingtalk
+make notify-test PROVIDER=feishu
+```
+说明：
+- `auto` 会先测邮件（若已配置），再按 `TASK_NOTIFY_PROVIDER` 或自动识别测试一个非邮件渠道。
+- 若邮件自检需要单独收件地址，可在 `.env` 配置 `SMTP_TEST_TO`（仅脚本使用，不影响业务发送）。
+
 ## 项目计划与进度
 - 计划：`PLAN.md`
 - 进度：`PROGRESS.md`

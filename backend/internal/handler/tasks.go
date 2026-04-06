@@ -560,6 +560,14 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		return
 	}
 
+	if len(item.Assignees) > 0 {
+		assigneeIDs := make([]uint, 0, len(item.Assignees))
+		for _, assignee := range item.Assignees {
+			assigneeIDs = append(assigneeIDs, assignee.ID)
+		}
+		h.queueTaskChannelNotifications(assigneeIDs, "任务已指派给你", "任务 "+item.TaskNo+" - "+item.Title+" 已分配给你", item)
+	}
+
 	c.JSON(http.StatusCreated, item)
 }
 
@@ -619,6 +627,8 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 		return
 	}
 
+	var addedAssigneeIDs []uint
+	var removedAssigneeIDs []uint
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		var oldAssignees []model.User
 		if err := tx.Model(&item).Association("Assignees").Find(&oldAssignees); err != nil {
@@ -652,6 +662,8 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 			}
 		}
 		added, removed := diffUserIDs(req.AssigneeIDs, oldIDs)
+		addedAssigneeIDs = append([]uint(nil), added...)
+		removedAssigneeIDs = append([]uint(nil), removed...)
 		if err := h.createNotificationsWithDB(tx, added, "你被加入任务执行人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你设为执行人", "tasks", item.ID); err != nil {
 			return err
 		}
@@ -672,6 +684,13 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_FAILED", err)
 		return
+	}
+
+	if len(addedAssigneeIDs) > 0 {
+		h.queueTaskChannelNotifications(addedAssigneeIDs, "你被加入任务执行人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你设为执行人", item)
+	}
+	if len(removedAssigneeIDs) > 0 {
+		h.queueTaskChannelNotifications(removedAssigneeIDs, "你已被移出任务执行人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你移出执行人", item)
 	}
 
 	c.JSON(http.StatusOK, item)
