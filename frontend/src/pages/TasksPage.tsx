@@ -147,6 +147,7 @@ export function TasksPage() {
   const [users, setUsers] = useState<User[]>([])
   const [filterUsers, setFilterUsers] = useState<User[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [filterTags, setFilterTags] = useState<Tag[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [parentTasks, setParentTasks] = useState<Task[]>([])
   const [keyword, setKeyword] = useState('')
@@ -154,6 +155,7 @@ export function TasksPage() {
   const [assigneeFilters, setAssigneeFilters] = useState<string[]>([])
   const [statusFilters, setStatusFilters] = useState<string[]>([])
   const [priorityFilters, setPriorityFilters] = useState<string[]>([])
+  const [tagFilters, setTagFilters] = useState<string[]>([])
   const [fieldSettingsOpen, setFieldSettingsOpen] = useState(false)
   const [fieldSettings, setFieldSettings] = useState<TaskFieldSetting[]>(() => {
     try {
@@ -194,6 +196,7 @@ export function TasksPage() {
   const isAssigneeFilterEnabled = fieldSettingsMap.get('assignees')?.filterable ?? true
   const isStatusFilterEnabled = fieldSettingsMap.get('status')?.filterable ?? true
   const isPriorityFilterEnabled = fieldSettingsMap.get('priority')?.filterable ?? true
+  const isTagFilterEnabled = fieldSettingsMap.get('tags')?.filterable ?? false
   const isProgressSortable = fieldSettingsMap.get('progress')?.sortable ?? true
   const isTaskFieldEditable = (key: TaskColumnKey) => fieldSettingsMap.get(key)?.editable ?? true
   const activeFilterCount =
@@ -202,6 +205,7 @@ export function TasksPage() {
     Number(assigneeFilters.length > 0 && isAssigneeFilterEnabled) +
     Number(statusFilters.length > 0 && isStatusFilterEnabled) +
     Number(priorityFilters.length > 0 && isPriorityFilterEnabled) +
+    Number(tagFilters.length > 0 && isTagFilterEnabled) +
     Number(sortKey === 'progress' && isProgressSortable)
 
   const load = async () => {
@@ -219,6 +223,7 @@ export function TasksPage() {
             assigneeIds: isAssigneeFilterEnabled ? assigneeFilters.join(',') : '',
             statuses: isStatusFilterEnabled ? statusFilters.join(',') : '',
             priorities: isPriorityFilterEnabled ? priorityFilters.join(',') : '',
+            tagIds: isTagFilterEnabled ? tagFilters.join(',') : '',
             searchFields: searchableFields.join(','),
             sortBy: sortKey,
             sortOrder
@@ -245,7 +250,7 @@ export function TasksPage() {
 
   useEffect(() => {
     void load()
-  }, [page, pageSize, keyword, projectFilter, assigneeFilters, statusFilters, priorityFilters, sortKey, sortOrder, searchableFields, isProjectFilterEnabled, isAssigneeFilterEnabled, isStatusFilterEnabled, isPriorityFilterEnabled])
+  }, [page, pageSize, keyword, projectFilter, assigneeFilters, statusFilters, priorityFilters, tagFilters, sortKey, sortOrder, searchableFields, isProjectFilterEnabled, isAssigneeFilterEnabled, isStatusFilterEnabled, isPriorityFilterEnabled, isTagFilterEnabled])
 
   useEffect(() => {
     if (sortKey !== 'progress') return
@@ -259,6 +264,12 @@ export function TasksPage() {
     void fetchData<{ users?: User[] }>('/tasks/assignee-options', { pageSize: 100 }, { silent: true })
       .then((data) => setFilterUsers(data?.users || []))
       .catch(() => setFilterUsers([]))
+  }, [])
+
+  useEffect(() => {
+    void fetchPage<Tag>('/tags', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true })
+      .then((data) => setFilterTags(data.list || []))
+      .catch(() => setFilterTags([]))
   }, [])
 
   useEffect(() => {
@@ -469,6 +480,22 @@ export function TasksPage() {
     Object.entries(priorityLabel).map(([value, label]) => ({ value, label }))
   ), [])
 
+  const tagFilterOptions = useMemo(() => {
+    const optionMap = new Map<string, { value: string; label: string; keywords: string[] }>()
+    filterTags.forEach((tag) => {
+      optionMap.set(String(tag.id), { value: String(tag.id), label: tag.name, keywords: [tag.name] })
+    })
+    tasks.forEach((task) => {
+      ;(task.tags || []).forEach((tag) => {
+        const key = String(tag.id)
+        if (!optionMap.has(key)) {
+          optionMap.set(key, { value: key, label: tag.name, keywords: [tag.name] })
+        }
+      })
+    })
+    return Array.from(optionMap.values()).sort((left, right) => left.label.localeCompare(right.label, 'zh-CN'))
+  }, [filterTags, tasks])
+
   const normalizedTagKeyword = tagKeyword.trim().toLowerCase()
   const canCreateTagFromKeyword = Boolean(normalizedTagKeyword) && !tags.some((tag) => tag.name.trim().toLowerCase() === normalizedTagKeyword)
   const hasTagSearchKeyword = Boolean(tagKeyword.trim())
@@ -509,6 +536,8 @@ export function TasksPage() {
       content = <TableHeaderFilter label="优先级" values={priorityFilters} options={priorityFilterOptions} onChange={(values) => { setPriorityFilters(values); setPage(1) }} placeholder="搜索优先级" noResultsText="没有匹配的优先级" />
     } else if (key === 'status' && isStatusFilterEnabled) {
       content = <TableHeaderFilter label="状态" values={statusFilters} options={statusFilterOptions} onChange={(values) => { setStatusFilters(values); setPage(1) }} placeholder="搜索状态" noResultsText="没有匹配的状态" />
+    } else if (key === 'tags' && isTagFilterEnabled) {
+      content = <TableHeaderFilter label="标签" values={tagFilters} options={tagFilterOptions} onChange={(values) => { setTagFilters(values); setPage(1) }} placeholder="搜索标签" noResultsText="没有匹配的标签" />
     } else if (key === 'progress' && isProgressSortable) {
       content = (
         <button type="button" className={`table-header-sort-trigger${sortKey === 'progress' ? ' active' : ''}`} onClick={toggleProgressSort}>

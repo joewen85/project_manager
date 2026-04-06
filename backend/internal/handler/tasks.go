@@ -414,6 +414,9 @@ func (h *Handler) ListTasks(c *gin.Context) {
 	if assigneeIDs := parseProjectIDs(c.Query("assigneeIds")); len(assigneeIDs) > 0 {
 		query = query.Where("EXISTS (SELECT 1 FROM task_users task_filter_users WHERE task_filter_users.task_id = tasks.id AND task_filter_users.user_id IN ?)", assigneeIDs)
 	}
+	if tagIDs := parseProjectIDs(c.Query("tagIds")); len(tagIDs) > 0 {
+		query = query.Where("EXISTS (SELECT 1 FROM task_tags task_filter_tags WHERE task_filter_tags.task_id = tasks.id AND task_filter_tags.tag_id IN ?)", tagIDs)
+	}
 	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
 		like := "%" + keyword + "%"
 		whereClause, args := buildTaskKeywordQuery(like, parseCSVValues(c.Query("searchFields")))

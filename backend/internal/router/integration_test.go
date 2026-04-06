@@ -618,6 +618,28 @@ func TestTagCRUDAndTaskRelationFlow(t *testing.T) {
 	if taskBody["customField1"] != "扩展内容1" || taskBody["customField2"] != "扩展内容2" || taskBody["customField3"] != "扩展内容3" {
 		t.Fatalf("task custom fields unexpected: %v %v %v", taskBody["customField1"], taskBody["customField2"], taskBody["customField3"])
 	}
+	taggedTaskID := int(taskBody["id"].(float64))
+
+	plainTaskResp, plainTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", token, map[string]any{
+		"title":     "无标签任务",
+		"projectId": projectID,
+	})
+	if plainTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create plain task status expected 201 got %d, body=%v", plainTaskResp.StatusCode, plainTaskBody)
+	}
+
+	filteredTaskResp, filteredTaskBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks?page=1&pageSize=20&tagIds="+strconv.Itoa(tagID), token, nil)
+	if filteredTaskResp.StatusCode != http.StatusOK {
+		t.Fatalf("filter tasks by tag status expected 200 got %d", filteredTaskResp.StatusCode)
+	}
+	filteredTaskList, _ := filteredTaskBody["list"].([]any)
+	if len(filteredTaskList) != 1 {
+		t.Fatalf("filter tasks by tag expected 1 got %d", len(filteredTaskList))
+	}
+	filteredTask, _ := filteredTaskList[0].(map[string]any)
+	if int(filteredTask["id"].(float64)) != taggedTaskID {
+		t.Fatalf("filter tasks by tag returned unexpected task id=%v", filteredTask["id"])
+	}
 
 	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tags?page=1&pageSize=20", token, nil)
 	if listResp.StatusCode != http.StatusOK {
