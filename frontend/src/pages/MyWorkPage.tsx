@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { fetchData, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
-import { MyWorkData } from '../types'
+import { MyWorkData, Task } from '../types'
 
 const emptyMyWorkData = (): MyWorkData => ({
   myTasks: [],
@@ -38,6 +39,22 @@ export function MyWorkPage() {
 
   useEffect(() => { void load() }, [])
 
+  const renderTaskList = (tasks: Task[], emptyText: string) => {
+    if (tasks.length === 0) return <p className="my-work-empty">{emptyText}</p>
+    return (
+      <ul className="my-work-list">
+        {tasks.map((task) => (
+          <li key={task.id}>
+            <Link className="my-work-link" to={`/tasks?taskId=${task.id}&view=1`}>
+              <span className="my-work-task-no">{task.taskNo || '-'}</span>
+              <span className="my-work-task-title">{task.title || '未命名任务'}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
   return (
     <section className="page-section">
       <DataState loading={loading} error={error} onRetry={() => { void load() }} />
@@ -46,7 +63,18 @@ export function MyWorkPage() {
         <article className="card metric-card"><p>我的创建</p><strong>{data.myCreated.length}</strong></article>
         <article className="card metric-card"><p>我的参与</p><strong>{data.myParticipate.length}</strong></article>
       </div>
-      <div className="card"><h3>我的任务编号</h3><p>{data.myTasks.map((t) => t.taskNo).join(' / ') || '暂无'}</p></div>
+      <div className="card">
+        <h3>我的任务</h3>
+        {renderTaskList(data.myTasks, '暂无任务')}
+      </div>
+      <div className="card">
+        <h3>我的创建</h3>
+        {renderTaskList(data.myCreated, '暂无创建任务')}
+      </div>
+      <div className="card">
+        <h3>我的参与</h3>
+        {renderTaskList(data.myParticipate, '暂无参与任务')}
+      </div>
     </section>
   )
 }

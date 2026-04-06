@@ -319,6 +319,36 @@ button, input, select, textarea { max-width: 100%; font: inherit; }
 .card strong { font-size: 24px; }
 .metric-card p { color: var(--color-text-muted); margin: 0 0 6px; }
 .metric-card strong { font-size: 28px; }
+.my-work-empty { margin: 0; color: var(--color-text-muted); }
+.my-work-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.my-work-link {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: var(--color-text);
+  transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard);
+}
+.my-work-link:hover {
+  border-color: color-mix(in oklab, var(--color-primary) 40%, var(--color-border));
+  background: color-mix(in oklab, var(--color-primary) 8%, transparent);
+}
+.my-work-link:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-focus);
+}
+.my-work-task-no {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.my-work-task-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
 
 .charts { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .chart-card { min-height: 320px; }
