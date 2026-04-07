@@ -2,6 +2,7 @@ import { BarChart3, Bell, Building2, CalendarRange, FolderKanban, KeyRound, List
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, clearPermissions, fetchData, fetchPage, getPermissions, hasPermission, readApiError, setPermissions } from '../services/api'
+import { subscribeNotificationSocket } from '../services/notificationsSocket'
 import { Modal } from './Modal'
 import { Notification, Role } from '../types'
 
@@ -37,6 +38,29 @@ interface ChangePasswordForm {
 }
 
 const createEmptyChangePasswordForm = (): ChangePasswordForm => ({ oldPassword: '', newPassword: '', confirmPassword: '' })
+
+const buildNotificationSocketUrl = () => {
+  const token = localStorage.getItem('token')
+  if (!token) return ''
+
+  const baseURLRaw = String(import.meta.env.VITE_API_BASE_URL || '/api/v1').trim()
+  if (!baseURLRaw) return ''
+
+  try {
+    const apiURL = /^https?:\/\//i.test(baseURLRaw)
+      ? new URL(baseURLRaw)
+      : new URL(baseURLRaw.startsWith('/') ? baseURLRaw : `/${baseURLRaw}`, window.location.origin)
+
+    const basePath = apiURL.pathname.replace(/\/+$/, '')
+    const wsURL = new URL(apiURL.origin)
+    wsURL.pathname = `${basePath}/notifications/ws`
+    wsURL.protocol = apiURL.protocol === 'https:' ? 'wss:' : 'ws:'
+    wsURL.searchParams.set('token', token)
+    return wsURL.toString()
+  } catch {
+    return ''
+  }
+}
 
 export function Layout() {
   const isLegacyNotificationsApiEnabled = () => localStorage.getItem('notifications_api_enabled') !== 'false'
@@ -204,7 +228,6 @@ export function Layout() {
         setPermissionState(merged)
         setPermissions(merged)
       }
-      await refreshUnreadCount(merged)
     }
 
     void refreshProfile().catch((error) => {
@@ -213,16 +236,19 @@ export function Layout() {
     const profileTimer = window.setInterval(() => {
       void refreshProfile().catch(() => {})
     }, 60000)
-    const unreadTimer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        void refreshUnreadCount(permissionsRef.current.length ? permissionsRef.current : getPermissions())
-      }
-    }, 20000)
     return () => {
       window.clearInterval(profileTimer)
-      window.clearInterval(unreadTimer)
     }
-  }, [isSamePermissions, normalizePermissions, refreshUnreadCount])
+  }, [isSamePermissions, normalizePermissions])
+
+  useEffect(() => {
+    if (!hasNotificationAccess) return
+    const socketURL = buildNotificationSocketUrl()
+    if (!socketURL) return
+    return subscribeNotificationSocket(socketURL, () => {
+      window.dispatchEvent(new Event('notifications:changed'))
+    })
+  }, [hasNotificationAccess])
 
   useEffect(() => {
     const handler = () => {
@@ -235,7 +261,7 @@ export function Layout() {
     }
     window.addEventListener('notifications:changed', handler as EventListener)
     return () => window.removeEventListener('notifications:changed', handler as EventListener)
-  }, [permissions, refreshUnreadCount, refreshLatestNotifications, notificationMenuOpen, location.pathname])
+  }, [refreshUnreadCount, refreshLatestNotifications, notificationMenuOpen, location.pathname])
 
   useEffect(() => {
     if (!isNotificationsListApiEnabled()) return

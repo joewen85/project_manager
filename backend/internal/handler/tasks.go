@@ -559,6 +559,7 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		respondDBError(c, http.StatusBadRequest, "CREATE_TASK_FAILED", err)
 		return
 	}
+	h.pushNotificationUpdates(req.AssigneeIDs)
 
 	if len(item.Assignees) > 0 {
 		assigneeIDs := make([]uint, 0, len(item.Assignees))
@@ -692,6 +693,7 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	if len(removedAssigneeIDs) > 0 {
 		h.queueTaskChannelNotifications(removedAssigneeIDs, "你已被移出任务执行人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你移出执行人", item)
 	}
+	h.pushNotificationUpdates(append(addedAssigneeIDs, removedAssigneeIDs...))
 
 	c.JSON(http.StatusOK, item)
 }

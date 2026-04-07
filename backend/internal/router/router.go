@@ -40,6 +40,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 	api := r.Group("/api/v1")
 	{
 		api.POST("/auth/login", h.Login)
+		api.GET("/notifications/ws", h.NotificationSocket)
 	}
 
 	authGroup := api.Group("")

@@ -216,6 +216,11 @@ Base URL: `http://localhost:8080/api/v1`
 
 ### PATCH `/notifications/read-all`
 
+### GET `/notifications/ws`
+- WebSocket 实时通知通道（不再依赖前端定时轮询）
+- 认证：`?token=<JWT>`（或 `Authorization: Bearer <JWT>`）
+- 事件：`{"type":"notifications.updated","at":"<RFC3339Nano>"}`
+
 ## 审计日志
 
 ### GET `/audit/logs`

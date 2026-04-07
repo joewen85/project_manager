@@ -30,7 +30,9 @@ func uniqueUint(values []uint) []uint {
 }
 
 func (h *Handler) createNotifications(userIDs []uint, title, content, module string, targetID uint) {
-	_ = h.createNotificationsWithDB(h.DB, userIDs, title, content, module, targetID)
+	if err := h.createNotificationsWithDB(h.DB, userIDs, title, content, module, targetID); err == nil {
+		h.pushNotificationUpdates(userIDs)
+	}
 }
 
 func (h *Handler) createNotificationsWithDB(db *gorm.DB, userIDs []uint, title, content, module string, targetID uint) error {
@@ -104,6 +106,7 @@ func (h *Handler) MarkNotificationRead(c *gin.Context) {
 		respondDBError(c, http.StatusInternalServerError, "MARK_NOTIFICATION_READ_FAILED", err)
 		return
 	}
+	h.pushNotificationUpdates([]uint{uid})
 	c.JSON(http.StatusOK, item)
 }
 
@@ -113,5 +116,6 @@ func (h *Handler) MarkAllNotificationsRead(c *gin.Context) {
 		respondDBError(c, http.StatusInternalServerError, "MARK_ALL_NOTIFICATIONS_READ_FAILED", err)
 		return
 	}
+	h.pushNotificationUpdates([]uint{uid})
 	respondMessage(c, http.StatusOK, "NOTIFICATIONS_MARKED_READ", "已全部标记为已读")
 }

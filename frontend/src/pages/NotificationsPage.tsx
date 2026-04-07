@@ -68,17 +68,23 @@ export function NotificationsPage() {
     void load()
   }, [page, pageSize, isReadFilter, moduleFilter, keyword])
 
+  useEffect(() => {
+    const handler = () => {
+      void load()
+    }
+    window.addEventListener('notifications:changed', handler as EventListener)
+    return () => window.removeEventListener('notifications:changed', handler as EventListener)
+  }, [page, pageSize, isReadFilter, moduleFilter, keyword])
+
   const markRead = async (id: number) => {
     if (!canUpdateNotifications) return
     await api.patch(`/notifications/${id}/read`)
-    await load()
     window.dispatchEvent(new Event('notifications:changed'))
   }
 
   const markAllRead = async () => {
     if (!canUpdateNotifications) return
     await api.patch('/notifications/read-all')
-    await load()
     window.dispatchEvent(new Event('notifications:changed'))
   }
 

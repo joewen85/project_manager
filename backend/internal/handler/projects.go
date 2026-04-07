@@ -220,6 +220,7 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		respondDBError(c, http.StatusBadRequest, "CREATE_PROJECT_FAILED", err)
 		return
 	}
+	h.pushNotificationUpdates(req.UserIDs)
 
 	c.JSON(http.StatusCreated, item)
 }
@@ -271,6 +272,8 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		item.Attachment = firstModelAttachment(modelAttachments)
 		item.Attachments = modelAttachments
 	}
+	var addedUsers []uint
+	var removedUsers []uint
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		var oldUsers []model.User
 		if err := tx.Model(&item).Association("Users").Find(&oldUsers); err != nil {
@@ -292,7 +295,7 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		if err := replaceAssociation(tx, &item, "Users", &users); err != nil {
 			return err
 		}
-		addedUsers, removedUsers := diffUserIDs(req.UserIDs, oldUserIDs)
+		addedUsers, removedUsers = diffUserIDs(req.UserIDs, oldUserIDs)
 		if err := h.createNotificationsWithDB(tx, addedUsers, "你被加入项目负责人", "项目 "+item.Code+" - "+item.Name+" 已将你设为负责人", "projects", item.ID); err != nil {
 			return err
 		}
@@ -319,6 +322,7 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_PROJECT_FAILED", err)
 		return
 	}
+	h.pushNotificationUpdates(append(addedUsers, removedUsers...))
 
 	c.JSON(http.StatusOK, item)
 }
