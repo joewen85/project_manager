@@ -12,6 +12,7 @@ import { FieldSettingItem, FieldSettingsModal } from '../components/FieldSetting
 import { SearchField } from '../components/SearchField'
 import { formatDateTime } from '../utils/datetime'
 import { AttachmentField } from '../components/AttachmentField'
+import { DateTimeQuickField } from '../components/DateTimeQuickField'
 import { usePermissions } from '../hooks/usePermissions'
 
 interface ProjectForm {
@@ -435,9 +436,19 @@ export function ProjectsPage() {
           <label htmlFor="project-attachment">附件</label>
           <AttachmentField inputId="project-attachment" value={form.attachments} disabled={!canUploadAttachment} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
           <label htmlFor="project-start">开始时间</label>
-          <input id="project-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} disabled={!isProjectFieldEditable('startAt')} />
+          <DateTimeQuickField
+            inputId="project-start"
+            value={form.startAt}
+            disabled={!isProjectFieldEditable('startAt')}
+            onChange={(value) => setForm((prev) => ({ ...prev, startAt: value }))}
+          />
           <label htmlFor="project-end">结束时间</label>
-          <input id="project-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} disabled={!isProjectFieldEditable('endAt')} />
+          <DateTimeQuickField
+            inputId="project-end"
+            value={form.endAt}
+            disabled={!isProjectFieldEditable('endAt')}
+            onChange={(value) => setForm((prev) => ({ ...prev, endAt: value }))}
+          />
           <label htmlFor="project-users">项目负责人</label>
           <SearchField aria-label="搜索负责人" placeholder="搜索负责人：姓名/用户名/邮箱" value={ownerKeyword} onChange={setOwnerKeyword} disabled={!isProjectFieldEditable('owners')} />
           <div id="project-users" className="multi-checklist">

@@ -15,6 +15,7 @@ import { RemoteProjectSelect } from '../components/RemoteProjectSelect'
 import { formatDateTime } from '../utils/datetime'
 import { Project, Tag, Task, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { AttachmentField } from '../components/AttachmentField'
+import { DateTimeQuickField } from '../components/DateTimeQuickField'
 import { usePermissions } from '../hooks/usePermissions'
 
 const statusLabel: Record<string, string> = {
@@ -92,7 +93,7 @@ const taskDefaultFieldSettings: TaskFieldSetting[] = [
   { key: 'priority', label: '优先级', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'status', label: '状态', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'progress', label: '进度', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
-  { key: 'tags', label: '标签', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'tags', label: '标签', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'startAt', label: '开始', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
   { key: 'endAt', label: '结束', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
   { key: 'assignees', label: '执行人', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
@@ -119,14 +120,12 @@ const normalizeTaskFieldSettings = (raw: unknown): TaskFieldSetting[] => {
       const key = String((item as { key?: string }).key || '') as TaskColumnKey
       const base = fallbackMap.get(key)
       if (!base) return null
-      const normalized = {
+      return {
         ...base,
         ...item,
         key: base.key,
         label: base.label
       } as TaskFieldSetting
-      if (base.key === 'projectName') normalized.editable = true
-      return normalized
     })
     .filter(Boolean) as TaskFieldSetting[]
 
@@ -1000,9 +999,19 @@ export function TasksPage() {
             {!canCreateTagFromKeyword && tags.length === 0 && <p className="inline-tip">暂无匹配标签，请输入名称后直接新增。</p>}
           </div>
           <label htmlFor="task-start">开始时间</label>
-          <input id="task-start" type="datetime-local" value={form.startAt} onChange={(e) => setForm((prev) => ({ ...prev, startAt: e.target.value }))} disabled={!isTaskFieldEditable('startAt')} />
+          <DateTimeQuickField
+            inputId="task-start"
+            value={form.startAt}
+            disabled={!isTaskFieldEditable('startAt')}
+            onChange={(value) => setForm((prev) => ({ ...prev, startAt: value }))}
+          />
           <label htmlFor="task-end">结束时间</label>
-          <input id="task-end" type="datetime-local" value={form.endAt} onChange={(e) => setForm((prev) => ({ ...prev, endAt: e.target.value }))} disabled={!isTaskFieldEditable('endAt')} />
+          <DateTimeQuickField
+            inputId="task-end"
+            value={form.endAt}
+            disabled={!isTaskFieldEditable('endAt')}
+            onChange={(value) => setForm((prev) => ({ ...prev, endAt: value }))}
+          />
           <label htmlFor="task-milestone">里程碑</label>
           <select id="task-milestone" value={form.isMilestone ? '1' : '0'} onChange={(e) => setForm((prev) => ({ ...prev, isMilestone: e.target.value === '1' }))}>
             <option value="0">否</option>
