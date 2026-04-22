@@ -69,16 +69,16 @@ const toDependencyPayload = (dependencies: TaskDependency[] | undefined, fallbac
   }))
 }
 
+const formatAssigneeNames = (assignees: Task['assignees']) => {
+  const names = (assignees || [])
+    .map((assignee) => (assignee.name || assignee.username || '').trim())
+    .filter(Boolean)
+  return names.length > 0 ? names.join(',') : '未分配'
+}
+
 const formatTaskName = (task: Task) => {
-  if (!task.startAt || !task.endAt) return `${task.taskNo} ${task.title}`
-  const durationDays = Math.max(dayjs(task.endAt).diff(dayjs(task.startAt), 'day'), 1)
-  if (durationDays <= 2) return task.taskNo
-  if (durationDays <= 4) {
-    const shortTitle = (task.title || '').trim()
-    const compact = shortTitle.length > 8 ? `${shortTitle.slice(0, 8)}…` : shortTitle
-    return compact ? `${task.taskNo} ${compact}` : task.taskNo
-  }
-  return `${task.taskNo} ${task.title}`
+  const title = (task.title || '').trim() || task.taskNo
+  return `${title}-${formatAssigneeNames(task.assignees)}`
 }
 
 export function GanttModule({ initialProjectId }: Props) {
@@ -545,7 +545,7 @@ export function GanttModule({ initialProjectId }: Props) {
         >
           {tasks.map((task) => (
             <option key={task.id} value={task.id}>
-              {task.taskNo} {task.title}
+              {formatTaskName(task)}
             </option>
           ))}
         </select>
@@ -561,7 +561,7 @@ export function GanttModule({ initialProjectId }: Props) {
           }}
         >
           <strong>目标任务：</strong>
-          <span>{dependencyTarget ? `${dependencyTarget.taskNo} ${dependencyTarget.title}` : '请选择目标任务'}</span>
+          <span>{dependencyTarget ? formatTaskName(dependencyTarget) : '请选择目标任务'}</span>
         </div>
 
         <div className="dependency-source-grid">
@@ -579,7 +579,7 @@ export function GanttModule({ initialProjectId }: Props) {
                 }}
                 onClick={() => setSelectedTaskId(task.id)}
               >
-                {task.taskNo}
+                {formatTaskName(task)}
               </button>
             ))}
         </div>
@@ -598,7 +598,7 @@ export function GanttModule({ initialProjectId }: Props) {
                   disabled={!canEditDependencies}
                   onClick={() => { void handleRemoveDependency(dependencyTarget.id, dependency.dependsOnTaskId) }}
                 >
-                  解除 {dependencyTask ? `${dependencyTask.taskNo} ${dependencyTask.title}` : `#${dependency.dependsOnTaskId}`}
+                  解除 {dependencyTask ? formatTaskName(dependencyTask) : `#${dependency.dependsOnTaskId}`}
                 </button>
               )
             })}
