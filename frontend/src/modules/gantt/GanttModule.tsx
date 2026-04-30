@@ -16,6 +16,8 @@ interface Props {
 
 type ScopeMode = 'single' | 'portfolio'
 type TimelineMode = 'Day' | 'Week' | 'Month'
+type GanttDisplayMode = 'timeline' | 'grouped'
+type GanttGroupMode = 'assignee' | 'status'
 
 const timelineModes: TimelineMode[] = ['Day', 'Week', 'Month']
 
@@ -25,6 +27,14 @@ interface RiskItem {
   title: string
   projectName: string
   slackDays: number
+}
+
+interface GanttGroupRow {
+  key: string
+  label: string
+  tasks: Task[]
+  completedCount: number
+  avgProgress: number
 }
 
 const priorityLabel: Record<string, string> = {
@@ -81,6 +91,14 @@ const formatTaskName = (task: Task) => {
   return `${title}-${formatAssigneeNames(task.assignees)}`
 }
 
+const formatTaskPeriod = (task: Task) => {
+  if (!task.startAt || !task.endAt) return '未排期'
+  const start = dayjs(task.startAt)
+  const end = dayjs(task.endAt)
+  if (!start.isValid() || !end.isValid() || !end.isAfter(start)) return '未排期'
+  return `${start.format('YYYY-MM-DD')} ~ ${end.format('YYYY-MM-DD')}`
+}
+
 export function GanttModule({ initialProjectId }: Props) {
   const permissions = usePermissions()
   const canUpdateSchedule = hasPermission('tasks.update', permissions)
@@ -88,6 +106,9 @@ export function GanttModule({ initialProjectId }: Props) {
   const canEditDependencies = canUpdateSchedule && canAutoResolveDependencies
   const [scopeMode, setScopeMode] = useState<ScopeMode>('single')
   const [timelineMode, setTimelineMode] = useState<TimelineMode>('Week')
+  const [displayMode, setDisplayMode] = useState<GanttDisplayMode>('timeline')
+  const [groupMode, setGroupMode] = useState<GanttGroupMode>('assignee')
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>(initialProjectId ? [initialProjectId] : [])
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(false)
@@ -162,11 +183,71 @@ export function GanttModule({ initialProjectId }: Props) {
     taskMapRef.current = new Map(tasks.map((task) => [task.id, task]))
   }, [tasks])
 
+  useEffect(() => {
+    if (tasks.length === 0) {
+      if (selectedTaskId !== undefined) setSelectedTaskId(undefined)
+      return
+    }
+    if (!Number.isFinite(selectedTaskId) || !tasks.some((task) => task.id === selectedTaskId)) {
+      setSelectedTaskId(tasks[0].id)
+    }
+  }, [tasks, selectedTaskId])
+
   const scheduledTasks = useMemo(
     () => tasks.filter((task) => task.startAt && task.endAt && dayjs(task.endAt).isAfter(dayjs(task.startAt))),
     [tasks]
   )
   const unscheduledCount = tasks.length - scheduledTasks.length
+  const isFlatStructure = useMemo(
+    () => tasks.length > 0 && !tasks.some((task) => Number(task.parentId || 0) > 0),
+    [tasks]
+  )
+
+  useEffect(() => {
+    if (isFlatStructure) setDisplayMode('grouped')
+  }, [isFlatStructure])
+
+  const groupedTaskRows = useMemo<GanttGroupRow[]>(() => {
+    const map = new Map<string, { label: string; taskMap: Map<number, Task> }>()
+    tasks.forEach((task) => {
+      if (groupMode === 'status') {
+        const key = `status:${task.status}`
+        const label = STATUS_META[task.status]?.label || task.status
+        const current = map.get(key) || { label, taskMap: new Map<number, Task>() }
+        current.taskMap.set(task.id, task)
+        map.set(key, current)
+        return
+      }
+
+      const assignees = task.assignees && task.assignees.length > 0
+        ? task.assignees.map((assignee) => (assignee.name || assignee.username || '未分配').trim() || '未分配')
+        : ['未分配']
+      assignees.forEach((assignee) => {
+        const key = `assignee:${assignee}`
+        const current = map.get(key) || { label: assignee, taskMap: new Map<number, Task>() }
+        current.taskMap.set(task.id, task)
+        map.set(key, current)
+      })
+    })
+
+    return Array.from(map.entries())
+      .map(([key, entry]) => {
+        const rows = Array.from(entry.taskMap.values()).sort((left, right) => {
+          const leftStart = left.startAt ? dayjs(left.startAt).valueOf() : Number.POSITIVE_INFINITY
+          const rightStart = right.startAt ? dayjs(right.startAt).valueOf() : Number.POSITIVE_INFINITY
+          if (leftStart !== rightStart) return leftStart - rightStart
+          return left.id - right.id
+        })
+        const completedCount = rows.filter((task) => task.status === 'completed').length
+        const avgProgress = rows.length > 0
+          ? Math.round(rows.reduce((sum, task) => sum + Math.max(0, Math.min(100, Number(task.progress || 0))), 0) / rows.length)
+          : 0
+        return { key, label: entry.label, tasks: rows, completedCount, avgProgress }
+      })
+      .sort((left, right) => right.tasks.length - left.tasks.length)
+  }, [tasks, groupMode])
+
+  const toggleGroup = (key: string) => setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }))
 
   const frappeTasks = useMemo<GanttTask[]>(() => {
     return scheduledTasks.map((task) => ({
@@ -393,6 +474,11 @@ export function GanttModule({ initialProjectId }: Props) {
   }, [canEditDependencies, loadGanttTasks])
 
   useEffect(() => {
+    if (displayMode !== 'timeline') {
+      ganttRef.current = null
+      return
+    }
+
     const wrapper = ganttWrapRef.current
     if (!wrapper) return
 
@@ -409,7 +495,10 @@ export function GanttModule({ initialProjectId }: Props) {
       language: 'zh',
       move_dependencies: true,
       readonly_progress: true,
-      on_click: (task) => setSelectedTaskId(Number(task.id)),
+      on_click: (task) => {
+        const taskId = Number(task.id)
+        if (Number.isFinite(taskId)) setSelectedTaskId(taskId)
+      },
       on_date_change: handleDateChange
     })
     ganttRef.current = instance
@@ -417,7 +506,7 @@ export function GanttModule({ initialProjectId }: Props) {
       wrapper.innerHTML = ''
       ganttRef.current = null
     }
-  }, [frappeTasks, timelineMode, handleDateChange])
+  }, [displayMode, frappeTasks, timelineMode, handleDateChange])
 
   const dependencyTarget = tasks.find((task) => task.id === dependencyTargetId)
 
@@ -514,8 +603,125 @@ export function GanttModule({ initialProjectId }: Props) {
 
       <div className="card gantt-main-card data-viz-card">
         <h3>工程项目甘特图</h3>
+        <div className="gantt-view-toolbar">
+          <select
+            aria-label="甘特显示模式"
+            value={displayMode}
+            onChange={(event) => setDisplayMode(event.target.value as GanttDisplayMode)}
+          >
+            <option value="timeline">时间轴模式</option>
+            <option value="grouped">分组进度模式</option>
+          </select>
+          {displayMode === 'grouped' && (
+            <select
+              aria-label="分组方式"
+              value={groupMode}
+              onChange={(event) => setGroupMode(event.target.value as GanttGroupMode)}
+            >
+              <option value="assignee">按执行人分组</option>
+              <option value="status">按状态分组</option>
+            </select>
+          )}
+          {isFlatStructure && <span className="helper-text">当前无子任务结构，默认使用分组进度模式</span>}
+        </div>
         <DataState loading={loading} error={error} empty={!loading && !error && tasks.length === 0} emptyText="暂无甘特图任务" onRetry={() => { void loadGanttTasks() }} />
-        {!loading && !error && tasks.length > 0 && <div className="pm-gantt-shell data-viz-surface" ref={ganttWrapRef} />}
+        {!loading && !error && tasks.length > 0 && displayMode === 'timeline' && <div className="pm-gantt-shell data-viz-surface" ref={ganttWrapRef} />}
+        {!loading && !error && tasks.length > 0 && displayMode === 'grouped' && (
+          <div className="gantt-group-board">
+            {groupedTaskRows.length === 0 && <p className="helper-text">暂无可展示任务</p>}
+            {groupedTaskRows.map((group, index) => {
+              const isExpanded = expandedGroups[group.key] ?? index === 0
+              const groupScheduledTasks = group.tasks.filter((task) => task.startAt && task.endAt && dayjs(task.endAt).isAfter(dayjs(task.startAt)))
+              const groupTimelineRange = groupScheduledTasks.length > 0
+                ? (() => {
+                  const minTime = Math.min(...groupScheduledTasks.map((task) => dayjs(task.startAt).valueOf()))
+                  const maxTime = Math.max(...groupScheduledTasks.map((task) => dayjs(task.endAt).valueOf()))
+                  const start = dayjs(minTime)
+                  const end = dayjs(maxTime)
+                  return { start, totalDays: Math.max(end.diff(start, 'day'), 1) }
+                })()
+                : undefined
+              return (
+                <section key={group.key} className="gantt-group-card">
+                  <button type="button" className="gantt-group-header" onClick={() => toggleGroup(group.key)}>
+                    <strong>{group.label}</strong>
+                    <span>{group.tasks.length} 个任务</span>
+                    <span>完成 {group.completedCount}</span>
+                    <span>平均进度 {group.avgProgress}%</span>
+                    <span>{isExpanded ? '收起' : '展开'}</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="gantt-group-list">
+                      {group.tasks.map((task) => {
+                        const progress = Math.max(0, Math.min(100, Number(task.progress || 0)))
+                        const statusMeta = STATUS_META[task.status] || STATUS_META.pending
+                        const startAt = task.startAt ? dayjs(task.startAt) : undefined
+                        const endAt = task.endAt ? dayjs(task.endAt) : undefined
+                        const hasSchedule = Boolean(
+                          groupTimelineRange &&
+                          startAt &&
+                          endAt &&
+                          endAt.isAfter(startAt)
+                        )
+                        const rawMarginLeftPercent = hasSchedule
+                          ? (startAt!.diff(groupTimelineRange!.start, 'day') / groupTimelineRange!.totalDays) * 100
+                          : 0
+                        const durationDays = hasSchedule
+                          ? Math.max(endAt!.diff(startAt!, 'day'), 1)
+                          : 0
+                        const rawWidthPercent = hasSchedule
+                          ? (durationDays / groupTimelineRange!.totalDays) * 100
+                          : 0
+                        const widthPercent = hasSchedule ? Math.max(rawWidthPercent, 8) : 0
+                        const marginLeftPercent = hasSchedule
+                          ? Math.min(rawMarginLeftPercent, Math.max(0, 100 - widthPercent))
+                          : 0
+
+                        return (
+                          <div
+                            key={task.id}
+                            className={`gantt-row gantt-group-row${selectedTaskId === task.id ? ' gantt-group-row--active' : ''}`}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedTaskId(task.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                setSelectedTaskId(task.id)
+                              }
+                            }}
+                          >
+                            <span className="gantt-label">
+                              {formatTaskName(task)}
+                              <em className="status-dot" style={{ background: statusMeta.color }}>{statusMeta.label}</em>
+                              <small className="gantt-row-period">{formatTaskPeriod(task)}</small>
+                            </span>
+                            <div className="gantt-track">
+                              {hasSchedule ? (
+                                <div
+                                  className="gantt-bar"
+                                  style={{ marginLeft: `${marginLeftPercent}%`, width: `${widthPercent}%`, borderColor: statusMeta.color }}
+                                >
+                                  <span className="gantt-bar-progress" style={{ width: `${progress}%`, background: statusMeta.color }} />
+                                  <span className="gantt-bar-text">{progress}%</span>
+                                </div>
+                              ) : (
+                                <div className="gantt-bar gantt-bar-unscheduled" style={{ width: '100%', borderColor: statusMeta.color }}>
+                                  <span className="gantt-bar-progress" style={{ width: `${progress}%`, background: statusMeta.color }} />
+                                  <span className="gantt-bar-text">未排期 · {progress}%</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </section>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {selectedTask && (

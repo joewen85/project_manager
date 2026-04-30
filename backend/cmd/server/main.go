@@ -40,6 +40,9 @@ func main() {
 	_ = godotenv.Load("../.env")
 
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("config validation failed: %v", err)
+	}
 	db, err := database.Connect(cfg)
 	if err != nil {
 		log.Fatalf("db connect failed: %v", err)

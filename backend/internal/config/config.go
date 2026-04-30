@@ -1,9 +1,13 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 )
+
+const defaultJWTSecret = "change-me"
 
 type Config struct {
 	AppName            string
@@ -39,7 +43,7 @@ func Load() Config {
 	cfg := Config{
 		AppName:            getEnv("APP_NAME", "project-manager"),
 		Port:               getEnv("APP_PORT", "8080"),
-		JWTSecret:          getEnv("JWT_SECRET", "change-me"),
+		JWTSecret:          getEnv("JWT_SECRET", defaultJWTSecret),
 		CORSAllowOrigins:   getEnv("CORS_ALLOW_ORIGINS", "http://localhost:5173"),
 		UploadDir:          getEnv("UPLOAD_DIR", "./static/uploads"),
 		UploadPublicBase:   getEnv("UPLOAD_PUBLIC_BASE", "/static/uploads"),
@@ -66,6 +70,17 @@ func Load() Config {
 		FeishuReceiveType:  getEnv("FEISHU_RECEIVE_ID_TYPE", "email"),
 	}
 	return cfg
+}
+
+func (c Config) Validate() error {
+	secret := strings.TrimSpace(c.JWTSecret)
+	if secret == "" {
+		return errors.New("JWT_SECRET is required")
+	}
+	if secret == defaultJWTSecret || strings.EqualFold(secret, "change-me-in-production") {
+		return errors.New("JWT_SECRET uses an insecure default value")
+	}
+	return nil
 }
 
 func (c Config) DSN() string {

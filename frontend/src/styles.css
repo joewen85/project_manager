@@ -1185,6 +1185,16 @@ td .btn + .btn { margin-left: 3px; }
   padding: 8px;
 }
 .gantt-main-card { overflow: hidden; }
+.gantt-view-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.gantt-view-toolbar .helper-text {
+  margin-left: auto;
+}
 .metric-card h4 { margin-bottom: 8px; }
 .metric-value {
   margin: 0;
@@ -1217,6 +1227,63 @@ td .btn + .btn { margin-left: 3px; }
 .pm-gantt-shell .bar-label.big {
   fill: #cbd5e1;
   font-size: 12px;
+}
+.gantt-group-board {
+  display: grid;
+  gap: 10px;
+  max-height: min(68vh, 780px);
+  overflow: auto;
+  padding-right: 2px;
+}
+.gantt-group-card {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-muted);
+}
+.gantt-group-header {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  display: grid;
+  grid-template-columns: minmax(140px, 1.2fr) repeat(4, auto);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.gantt-group-list {
+  padding: 0 12px 10px;
+}
+.gantt-group-row {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 6px;
+}
+.gantt-group-row--active {
+  outline: 1px solid rgba(56, 189, 248, 0.75);
+  background: rgba(56, 189, 248, 0.08);
+}
+.gantt-group-row .gantt-label {
+  flex-wrap: wrap;
+}
+.gantt-row-period {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.gantt-bar-unscheduled {
+  margin-left: 0 !important;
+  background: rgba(15, 23, 42, 0.32);
+  border-style: dashed;
+}
+.gantt-unscheduled-progress {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 10px;
 }
 .dependency-board { display: grid; gap: 10px; }
 .dependency-target {
@@ -1263,6 +1330,59 @@ td .btn + .btn { margin-left: 3px; }
 .tree-progress-line { width: 140px; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; border: 1px solid #cbd5e1; }
 .tree-progress-bar { display: block; height: 100%; background: linear-gradient(90deg, #34d399, #10b981); }
 .tree-progress-text { color: var(--color-text-muted); font-size: 12px; min-width: 36px; }
+.flat-task-toolbar {
+  margin: 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.flat-task-toolbar select {
+  width: auto;
+  min-width: 120px;
+}
+.flat-task-groups {
+  display: grid;
+  gap: 10px;
+  max-height: min(65vh, 720px);
+  overflow: auto;
+}
+.flat-task-group {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-muted);
+}
+.flat-task-group-header {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  display: grid;
+  grid-template-columns: minmax(140px, 1.2fr) repeat(4, auto);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.flat-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 10px;
+  display: grid;
+  gap: 6px;
+}
+.flat-task-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.flat-task-title {
+  min-width: 260px;
+  max-width: min(54vw, 640px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .status-dot {
   display: inline-flex;
   align-items: center;
@@ -1303,6 +1423,26 @@ td .btn + .btn { margin-left: 3px; }
 }
 
 @media (max-width: 1024px) {
+  .gantt-group-header {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 6px;
+  }
+  .gantt-view-toolbar .helper-text {
+    margin-left: 0;
+    width: 100%;
+  }
+  .flat-task-group-header {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 6px;
+  }
+  .flat-task-item {
+    flex-wrap: wrap;
+  }
+  .flat-task-title {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+  }
   .app-shell { grid-template-columns: 1fr; }
   .sidebar-backdrop {
     display: block;
