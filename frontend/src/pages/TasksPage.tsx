@@ -77,7 +77,7 @@ const initialForm: TaskForm = {
   tagIds: []
 }
 
-type TaskSortKey = 'createdAt' | 'progress'
+type TaskSortKey = 'taskNo' | 'title' | 'priority' | 'status' | 'progress' | 'startAt' | 'endAt' | 'createdAt'
 type TaskSortOrder = 'asc' | 'desc'
 type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'tags' | 'startAt' | 'endAt' | 'assignees' | 'description' | 'customField1' | 'customField2' | 'customField3'
 interface TaskFieldSetting extends FieldSettingItem {
@@ -94,14 +94,25 @@ const taskDefaultFieldSettings: TaskFieldSetting[] = [
   { key: 'status', label: '状态', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'progress', label: '进度', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'tags', label: '标签', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
-  { key: 'startAt', label: '开始', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
-  { key: 'endAt', label: '结束', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'startAt', label: '开始', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
+  { key: 'endAt', label: '结束', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'assignees', label: '执行人', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'description', label: '描述', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
   { key: 'customField1', label: '自定义内容 1', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: true },
   { key: 'customField2', label: '自定义内容 2', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: true },
   { key: 'customField3', label: '自定义内容 3', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: true }
 ]
+
+const taskSortableKeySet = new Set<TaskSortKey>(['taskNo', 'title', 'priority', 'status', 'progress', 'startAt', 'endAt', 'createdAt'])
+const taskColumnSortKeyMap: Partial<Record<TaskColumnKey, TaskSortKey>> = {
+  taskNo: 'taskNo',
+  title: 'title',
+  priority: 'priority',
+  status: 'status',
+  progress: 'progress',
+  startAt: 'startAt',
+  endAt: 'endAt'
+}
 
 const getTaskProjectName = (task: Task, projects: Project[]) => {
   if (task.projectName) return task.projectName
@@ -196,7 +207,12 @@ export function TasksPage() {
   const isStatusFilterEnabled = fieldSettingsMap.get('status')?.filterable ?? true
   const isPriorityFilterEnabled = fieldSettingsMap.get('priority')?.filterable ?? true
   const isTagFilterEnabled = fieldSettingsMap.get('tags')?.filterable ?? false
-  const isProgressSortable = fieldSettingsMap.get('progress')?.sortable ?? true
+  const sortableFields = useMemo(() => (
+    fieldSettings
+      .filter((field) => field.sortable && taskSortableKeySet.has(field.key as TaskSortKey))
+      .map((field) => field.key as TaskSortKey)
+  ), [fieldSettings])
+  const sortableFieldSet = useMemo(() => new Set(sortableFields), [sortableFields])
   const isTaskFieldEditable = (key: TaskColumnKey) => fieldSettingsMap.get(key)?.editable ?? true
   const activeFilterCount =
     Number(Boolean(keyword.trim()) && searchableFields.length > 0) +
@@ -205,7 +221,8 @@ export function TasksPage() {
     Number(statusFilters.length > 0 && isStatusFilterEnabled) +
     Number(priorityFilters.length > 0 && isPriorityFilterEnabled) +
     Number(tagFilters.length > 0 && isTagFilterEnabled) +
-    Number(sortKey === 'progress' && isProgressSortable)
+    Number(sortKey !== 'createdAt') +
+    Number(sortOrder !== 'desc')
 
   const load = async () => {
     try {
@@ -252,12 +269,12 @@ export function TasksPage() {
   }, [page, pageSize, keyword, projectFilter, assigneeFilters, statusFilters, priorityFilters, tagFilters, sortKey, sortOrder, searchableFields, isProjectFilterEnabled, isAssigneeFilterEnabled, isStatusFilterEnabled, isPriorityFilterEnabled, isTagFilterEnabled])
 
   useEffect(() => {
-    if (sortKey !== 'progress') return
-    if (!isProgressSortable) {
+    if (sortKey === 'createdAt') return
+    if (!sortableFieldSet.has(sortKey)) {
       setSortKey('createdAt')
       setSortOrder('desc')
     }
-  }, [sortKey, isProgressSortable])
+  }, [sortKey, sortableFieldSet])
 
   useEffect(() => {
     void fetchData<{ users?: User[] }>('/tasks/assignee-options', { pageSize: 100 }, { silent: true })
@@ -510,11 +527,11 @@ export function TasksPage() {
     })
   }
 
-  const toggleProgressSort = () => {
-    if (!isProgressSortable) return
+  const toggleSort = (nextKey: TaskSortKey) => {
+    if (nextKey !== 'createdAt' && !sortableFieldSet.has(nextKey)) return
     setPage(1)
-    if (sortKey !== 'progress') {
-      setSortKey('progress')
+    if (sortKey !== nextKey) {
+      setSortKey(nextKey)
       setSortOrder('asc')
       return
     }
@@ -529,21 +546,37 @@ export function TasksPage() {
   const renderTaskHeaderCell = (key: TaskColumnKey) => {
     const setting = fieldSettingsMap.get(key)
     if (!setting) return null
+    const sortableKey = taskColumnSortKeyMap[key]
+    const isSortable = Boolean(sortableKey && sortableFieldSet.has(sortableKey))
 
-    let content: ReactNode = setting.label
+    const sortButton = isSortable && sortableKey ? (
+      <button
+        type="button"
+        className={`table-header-sort-trigger${sortKey === sortableKey ? ' active' : ''}`}
+        onClick={() => toggleSort(sortableKey)}
+      >
+        {setting.label}
+        <span className="table-header-sort-indicator">{sortKey === sortableKey ? (sortOrder === 'asc' ? '↑' : '↓') : '↕'}</span>
+      </button>
+    ) : null
+
+    let content: ReactNode = sortButton || setting.label
     if (key === 'priority' && isPriorityFilterEnabled) {
-      content = <TableHeaderFilter label="优先级" values={priorityFilters} options={priorityFilterOptions} onChange={(values) => { setPriorityFilters(values); setPage(1) }} placeholder="搜索优先级" noResultsText="没有匹配的优先级" />
+      content = (
+        <span className="table-header-filter-sort-wrap">
+          <TableHeaderFilter label="优先级" values={priorityFilters} options={priorityFilterOptions} onChange={(values) => { setPriorityFilters(values); setPage(1) }} placeholder="搜索优先级" noResultsText="没有匹配的优先级" />
+          {sortButton}
+        </span>
+      )
     } else if (key === 'status' && isStatusFilterEnabled) {
-      content = <TableHeaderFilter label="状态" values={statusFilters} options={statusFilterOptions} onChange={(values) => { setStatusFilters(values); setPage(1) }} placeholder="搜索状态" noResultsText="没有匹配的状态" />
+      content = (
+        <span className="table-header-filter-sort-wrap">
+          <TableHeaderFilter label="状态" values={statusFilters} options={statusFilterOptions} onChange={(values) => { setStatusFilters(values); setPage(1) }} placeholder="搜索状态" noResultsText="没有匹配的状态" />
+          {sortButton}
+        </span>
+      )
     } else if (key === 'tags' && isTagFilterEnabled) {
       content = <TableHeaderFilter label="标签" values={tagFilters} options={tagFilterOptions} onChange={(values) => { setTagFilters(values); setPage(1) }} placeholder="搜索标签" noResultsText="没有匹配的标签" />
-    } else if (key === 'progress' && isProgressSortable) {
-      content = (
-        <button type="button" className={`table-header-sort-trigger${sortKey === 'progress' ? ' active' : ''}`} onClick={toggleProgressSort}>
-          进度
-          <span className="table-header-sort-indicator">{sortKey === 'progress' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕'}</span>
-        </button>
-      )
     }
 
     return <th key={key}>{content}</th>
