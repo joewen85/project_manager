@@ -382,6 +382,25 @@ tbody tr { transition: background-color var(--duration-fast) var(--ease-standard
   gap: 8px;
   align-items: center;
 }
+.task-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.task-batch-actions .success {
+  margin-left: auto;
+}
+.task-selection-col {
+  width: 44px;
+  text-align: center;
+}
+.task-selection-col input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+}
 .cell-ellipsis {
   display: inline-block;
   max-width: 320px;
@@ -1640,6 +1659,13 @@ td .btn + .btn { margin-left: 3px; }
   }
   .responsive-table td[data-label='操作'] .btn {
     width: 100%;
+  }
+  .responsive-table td[data-label='选择'] {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .responsive-table td[data-label='选择']::before {
+    margin-bottom: -2px;
   }
   .responsive-table td.field-settings-body-cell {
     display: none;

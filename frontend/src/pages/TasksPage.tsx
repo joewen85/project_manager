@@ -198,7 +198,11 @@ export function TasksPage() {
   const [pendingOpenTaskId, setPendingOpenTaskId] = useState<number | null>(null)
   const [pendingViewTaskId, setPendingViewTaskId] = useState<number | null>(null)
   const [expandedAssigneeTaskIds, setExpandedAssigneeTaskIds] = useState<number[]>([])
+  const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([])
+  const [batchDeleting, setBatchDeleting] = useState(false)
+  const [batchActionMessage, setBatchActionMessage] = useState('')
   const parentTaskWrapRef = useRef<HTMLDivElement | null>(null)
+  const selectAllRef = useRef<HTMLInputElement | null>(null)
   const fieldSettingsMap = useMemo(() => new Map(fieldSettings.map((field) => [field.key, field])), [fieldSettings])
   const visibleColumns = useMemo(() => fieldSettings.filter((field) => field.visible).map((field) => field.key), [fieldSettings])
   const searchableFields = useMemo(() => fieldSettings.filter((field) => field.searchable).map((field) => field.key), [fieldSettings])
@@ -223,6 +227,14 @@ export function TasksPage() {
     Number(tagFilters.length > 0 && isTagFilterEnabled) +
     Number(sortKey !== 'createdAt') +
     Number(sortOrder !== 'desc')
+  const currentPageTaskIds = useMemo(() => tasks.map((task) => task.id), [tasks])
+  const selectedTaskIdSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds])
+  const selectedOnPageCount = useMemo(
+    () => currentPageTaskIds.filter((id) => selectedTaskIdSet.has(id)).length,
+    [currentPageTaskIds, selectedTaskIdSet]
+  )
+  const allOnPageSelected = currentPageTaskIds.length > 0 && selectedOnPageCount === currentPageTaskIds.length
+  const someOnPageSelected = selectedOnPageCount > 0 && !allOnPageSelected
 
   const load = async () => {
     try {
@@ -275,6 +287,15 @@ export function TasksPage() {
       setSortOrder('desc')
     }
   }, [sortKey, sortableFieldSet])
+
+  useEffect(() => {
+    setSelectedTaskIds((prev) => prev.filter((id) => tasks.some((task) => task.id === id)))
+  }, [tasks])
+
+  useEffect(() => {
+    if (!selectAllRef.current) return
+    selectAllRef.current.indeterminate = someOnPageSelected
+  }, [someOnPageSelected, allOnPageSelected])
 
   useEffect(() => {
     void fetchData<{ users?: User[] }>('/tasks/assignee-options', { pageSize: 100 }, { silent: true })
@@ -434,6 +455,55 @@ export function TasksPage() {
       await load()
     } catch (deleteError) {
       setError(readApiError(deleteError, '删除任务失败'))
+    }
+  }
+
+  const toggleTaskSelection = (taskId: number, checked: boolean) => {
+    setSelectedTaskIds((prev) => {
+      if (checked) return prev.includes(taskId) ? prev : [...prev, taskId]
+      return prev.filter((id) => id !== taskId)
+    })
+  }
+
+  const toggleSelectAllCurrentPage = (checked: boolean) => {
+    setSelectedTaskIds((prev) => {
+      if (!checked) return prev.filter((id) => !currentPageTaskIds.includes(id))
+      const next = new Set(prev)
+      currentPageTaskIds.forEach((id) => next.add(id))
+      return Array.from(next)
+    })
+  }
+
+  const handleBatchDelete = async () => {
+    if (!canDeleteTask || selectedTaskIds.length === 0) return
+    if (!confirm(`确认删除已选中的 ${selectedTaskIds.length} 个任务？`)) return
+    try {
+      setBatchDeleting(true)
+      setBatchActionMessage('')
+      setError('')
+      const targetIds = [...selectedTaskIds]
+      const results = await Promise.allSettled(targetIds.map((id) => api.delete(`/tasks/${id}`)))
+      const failedIds: number[] = []
+      let successCount = 0
+      let firstReason: unknown = null
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          successCount += 1
+          return
+        }
+        failedIds.push(targetIds[index])
+        if (!firstReason) firstReason = result.reason
+      })
+      setSelectedTaskIds(failedIds)
+      if (successCount > 0) await load()
+      if (failedIds.length === 0) {
+        setBatchActionMessage(`已批量删除 ${successCount} 个任务`)
+      } else {
+        const failMessage = firstReason ? readApiError(firstReason, '批量删除失败') : '批量删除失败'
+        setError(`已删除 ${successCount} 个任务，${failedIds.length} 个失败：${failMessage}`)
+      }
+    } finally {
+      setBatchDeleting(false)
     }
   }
 
@@ -751,9 +821,38 @@ export function TasksPage() {
       </FilterPanel>
 
       <div className="card">
+        {(selectedTaskIds.length > 0 || batchActionMessage) && (
+          <div className="task-batch-actions">
+            {selectedTaskIds.length > 0 && <span>已选择 {selectedTaskIds.length} 项</span>}
+            {selectedTaskIds.length > 0 && (
+              <button className="btn danger" disabled={!canDeleteTask || batchDeleting} onClick={() => { void handleBatchDelete() }}>
+                {batchDeleting ? '删除中...' : '批量删除'}
+              </button>
+            )}
+            {selectedTaskIds.length > 0 && (
+              <button
+                className="btn secondary"
+                disabled={batchDeleting}
+                onClick={() => setSelectedTaskIds([])}
+              >
+                取消选择
+              </button>
+            )}
+            {batchActionMessage && <span className="success">{batchActionMessage}</span>}
+          </div>
+        )}
         <DataState loading={loading} error={error} empty={!loading && !error && tasks.length === 0} emptyText="暂无匹配的任务" onRetry={() => { void load() }} />
         {!loading && !error && tasks.length > 0 && (
           <table className="responsive-table"><thead><tr>
+            <th className="task-selection-col">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                aria-label="全选当前页任务"
+                checked={allOnPageSelected}
+                onChange={(event) => toggleSelectAllCurrentPage(event.target.checked)}
+              />
+            </th>
             {visibleColumns.map((columnKey) => renderTaskHeaderCell(columnKey))}
             <th className="field-settings-header-cell">
               <span className="field-settings-header-inline">
@@ -771,6 +870,14 @@ export function TasksPage() {
 
               return (
                 <tr key={task.id} id={`task-row-${task.id}`} className={focusedTaskId === task.id ? 'task-row-focused' : ''}>
+                  <td data-label="选择" className="task-selection-col">
+                    <input
+                      type="checkbox"
+                      aria-label={`选择任务 ${task.taskNo || task.id}`}
+                      checked={selectedTaskIdSet.has(task.id)}
+                      onChange={(event) => toggleTaskSelection(task.id, event.target.checked)}
+                    />
+                  </td>
                   {visibleColumns.map((columnKey) => renderTaskCell(task, columnKey, assigneeNames, isExpanded, visibleAssigneeNames))}
                   <td data-label="操作">
                     <div className="table-actions">
