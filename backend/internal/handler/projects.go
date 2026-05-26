@@ -88,6 +88,7 @@ func (h *Handler) ListProjects(c *gin.Context) {
 		"startAt":   "projects.start_at",
 		"endAt":     "projects.end_at",
 		"createdAt": "projects.created_at",
+		"updatedAt": "projects.updated_at",
 	})
 	if err := query.Preload("Users").Preload("Departments").Order(orderBy).Offset((page - 1) * pageSize).Limit(pageSize).Find(&projects).Error; err != nil {
 		respondDBError(c, http.StatusInternalServerError, "QUERY_PROJECTS_FAILED", err)

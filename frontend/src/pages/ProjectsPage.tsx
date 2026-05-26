@@ -35,9 +35,9 @@ const normalizeAttachments = (item: { attachments?: UploadAttachment[]; attachme
 
 const initialForm: ProjectForm = { code: '', name: '', description: '', startAt: '', endAt: '', attachments: emptyUploadAttachments(), userIds: [], departmentIds: [] }
 
-type SortKey = 'code' | 'name' | 'createdAt' | 'startAt' | 'endAt'
+type SortKey = 'code' | 'name' | 'createdAt' | 'updatedAt' | 'startAt' | 'endAt'
 type SortOrder = 'asc' | 'desc'
-type ProjectColumnKey = 'code' | 'name' | 'description' | 'owners' | 'departments' | 'startAt' | 'endAt'
+type ProjectColumnKey = 'code' | 'name' | 'description' | 'owners' | 'departments' | 'startAt' | 'endAt' | 'updatedAt'
 interface ProjectFieldSetting extends FieldSettingItem {
   key: ProjectColumnKey
 }
@@ -50,7 +50,8 @@ const projectDefaultFieldSettings: ProjectFieldSetting[] = [
   { key: 'owners', label: '负责人', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
   { key: 'departments', label: '部门', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
   { key: 'startAt', label: '开始时间', visible: false, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
-  { key: 'endAt', label: '结束时间', visible: false, editable: true, sortable: true, searchable: false, filterable: false, custom: false }
+  { key: 'endAt', label: '结束时间', visible: false, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
+  { key: 'updatedAt', label: '更新时间', visible: false, editable: false, sortable: true, searchable: false, filterable: false, custom: false }
 ]
 
 const getProjectOwnerNames = (project: Project) => (project.users || []).map((user) => user.username || user.name).filter(Boolean)
@@ -299,6 +300,8 @@ export function ProjectsPage() {
         return <td key={key} data-label="开始时间">{formatDateTime(project.startAt)}</td>
       case 'endAt':
         return <td key={key} data-label="结束时间">{formatDateTime(project.endAt)}</td>
+      case 'updatedAt':
+        return <td key={key} data-label="更新时间">{formatDateTime(project.updatedAt)}</td>
       default:
         return null
     }
@@ -317,6 +320,7 @@ export function ProjectsPage() {
           <option value="createdAt">按创建时间</option>
           {sortableFields.has('code') && <option value="code">按编码</option>}
           {sortableFields.has('name') && <option value="name">按名称</option>}
+          {sortableFields.has('updatedAt') && <option value="updatedAt">按更新时间</option>}
           {sortableFields.has('startAt') && <option value="startAt">按开始时间</option>}
           {sortableFields.has('endAt') && <option value="endAt">按结束时间</option>}
         </select>

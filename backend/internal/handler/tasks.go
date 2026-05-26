@@ -102,6 +102,7 @@ func parseTaskSort(c *gin.Context) string {
 		"startAt":   "tasks.start_at",
 		"endAt":     "tasks.end_at",
 		"createdAt": "tasks.created_at",
+		"updatedAt": "tasks.updated_at",
 	})
 }
 

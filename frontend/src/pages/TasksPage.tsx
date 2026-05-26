@@ -77,9 +77,9 @@ const initialForm: TaskForm = {
   tagIds: []
 }
 
-type TaskSortKey = 'taskNo' | 'title' | 'priority' | 'status' | 'progress' | 'startAt' | 'endAt' | 'createdAt'
+type TaskSortKey = 'taskNo' | 'title' | 'priority' | 'status' | 'progress' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt'
 type TaskSortOrder = 'asc' | 'desc'
-type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'tags' | 'startAt' | 'endAt' | 'assignees' | 'description' | 'customField1' | 'customField2' | 'customField3'
+type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'tags' | 'startAt' | 'endAt' | 'updatedAt' | 'assignees' | 'description' | 'customField1' | 'customField2' | 'customField3'
 interface TaskFieldSetting extends FieldSettingItem {
   key: TaskColumnKey
 }
@@ -96,6 +96,7 @@ const taskDefaultFieldSettings: TaskFieldSetting[] = [
   { key: 'tags', label: '标签', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'startAt', label: '开始', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'endAt', label: '结束', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
+  { key: 'updatedAt', label: '更新时间', visible: false, editable: false, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'assignees', label: '执行人', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'description', label: '描述', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
   { key: 'customField1', label: '自定义内容 1', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: true },
@@ -103,7 +104,7 @@ const taskDefaultFieldSettings: TaskFieldSetting[] = [
   { key: 'customField3', label: '自定义内容 3', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: true }
 ]
 
-const taskSortableKeySet = new Set<TaskSortKey>(['taskNo', 'title', 'priority', 'status', 'progress', 'startAt', 'endAt', 'createdAt'])
+const taskSortableKeySet = new Set<TaskSortKey>(['taskNo', 'title', 'priority', 'status', 'progress', 'startAt', 'endAt', 'createdAt', 'updatedAt'])
 const taskColumnSortKeyMap: Partial<Record<TaskColumnKey, TaskSortKey>> = {
   taskNo: 'taskNo',
   title: 'title',
@@ -111,7 +112,8 @@ const taskColumnSortKeyMap: Partial<Record<TaskColumnKey, TaskSortKey>> = {
   status: 'status',
   progress: 'progress',
   startAt: 'startAt',
-  endAt: 'endAt'
+  endAt: 'endAt',
+  updatedAt: 'updatedAt'
 }
 
 const getTaskProjectName = (task: Task, projects: Project[]) => {
@@ -680,6 +682,8 @@ export function TasksPage() {
         return <td key={key} data-label="开始">{formatDateTime(task.startAt)}</td>
       case 'endAt':
         return <td key={key} data-label="结束">{formatDateTime(task.endAt)}</td>
+      case 'updatedAt':
+        return <td key={key} data-label="更新时间">{formatDateTime(task.updatedAt)}</td>
       case 'assignees':
         return (
           <td key={key} data-label="执行人">

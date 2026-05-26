@@ -41,6 +41,7 @@ export interface Project {
   attachment?: UploadAttachment
   attachments?: UploadAttachment[]
   createdAt?: string
+  updatedAt?: string
   users?: User[]
   departments?: Department[]
   tasks?: Task[]
@@ -73,6 +74,7 @@ export interface Task {
   tags?: Tag[]
   dependencies?: TaskDependency[]
   createdAt?: string
+  updatedAt?: string
 }
 
 export interface TaskDependency {
