@@ -37,7 +37,7 @@ const initialForm: ProjectForm = { code: '', name: '', description: '', startAt:
 
 type SortKey = 'code' | 'name' | 'createdAt' | 'updatedAt' | 'startAt' | 'endAt'
 type SortOrder = 'asc' | 'desc'
-type ProjectColumnKey = 'code' | 'name' | 'description' | 'owners' | 'departments' | 'startAt' | 'endAt' | 'updatedAt'
+type ProjectColumnKey = 'code' | 'name' | 'description' | 'owners' | 'departments' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt'
 interface ProjectFieldSetting extends FieldSettingItem {
   key: ProjectColumnKey
 }
@@ -51,6 +51,7 @@ const projectDefaultFieldSettings: ProjectFieldSetting[] = [
   { key: 'departments', label: '部门', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
   { key: 'startAt', label: '开始时间', visible: false, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'endAt', label: '结束时间', visible: false, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
+  { key: 'createdAt', label: '创建时间', visible: false, editable: false, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'updatedAt', label: '更新时间', visible: false, editable: false, sortable: true, searchable: false, filterable: false, custom: false }
 ]
 
@@ -93,7 +94,7 @@ export function ProjectsPage() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [selected, setSelected] = useState<number>()
   const [keyword, setKeyword] = useState('')
-  const [sortKey, setSortKey] = useState<SortKey>('createdAt')
+  const [sortKey, setSortKey] = useState<SortKey>('updatedAt')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [fieldSettingsOpen, setFieldSettingsOpen] = useState(false)
   const [fieldSettings, setFieldSettings] = useState<ProjectFieldSetting[]>(() => {
@@ -123,7 +124,7 @@ export function ProjectsPage() {
   const searchableFields = useMemo(() => fieldSettings.filter((field) => field.searchable).map((field) => field.key), [fieldSettings])
   const sortableFields = useMemo(() => new Set(fieldSettings.filter((field) => field.sortable).map((field) => field.key)), [fieldSettings])
   const isProjectFieldEditable = (key: ProjectColumnKey) => fieldSettingsMap.get(key)?.editable ?? true
-  const activeFilterCount = Number(Boolean(keyword.trim()) && searchableFields.length > 0) + Number(sortKey !== 'createdAt') + Number(sortOrder !== 'desc')
+  const activeFilterCount = Number(Boolean(keyword.trim()) && searchableFields.length > 0) + Number(sortKey !== 'updatedAt') + Number(sortOrder !== 'desc')
 
   const load = async () => {
     try {
@@ -152,9 +153,9 @@ export function ProjectsPage() {
   }, [page, pageSize, keyword, sortKey, sortOrder, searchableFields])
 
   useEffect(() => {
-    if (sortKey === 'createdAt') return
+    if (sortKey === 'updatedAt') return
     if (!sortableFields.has(sortKey as ProjectColumnKey)) {
-      setSortKey('createdAt')
+      setSortKey('updatedAt')
       setSortOrder('desc')
     }
   }, [sortKey, sortableFields])
@@ -300,6 +301,8 @@ export function ProjectsPage() {
         return <td key={key} data-label="开始时间">{formatDateTime(project.startAt)}</td>
       case 'endAt':
         return <td key={key} data-label="结束时间">{formatDateTime(project.endAt)}</td>
+      case 'createdAt':
+        return <td key={key} data-label="创建时间">{formatDateTime(project.createdAt)}</td>
       case 'updatedAt':
         return <td key={key} data-label="更新时间">{formatDateTime(project.updatedAt)}</td>
       default:
@@ -317,10 +320,10 @@ export function ProjectsPage() {
       >
         {searchableFields.length > 0 && <SearchField className="toolbar-search-field" aria-label="搜索项目" value={keyword} placeholder="搜索：已启用可搜索字段" onChange={(value) => { setKeyword(value); setPage(1) }} />}
         <select aria-label="项目排序字段" value={sortKey} onChange={(e) => { setSortKey(e.target.value as SortKey); setPage(1) }}>
+          <option value="updatedAt">按更新时间</option>
           <option value="createdAt">按创建时间</option>
           {sortableFields.has('code') && <option value="code">按编码</option>}
           {sortableFields.has('name') && <option value="name">按名称</option>}
-          {sortableFields.has('updatedAt') && <option value="updatedAt">按更新时间</option>}
           {sortableFields.has('startAt') && <option value="startAt">按开始时间</option>}
           {sortableFields.has('endAt') && <option value="endAt">按结束时间</option>}
         </select>

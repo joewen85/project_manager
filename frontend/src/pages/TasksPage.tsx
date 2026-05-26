@@ -79,7 +79,7 @@ const initialForm: TaskForm = {
 
 type TaskSortKey = 'taskNo' | 'title' | 'priority' | 'status' | 'progress' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt'
 type TaskSortOrder = 'asc' | 'desc'
-type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'tags' | 'startAt' | 'endAt' | 'updatedAt' | 'assignees' | 'description' | 'customField1' | 'customField2' | 'customField3'
+type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'tags' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt' | 'assignees' | 'description' | 'customField1' | 'customField2' | 'customField3'
 interface TaskFieldSetting extends FieldSettingItem {
   key: TaskColumnKey
 }
@@ -96,6 +96,7 @@ const taskDefaultFieldSettings: TaskFieldSetting[] = [
   { key: 'tags', label: '标签', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'startAt', label: '开始', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'endAt', label: '结束', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
+  { key: 'createdAt', label: '创建时间', visible: false, editable: false, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'updatedAt', label: '更新时间', visible: false, editable: false, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'assignees', label: '执行人', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'description', label: '描述', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
@@ -113,6 +114,7 @@ const taskColumnSortKeyMap: Partial<Record<TaskColumnKey, TaskSortKey>> = {
   progress: 'progress',
   startAt: 'startAt',
   endAt: 'endAt',
+  createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 }
 
@@ -176,7 +178,7 @@ export function TasksPage() {
       return taskDefaultFieldSettings
     }
   })
-  const [sortKey, setSortKey] = useState<TaskSortKey>('createdAt')
+  const [sortKey, setSortKey] = useState<TaskSortKey>('updatedAt')
   const [sortOrder, setSortOrder] = useState<TaskSortOrder>('desc')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -227,7 +229,7 @@ export function TasksPage() {
     Number(statusFilters.length > 0 && isStatusFilterEnabled) +
     Number(priorityFilters.length > 0 && isPriorityFilterEnabled) +
     Number(tagFilters.length > 0 && isTagFilterEnabled) +
-    Number(sortKey !== 'createdAt') +
+    Number(sortKey !== 'updatedAt') +
     Number(sortOrder !== 'desc')
   const currentPageTaskIds = useMemo(() => tasks.map((task) => task.id), [tasks])
   const selectedTaskIdSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds])
@@ -283,9 +285,9 @@ export function TasksPage() {
   }, [page, pageSize, keyword, projectFilter, assigneeFilters, statusFilters, priorityFilters, tagFilters, sortKey, sortOrder, searchableFields, isProjectFilterEnabled, isAssigneeFilterEnabled, isStatusFilterEnabled, isPriorityFilterEnabled, isTagFilterEnabled])
 
   useEffect(() => {
-    if (sortKey === 'createdAt') return
+    if (sortKey === 'updatedAt') return
     if (!sortableFieldSet.has(sortKey)) {
-      setSortKey('createdAt')
+      setSortKey('updatedAt')
       setSortOrder('desc')
     }
   }, [sortKey, sortableFieldSet])
@@ -600,7 +602,7 @@ export function TasksPage() {
   }
 
   const toggleSort = (nextKey: TaskSortKey) => {
-    if (nextKey !== 'createdAt' && !sortableFieldSet.has(nextKey)) return
+    if (nextKey !== 'updatedAt' && !sortableFieldSet.has(nextKey)) return
     setPage(1)
     if (sortKey !== nextKey) {
       setSortKey(nextKey)
@@ -611,7 +613,7 @@ export function TasksPage() {
       setSortOrder('desc')
       return
     }
-    setSortKey('createdAt')
+    setSortKey('updatedAt')
     setSortOrder('desc')
   }
 
@@ -682,6 +684,8 @@ export function TasksPage() {
         return <td key={key} data-label="开始">{formatDateTime(task.startAt)}</td>
       case 'endAt':
         return <td key={key} data-label="结束">{formatDateTime(task.endAt)}</td>
+      case 'createdAt':
+        return <td key={key} data-label="创建时间">{formatDateTime(task.createdAt)}</td>
       case 'updatedAt':
         return <td key={key} data-label="更新时间">{formatDateTime(task.updatedAt)}</td>
       case 'assignees':
