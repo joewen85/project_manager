@@ -17,16 +17,42 @@ function ViewportBridge() {
       query.addListener(listener)
       return () => query.removeListener(listener)
     }
+    const textInputTypes = new Set([
+      'email',
+      'number',
+      'password',
+      'search',
+      'tel',
+      'text',
+      'url'
+    ])
+    const isTextEntryFocused = () => {
+      const activeElement = document.activeElement
+      if (activeElement instanceof HTMLTextAreaElement) return true
+      if (activeElement instanceof HTMLInputElement) return textInputTypes.has(activeElement.type)
+      return activeElement instanceof HTMLElement && activeElement.isContentEditable
+    }
+    let stableAppWidth = window.innerWidth
+    let stableAppHeight = window.innerHeight
 
     const syncViewport = () => {
       const viewport = window.visualViewport
       const width = viewport?.width ?? window.innerWidth
       const height = viewport?.height ?? window.innerHeight
-      root.style.setProperty('--app-width', `${window.innerWidth}px`)
-      root.style.setProperty('--app-height', `${window.innerHeight}px`)
+      const appWidth = window.innerWidth
+      const appHeight = window.innerHeight
+      const widthChanged = Math.abs(appWidth - stableAppWidth) > 1
+      const heightGrew = appHeight > stableAppHeight
+      if (widthChanged || heightGrew || !isTextEntryFocused()) {
+        stableAppWidth = appWidth
+        stableAppHeight = appHeight
+      }
+
+      root.style.setProperty('--app-width', `${appWidth}px`)
+      root.style.setProperty('--app-height', `${stableAppHeight}px`)
       root.style.setProperty('--visual-viewport-width', `${width}px`)
       root.style.setProperty('--visual-viewport-height', `${height}px`)
-      root.dataset.orientation = width >= height ? 'landscape' : 'portrait'
+      root.dataset.orientation = stableAppWidth >= stableAppHeight ? 'landscape' : 'portrait'
       root.dataset.foldLayout = horizontalFold.matches
         ? 'dual-landscape'
         : verticalFold.matches
