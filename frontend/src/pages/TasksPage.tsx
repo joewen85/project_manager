@@ -22,6 +22,7 @@ const statusLabel: Record<string, string> = {
   pending: '待处理',
   queued: '排队中',
   processing: '处理中',
+  reviewing: '待审核',
   completed: '已完成'
 }
 
@@ -49,6 +50,7 @@ interface TaskForm {
   projectId: number
   parentId?: number
   assigneeIds: number[]
+  reviewerIds: number[]
   tagIds: number[]
 }
 
@@ -74,12 +76,13 @@ const initialForm: TaskForm = {
   attachments: emptyUploadAttachments(),
   projectId: 0,
   assigneeIds: [],
+  reviewerIds: [],
   tagIds: []
 }
 
 type TaskSortKey = 'taskNo' | 'title' | 'priority' | 'status' | 'progress' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt'
 type TaskSortOrder = 'asc' | 'desc'
-type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'tags' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt' | 'assignees' | 'description' | 'customField1' | 'customField2' | 'customField3'
+type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'tags' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt' | 'assignees' | 'reviewers' | 'description' | 'customField1' | 'customField2' | 'customField3'
 interface TaskFieldSetting extends FieldSettingItem {
   key: TaskColumnKey
 }
@@ -99,6 +102,7 @@ const taskDefaultFieldSettings: TaskFieldSetting[] = [
   { key: 'createdAt', label: '创建时间', visible: false, editable: false, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'updatedAt', label: '更新时间', visible: false, editable: false, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'assignees', label: '执行人', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
+  { key: 'reviewers', label: '审核人', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
   { key: 'description', label: '描述', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
   { key: 'customField1', label: '自定义内容 1', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: true },
   { key: 'customField2', label: '自定义内容 2', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: true },
@@ -124,6 +128,7 @@ const getTaskProjectName = (task: Task, projects: Project[]) => {
 }
 
 const getTaskAssigneeNames = (task: Task) => (task.assignees || []).map((user) => user.username || user.name).filter(Boolean)
+const getTaskReviewerNames = (task: Task) => (task.reviewers || []).map((user) => user.username || user.name).filter(Boolean)
 
 const normalizeTaskFieldSettings = (raw: unknown): TaskFieldSetting[] => {
   const fallbackMap = new Map(taskDefaultFieldSettings.map((field) => [field.key, field]))
@@ -159,6 +164,7 @@ export function TasksPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [reviewerUsers, setReviewerUsers] = useState<User[]>([])
   const [filterUsers, setFilterUsers] = useState<User[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [filterTags, setFilterTags] = useState<Tag[]>([])
@@ -184,6 +190,8 @@ export function TasksPage() {
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
   const [form, setForm] = useState<TaskForm>(initialForm)
+  const [editingTaskSnapshot, setEditingTaskSnapshot] = useState<Task | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailTask, setDetailTask] = useState<Task | null>(null)
@@ -193,6 +201,7 @@ export function TasksPage() {
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
   const [assigneeKeyword, setAssigneeKeyword] = useState('')
+  const [reviewerKeyword, setReviewerKeyword] = useState('')
   const [tagKeyword, setTagKeyword] = useState('')
   const [creatingTag, setCreatingTag] = useState(false)
   const [parentTaskInput, setParentTaskInput] = useState(noParentLabel)
@@ -202,6 +211,7 @@ export function TasksPage() {
   const [pendingOpenTaskId, setPendingOpenTaskId] = useState<number | null>(null)
   const [pendingViewTaskId, setPendingViewTaskId] = useState<number | null>(null)
   const [expandedAssigneeTaskIds, setExpandedAssigneeTaskIds] = useState<number[]>([])
+  const [expandedReviewerTaskIds, setExpandedReviewerTaskIds] = useState<number[]>([])
   const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([])
   const [batchDeleting, setBatchDeleting] = useState(false)
   const [batchActionMessage, setBatchActionMessage] = useState('')
@@ -239,6 +249,30 @@ export function TasksPage() {
   )
   const allOnPageSelected = currentPageTaskIds.length > 0 && selectedOnPageCount === currentPageTaskIds.length
   const someOnPageSelected = selectedOnPageCount > 0 && !allOnPageSelected
+  const currentUserId = Number(currentUser?.id || 0)
+  const currentUserIsAdmin = Boolean(currentUser?.roles?.some((role) => role.name === 'admin'))
+  const editingAssigneeIds = useMemo(() => (editingTaskSnapshot?.assignees || []).map((user) => user.id), [editingTaskSnapshot])
+  const editingReviewerIds = useMemo(() => (editingTaskSnapshot?.reviewers || []).map((user) => user.id), [editingTaskSnapshot])
+  const isEditingAssignee = currentUserId > 0 && editingAssigneeIds.includes(currentUserId)
+  const isEditingReviewer = currentUserId > 0 && editingReviewerIds.includes(currentUserId)
+  const isEditingCreator = Boolean(form.id && currentUserId > 0 && editingTaskSnapshot?.creatorId === currentUserId)
+  const isExecutorOnlyEdit = Boolean(form.id && isEditingAssignee && !isEditingReviewer && !isEditingCreator && !currentUserIsAdmin)
+  const canEditFullTask = form.id ? canUpdateTask && !isExecutorOnlyEdit : canCreateTask
+  const canCurrentUserCompleteForm = Boolean(form.id && isEditingReviewer)
+  const canSubmitForm = form.id
+    ? canEditFullTask || isEditingAssignee || (isEditingReviewer && form.status === 'completed')
+    : canCreateTask
+
+  const isCurrentUserTaskAssignee = (task: Task) => currentUserId > 0 && (task.assignees || []).some((user) => user.id === currentUserId)
+  const isCurrentUserTaskReviewer = (task: Task) => currentUserId > 0 && (task.reviewers || []).some((user) => user.id === currentUserId)
+  const canHandleTask = (task: Task) => canUpdateTask || isCurrentUserTaskAssignee(task) || isCurrentUserTaskReviewer(task)
+  const canEditTaskField = (key: TaskColumnKey) => {
+    if (!isTaskFieldEditable(key)) return false
+    if (!form.id) return canCreateTask
+    if (key === 'progress') return canUpdateTask || isEditingAssignee
+    if (key === 'status') return (canUpdateTask && !isExecutorOnlyEdit) || isEditingReviewer
+    return canEditFullTask
+  }
 
   const load = async () => {
     try {
@@ -283,6 +317,12 @@ export function TasksPage() {
   useEffect(() => {
     void load()
   }, [page, pageSize, keyword, projectFilter, assigneeFilters, statusFilters, priorityFilters, tagFilters, sortKey, sortOrder, searchableFields, isProjectFilterEnabled, isAssigneeFilterEnabled, isStatusFilterEnabled, isPriorityFilterEnabled, isTagFilterEnabled])
+
+  useEffect(() => {
+    void fetchData<User>('/auth/profile', undefined, { silent: true })
+      .then((profile) => setCurrentUser(profile))
+      .catch(() => setCurrentUser(null))
+  }, [])
 
   useEffect(() => {
     if (sortKey === 'updatedAt') return
@@ -335,14 +375,16 @@ export function TasksPage() {
     const timer = window.setTimeout(() => {
       void Promise.all([
         fetchPage<User>('/users', { page: 1, pageSize: 200, keyword: assigneeKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 })),
+        fetchPage<User>('/users', { page: 1, pageSize: 200, keyword: reviewerKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 })),
         fetchPage<Tag>('/tags', { page: 1, pageSize: 200, keyword: tagKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 }))
-      ]).then(([userPage, tagPage]) => {
+      ]).then(([userPage, reviewerPage, tagPage]) => {
         setUsers(userPage.list)
+        setReviewerUsers(reviewerPage.list)
         setTags(tagPage.list)
       })
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [modalOpen, assigneeKeyword, tagKeyword])
+  }, [modalOpen, assigneeKeyword, reviewerKeyword, tagKeyword])
 
   useEffect(() => {
     if (!modalOpen || !form.projectId) return
@@ -354,9 +396,11 @@ export function TasksPage() {
   const openCreateModal = () => {
     if (!canCreateTask) return
     setForm((prev) => ({ ...initialForm, projectId: prev.projectId || projects[0]?.id || 0 }))
+    setEditingTaskSnapshot(null)
     setFormError('')
     setFormSuccess('')
     setAssigneeKeyword('')
+    setReviewerKeyword('')
     setTagKeyword('')
     setParentTaskInput(noParentLabel)
     setModalOpen(true)
@@ -364,7 +408,7 @@ export function TasksPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (form.id && !canUpdateTask) return
+    if (form.id && !canSubmitForm) return
     if (!form.id && !canCreateTask) return
     if (!form.projectId) {
       setFormError('请选择项目')
@@ -384,11 +428,17 @@ export function TasksPage() {
     try {
       setSubmitting(true)
       setFormError('')
-      if (form.id) await api.put(`/tasks/${form.id}`, payload)
-      else await api.post('/tasks', payload)
+      if (form.id) {
+        if (canEditFullTask) await api.put(`/tasks/${form.id}`, payload)
+        else if (isEditingReviewer && form.status === 'completed') await api.patch(`/tasks/${form.id}/complete`)
+        else if (isEditingAssignee) await api.patch(`/tasks/${form.id}/progress`, { progress: form.progress })
+      } else {
+        await api.post('/tasks', payload)
+      }
       setFormSuccess('保存成功')
       setModalOpen(false)
       setForm(initialForm)
+      setEditingTaskSnapshot(null)
       await load()
     } catch (submitError) {
       setFormError(readApiError(submitError, '保存任务失败'))
@@ -398,7 +448,8 @@ export function TasksPage() {
   }
 
   const edit = (item: Task) => {
-    if (!canUpdateTask) return
+    if (!canHandleTask(item)) return
+    setEditingTaskSnapshot(item)
     setForm({
       id: item.id,
       taskNo: item.taskNo,
@@ -417,11 +468,13 @@ export function TasksPage() {
       projectId: item.projectId,
       parentId: item.parentId,
       assigneeIds: (item.assignees || []).map((user) => user.id),
+      reviewerIds: (item.reviewers || []).map((user) => user.id),
       tagIds: (item.tags || []).map((tag) => tag.id)
     })
     setFormError('')
     setFormSuccess('')
     setAssigneeKeyword('')
+    setReviewerKeyword('')
     setTagKeyword('')
     const parent = parentTasks.find((task) => task.id === item.parentId) || tasks.find((task) => task.id === item.parentId)
     setParentTaskInput(parent ? `${parent.taskNo}｜${parent.title}` : noParentLabel)
@@ -429,7 +482,7 @@ export function TasksPage() {
   }
 
   const createTagInline = async (rawName?: string) => {
-    const canMutateCurrentTask = form.id ? canUpdateTask : canCreateTask
+    const canMutateCurrentTask = form.id ? canEditFullTask : canCreateTask
     if (!canCreateTag || !canMutateCurrentTask) return
     const name = (rawName ?? tagKeyword).trim()
     if (!name) {
@@ -513,6 +566,10 @@ export function TasksPage() {
 
   const toggleAssigneeExpand = (taskId: number) => {
     setExpandedAssigneeTaskIds((prev) => prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId])
+  }
+
+  const toggleReviewerExpand = (taskId: number) => {
+    setExpandedReviewerTaskIds((prev) => prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId])
   }
 
   const viewDetail = (item: Task) => {
@@ -601,6 +658,26 @@ export function TasksPage() {
     })
   }
 
+  const statusOptions = useMemo(() => {
+    const currentStatus = form.status
+    return Object.keys(statusLabel).filter((key) => {
+      if (key === currentStatus) return true
+      if (key === 'completed') return canCurrentUserCompleteForm
+      if (!form.id) return true
+      if (canUpdateTask && !isExecutorOnlyEdit) return true
+      return key === currentStatus
+    })
+  }, [form.id, form.status, canCurrentUserCompleteForm, canUpdateTask, isExecutorOnlyEdit])
+
+  const handleProgressChange = (value: number) => {
+    const progress = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0
+    setForm((prev) => ({
+      ...prev,
+      progress,
+      status: prev.id && isEditingAssignee && progress >= 100 && prev.status !== 'completed' ? 'reviewing' : prev.status
+    }))
+  }
+
   const toggleSort = (nextKey: TaskSortKey) => {
     if (nextKey !== 'updatedAt' && !sortableFieldSet.has(nextKey)) return
     setPage(1)
@@ -656,7 +733,16 @@ export function TasksPage() {
     return <th key={key}>{content}</th>
   }
 
-  const renderTaskCell = (task: Task, key: TaskColumnKey, assigneeNames: string[], isExpanded: boolean, visibleAssigneeNames: string[]) => {
+  const renderTaskCell = (
+    task: Task,
+    key: TaskColumnKey,
+    assigneeNames: string[],
+    isAssigneeExpanded: boolean,
+    visibleAssigneeNames: string[],
+    reviewerNames: string[],
+    isReviewerExpanded: boolean,
+    visibleReviewerNames: string[]
+  ) => {
     switch (key) {
       case 'taskNo':
         return <td key={key} data-label="任务编号">{task.taskNo}</td>
@@ -698,7 +784,24 @@ export function TasksPage() {
                 ))}
                 {assigneeNames.length > 3 && (
                   <button type="button" className="task-user-more" onClick={() => toggleAssigneeExpand(task.id)}>
-                    {isExpanded ? '收起' : `显示更多（${assigneeNames.length - 3}）`}
+                    {isAssigneeExpanded ? '收起' : `显示更多（${assigneeNames.length - 3}）`}
+                  </button>
+                )}
+              </div>
+            ) : '-'}
+          </td>
+        )
+      case 'reviewers':
+        return (
+          <td key={key} data-label="审核人">
+            {reviewerNames.length > 0 ? (
+              <div className="task-user-stack">
+                {visibleReviewerNames.map((name) => (
+                  <span key={name} className="task-user-line">{name}</span>
+                ))}
+                {reviewerNames.length > 3 && (
+                  <button type="button" className="task-user-more" onClick={() => toggleReviewerExpand(task.id)}>
+                    {isReviewerExpanded ? '收起' : `显示更多（${reviewerNames.length - 3}）`}
                   </button>
                 )}
               </div>
@@ -873,8 +976,11 @@ export function TasksPage() {
           </tr></thead><tbody>
             {tasks.map((task) => {
               const assigneeNames = getTaskAssigneeNames(task)
-              const isExpanded = expandedAssigneeTaskIds.includes(task.id)
-              const visibleAssigneeNames = isExpanded ? assigneeNames : assigneeNames.slice(0, 3)
+              const reviewerNames = getTaskReviewerNames(task)
+              const isAssigneeExpanded = expandedAssigneeTaskIds.includes(task.id)
+              const isReviewerExpanded = expandedReviewerTaskIds.includes(task.id)
+              const visibleAssigneeNames = isAssigneeExpanded ? assigneeNames : assigneeNames.slice(0, 3)
+              const visibleReviewerNames = isReviewerExpanded ? reviewerNames : reviewerNames.slice(0, 3)
 
               return (
                 <tr key={task.id} id={`task-row-${task.id}`} className={focusedTaskId === task.id ? 'task-row-focused' : ''}>
@@ -886,11 +992,11 @@ export function TasksPage() {
                       onChange={(event) => toggleTaskSelection(task.id, event.target.checked)}
                     />
                   </td>
-                  {visibleColumns.map((columnKey) => renderTaskCell(task, columnKey, assigneeNames, isExpanded, visibleAssigneeNames))}
+                  {visibleColumns.map((columnKey) => renderTaskCell(task, columnKey, assigneeNames, isAssigneeExpanded, visibleAssigneeNames, reviewerNames, isReviewerExpanded, visibleReviewerNames))}
                   <td data-label="操作">
                     <div className="table-actions">
                       <button className="btn secondary" onClick={() => viewDetail(task)}>查看详情</button>
-                      {canUpdateTask && <button className="btn secondary" onClick={() => edit(task)}>编辑</button>}
+                      {canHandleTask(task) && <button className="btn secondary" onClick={() => edit(task)}>{canUpdateTask ? '编辑' : '处理'}</button>}
                       {canDeleteTask && <button className="btn danger" onClick={() => onDelete(task.id)}>删除</button>}
                     </div>
                   </td>
@@ -959,6 +1065,7 @@ export function TasksPage() {
               <div className="detail-columns">
                 <div><strong>创建人ID：</strong>{detailTask.creatorId || '-'}</div>
                 <div><strong>执行人：</strong>{(detailTask.assignees || []).map((u) => `${u.name}(${u.username})`).join('，') || '-'}</div>
+                <div><strong>审核人：</strong>{(detailTask.reviewers || []).map((u) => `${u.name}(${u.username})`).join('，') || '-'}</div>
                 <div className="detail-time-line"><strong>任务周期：</strong>{formatDateTime(detailTask.startAt)} - {formatDateTime(detailTask.endAt)}</div>
                 <div className="detail-time-line">
                   <strong>附件：</strong>
@@ -975,13 +1082,13 @@ export function TasksPage() {
       <Modal open={modalOpen} title={form.id ? '编辑任务' : '新增任务'} onClose={() => setModalOpen(false)}>
         <form className="form-grid" onSubmit={submit}>
           <label htmlFor="task-no">任务编号（可空自动生成）</label>
-          <input id="task-no" value={form.taskNo} onChange={(e) => setForm((prev) => ({ ...prev, taskNo: e.target.value }))} disabled={!isTaskFieldEditable('taskNo')} />
+          <input id="task-no" value={form.taskNo} onChange={(e) => setForm((prev) => ({ ...prev, taskNo: e.target.value }))} disabled={!canEditTaskField('taskNo')} />
           <label className="required-label" htmlFor="task-title">标题</label>
-          <input id="task-title" value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} required disabled={!isTaskFieldEditable('title')} />
+          <input id="task-title" value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} required disabled={!canEditTaskField('title')} />
           <label htmlFor="task-description">描述</label>
-          <textarea id="task-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!isTaskFieldEditable('description')} />
+          <textarea id="task-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!canEditTaskField('description')} />
           <label htmlFor="task-attachment">附件</label>
-          <AttachmentField inputId="task-attachment" value={form.attachments} disabled={!canUploadAttachment} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
+          <AttachmentField inputId="task-attachment" value={form.attachments} disabled={!canUploadAttachment || !canEditFullTask} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
           <label className="required-label">项目</label>
           <RemoteProjectSelect
             ariaLabel="任务所属项目"
@@ -989,7 +1096,7 @@ export function TasksPage() {
             defaultOptionLabel="请选择项目"
             placeholder="搜索项目：编码/名称/描述"
             noResultsText="没有匹配的项目"
-            disabled={!isTaskFieldEditable('projectName')}
+            disabled={!canEditTaskField('projectName')}
             onChange={(value) => {
               const projectId = Number(value)
               setForm((prev) => ({
@@ -1007,7 +1114,7 @@ export function TasksPage() {
               aria-label="搜索父任务"
               placeholder="搜索父任务：任务编号/标题/描述"
               value={parentTaskInput}
-              disabled={!isTaskFieldEditable('title')}
+              disabled={!canEditFullTask}
               onFocus={() => setParentDropdownOpen(true)}
               onKeyDown={(event) => {
                 if (!parentDropdownOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
@@ -1079,23 +1186,33 @@ export function TasksPage() {
             )}
           </div>
           <label htmlFor="task-status">状态</label>
-          <select id="task-status" value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))} disabled={!isTaskFieldEditable('status')}>
-            {Object.keys(statusLabel).map((key) => <option key={key} value={key}>{statusLabel[key]}</option>)}
+          <select id="task-status" value={form.status} onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))} disabled={!canEditTaskField('status')}>
+            {statusOptions.map((key) => <option key={key} value={key}>{statusLabel[key]}</option>)}
           </select>
           <label htmlFor="task-priority">优先级</label>
-          <select id="task-priority" value={form.priority} onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value as TaskPriority }))} disabled={!isTaskFieldEditable('priority')}>
+          <select id="task-priority" value={form.priority} onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value as TaskPriority }))} disabled={!canEditTaskField('priority')}>
             <option value="high">高</option>
             <option value="medium">中</option>
             <option value="low">低</option>
           </select>
           <label htmlFor="task-progress">进度</label>
-          <input id="task-progress" type="number" inputMode="numeric" min={0} max={100} value={form.progress} onChange={(e) => setForm((prev) => ({ ...prev, progress: Number(e.target.value) }))} disabled={!isTaskFieldEditable('progress')} />
+          <input id="task-progress" type="number" inputMode="numeric" min={0} max={100} value={form.progress} onChange={(e) => handleProgressChange(Number(e.target.value))} disabled={!canEditTaskField('progress')} />
           <label htmlFor="task-assignees">执行人（多人）</label>
-          <SearchField aria-label="搜索执行人" placeholder="搜索执行人：姓名/用户名/邮箱" value={assigneeKeyword} onChange={setAssigneeKeyword} disabled={!isTaskFieldEditable('assignees')} />
+          <SearchField aria-label="搜索执行人" placeholder="搜索执行人：姓名/用户名/邮箱" value={assigneeKeyword} onChange={setAssigneeKeyword} disabled={!canEditTaskField('assignees')} />
           <div id="task-assignees" className="multi-checklist">
             {users.map((user) => (
               <label key={user.id} className="multi-check-item">
-                <input type="checkbox" checked={form.assigneeIds.includes(user.id)} onChange={() => setForm((prev) => ({ ...prev, assigneeIds: toggleNumber(prev.assigneeIds, user.id) }))} disabled={!isTaskFieldEditable('assignees')} />
+                <input type="checkbox" checked={form.assigneeIds.includes(user.id)} onChange={() => setForm((prev) => ({ ...prev, assigneeIds: toggleNumber(prev.assigneeIds, user.id) }))} disabled={!canEditTaskField('assignees')} />
+                <span>{user.name} ({user.username})</span>
+              </label>
+            ))}
+          </div>
+          <label htmlFor="task-reviewers">审核人（多人）</label>
+          <SearchField aria-label="搜索审核人" placeholder="搜索审核人：姓名/用户名/邮箱" value={reviewerKeyword} onChange={setReviewerKeyword} disabled={!canEditTaskField('reviewers')} />
+          <div id="task-reviewers" className="multi-checklist">
+            {reviewerUsers.map((user) => (
+              <label key={user.id} className="multi-check-item">
+                <input type="checkbox" checked={form.reviewerIds.includes(user.id)} onChange={() => setForm((prev) => ({ ...prev, reviewerIds: toggleNumber(prev.reviewerIds, user.id) }))} disabled={!canEditTaskField('reviewers')} />
                 <span>{user.name} ({user.username})</span>
               </label>
             ))}
@@ -1107,10 +1224,10 @@ export function TasksPage() {
             placeholder="搜索标签名称；没有则可直接新增"
             value={tagKeyword}
             onChange={setTagKeyword}
-            disabled={!isTaskFieldEditable('tags')}
+            disabled={!canEditTaskField('tags')}
             onKeyDown={(event) => {
-              const canMutateCurrentTask = form.id ? canUpdateTask : canCreateTask
-              if (event.key === 'Enter' && canCreateTagFromKeyword && canCreateTag && canMutateCurrentTask && isTaskFieldEditable('tags')) {
+              const canMutateCurrentTask = form.id ? canEditFullTask : canCreateTask
+              if (event.key === 'Enter' && canCreateTagFromKeyword && canCreateTag && canMutateCurrentTask && canEditTaskField('tags')) {
                 event.preventDefault()
                 void createTagInline(tagKeyword)
               }
@@ -1118,29 +1235,29 @@ export function TasksPage() {
           />
           <div className="multi-checklist">
             {hasTagSearchKeyword && tags.length > 0 && (
-              <label className="multi-check-item multi-check-item-action">
-                <input
-                type="checkbox"
-                checked={allSearchedTagsSelected}
-                onChange={(event) => toggleSelectAllSearchedTags(event.target.checked)}
-                disabled={!isTaskFieldEditable('tags')}
-              />
+	              <label className="multi-check-item multi-check-item-action">
+	                <input
+	                  type="checkbox"
+	                  checked={allSearchedTagsSelected}
+	                  onChange={(event) => toggleSelectAllSearchedTags(event.target.checked)}
+	                  disabled={!canEditTaskField('tags')}
+	                />
                 <span>全选搜索到的标签（{tags.length}）</span>
               </label>
             )}
-            {canCreateTagFromKeyword && canCreateTag && (form.id ? canUpdateTask : canCreateTask) && (
+            {canCreateTagFromKeyword && canCreateTag && (form.id ? canEditFullTask : canCreateTask) && (
               <button
                 type="button"
                 className="multi-check-action"
                 onClick={() => { void createTagInline(tagKeyword) }}
-                disabled={creatingTag || !isTaskFieldEditable('tags')}
+                disabled={creatingTag || !canEditTaskField('tags')}
               >
                 {creatingTag ? '新增中...' : `新增标签「${tagKeyword.trim()}」`}
               </button>
             )}
             {tags.map((tag) => (
               <label key={tag.id} className="multi-check-item">
-                <input type="checkbox" checked={form.tagIds.includes(tag.id)} onChange={() => setForm((prev) => ({ ...prev, tagIds: toggleNumber(prev.tagIds, tag.id) }))} disabled={!isTaskFieldEditable('tags')} />
+                <input type="checkbox" checked={form.tagIds.includes(tag.id)} onChange={() => setForm((prev) => ({ ...prev, tagIds: toggleNumber(prev.tagIds, tag.id) }))} disabled={!canEditTaskField('tags')} />
                 <span>{tag.name}</span>
               </label>
             ))}
@@ -1150,29 +1267,29 @@ export function TasksPage() {
           <DateTimeQuickField
             inputId="task-start"
             value={form.startAt}
-            disabled={!isTaskFieldEditable('startAt')}
+            disabled={!canEditTaskField('startAt')}
             onChange={(value) => setForm((prev) => ({ ...prev, startAt: value }))}
           />
           <label htmlFor="task-end">结束时间</label>
           <DateTimeQuickField
             inputId="task-end"
             value={form.endAt}
-            disabled={!isTaskFieldEditable('endAt')}
+            disabled={!canEditTaskField('endAt')}
             onChange={(value) => setForm((prev) => ({ ...prev, endAt: value }))}
           />
           <label htmlFor="task-milestone">里程碑</label>
-          <select id="task-milestone" value={form.isMilestone ? '1' : '0'} onChange={(e) => setForm((prev) => ({ ...prev, isMilestone: e.target.value === '1' }))}>
+          <select id="task-milestone" value={form.isMilestone ? '1' : '0'} onChange={(e) => setForm((prev) => ({ ...prev, isMilestone: e.target.value === '1' }))} disabled={!canEditFullTask}>
             <option value="0">否</option>
             <option value="1">是</option>
           </select>
           <label htmlFor="task-custom-field-1">自定义内容 1</label>
-          <textarea id="task-custom-field-1" rows={4} value={form.customField1} onChange={(e) => setForm((prev) => ({ ...prev, customField1: e.target.value }))} disabled={!isTaskFieldEditable('customField1')} />
+          <textarea id="task-custom-field-1" rows={4} value={form.customField1} onChange={(e) => setForm((prev) => ({ ...prev, customField1: e.target.value }))} disabled={!canEditTaskField('customField1')} />
           <label htmlFor="task-custom-field-2">自定义内容 2</label>
-          <textarea id="task-custom-field-2" rows={4} value={form.customField2} onChange={(e) => setForm((prev) => ({ ...prev, customField2: e.target.value }))} disabled={!isTaskFieldEditable('customField2')} />
+          <textarea id="task-custom-field-2" rows={4} value={form.customField2} onChange={(e) => setForm((prev) => ({ ...prev, customField2: e.target.value }))} disabled={!canEditTaskField('customField2')} />
           <label htmlFor="task-custom-field-3">自定义内容 3</label>
-          <textarea id="task-custom-field-3" rows={4} value={form.customField3} onChange={(e) => setForm((prev) => ({ ...prev, customField3: e.target.value }))} disabled={!isTaskFieldEditable('customField3')} />
+          <textarea id="task-custom-field-3" rows={4} value={form.customField3} onChange={(e) => setForm((prev) => ({ ...prev, customField3: e.target.value }))} disabled={!canEditTaskField('customField3')} />
           <div className="row-actions">
-            <button type="submit" className="btn" disabled={submitting || (form.id ? !canUpdateTask : !canCreateTask)}>{submitting ? '保存中...' : '保存任务'}</button>
+            <button type="submit" className="btn" disabled={submitting || !canSubmitForm}>{submitting ? '保存中...' : '保存任务'}</button>
             <button type="button" className="btn secondary" onClick={() => setForm(initialForm)}>重置</button>
           </div>
           {formError && <p className="error">{formError}</p>}

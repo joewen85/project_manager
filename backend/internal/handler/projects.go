@@ -374,6 +374,7 @@ func (h *Handler) ProjectDetail(c *gin.Context) {
 		Preload("Users").
 		Preload("Departments").
 		Preload("Tasks.Assignees").
+		Preload("Tasks.Reviewers").
 		Where("id = ?", c.Param("id")).
 		First(&project).Error; err != nil {
 		respondError(c, http.StatusNotFound, "PROJECT_NOT_FOUND", "项目不存在")

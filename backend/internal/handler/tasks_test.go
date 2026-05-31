@@ -12,6 +12,7 @@ func TestNormalizeStatus(t *testing.T) {
 	}{
 		{in: "queued", want: model.TaskQueued},
 		{in: "processing", want: model.TaskProcessing},
+		{in: "reviewing", want: model.TaskReviewing},
 		{in: "completed", want: model.TaskCompleted},
 		{in: "unknown", want: model.TaskPending},
 	}

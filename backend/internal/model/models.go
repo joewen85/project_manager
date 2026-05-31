@@ -8,6 +8,7 @@ const (
 	TaskPending    TaskStatus = "pending"
 	TaskQueued     TaskStatus = "queued"
 	TaskProcessing TaskStatus = "processing"
+	TaskReviewing  TaskStatus = "reviewing"
 	TaskCompleted  TaskStatus = "completed"
 )
 
@@ -113,6 +114,7 @@ type Task struct {
 	ParentID     *uint            `gorm:"index" json:"parentId"`
 	Children     []Task           `gorm:"foreignKey:ParentID" json:"children,omitempty"`
 	Assignees    []User           `gorm:"many2many:task_users;" json:"assignees,omitempty"`
+	Reviewers    []User           `gorm:"many2many:task_reviewers;" json:"reviewers,omitempty"`
 	Tags         []Tag            `gorm:"many2many:task_tags;" json:"tags,omitempty"`
 	Dependencies []TaskDependency `gorm:"foreignKey:TaskID" json:"dependencies,omitempty"`
 }

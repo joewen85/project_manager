@@ -1,4 +1,4 @@
-export type Status = 'pending' | 'queued' | 'processing' | 'completed'
+export type Status = 'pending' | 'queued' | 'processing' | 'reviewing' | 'completed'
 export type TaskPriority = 'high' | 'medium' | 'low'
 
 export interface PageResult<T> {
@@ -71,6 +71,7 @@ export interface Task {
   creatorId?: number
   creator?: User
   assignees?: User[]
+  reviewers?: User[]
   tags?: Tag[]
   dependencies?: TaskDependency[]
   createdAt?: string

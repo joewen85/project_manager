@@ -31,8 +31,13 @@ type taskRequest struct {
 	ProjectID    uint                     `json:"projectId" binding:"required"`
 	ParentID     *uint                    `json:"parentId"`
 	AssigneeIDs  []uint                   `json:"assigneeIds"`
+	ReviewerIDs  []uint                   `json:"reviewerIds"`
 	TagIDs       []uint                   `json:"tagIds"`
 	Dependencies *[]taskDependencyRequest `json:"dependencies"`
+}
+
+type taskProgressRequest struct {
+	Progress int `json:"progress"`
 }
 
 type taskDependencyRequest struct {
@@ -48,7 +53,7 @@ type taskScheduleRequest struct {
 
 func normalizeStatus(status string) model.TaskStatus {
 	switch model.TaskStatus(status) {
-	case model.TaskQueued, model.TaskProcessing, model.TaskCompleted:
+	case model.TaskQueued, model.TaskProcessing, model.TaskReviewing, model.TaskCompleted:
 		return model.TaskStatus(status)
 	default:
 		return model.TaskPending
@@ -80,9 +85,9 @@ func prioritySortClause(order string) string {
 func statusSortClause(order string) string {
 	switch strings.ToLower(strings.TrimSpace(order)) {
 	case "desc":
-		return "CASE tasks.status WHEN 'completed' THEN 0 WHEN 'processing' THEN 1 WHEN 'queued' THEN 2 WHEN 'pending' THEN 3 ELSE 4 END, tasks.created_at desc"
+		return "CASE tasks.status WHEN 'completed' THEN 0 WHEN 'reviewing' THEN 1 WHEN 'processing' THEN 2 WHEN 'queued' THEN 3 WHEN 'pending' THEN 4 ELSE 5 END, tasks.created_at desc"
 	default:
-		return "CASE tasks.status WHEN 'pending' THEN 0 WHEN 'queued' THEN 1 WHEN 'processing' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END, tasks.created_at desc"
+		return "CASE tasks.status WHEN 'pending' THEN 0 WHEN 'queued' THEN 1 WHEN 'processing' THEN 2 WHEN 'reviewing' THEN 3 WHEN 'completed' THEN 4 ELSE 5 END, tasks.created_at desc"
 	}
 }
 
@@ -168,6 +173,7 @@ func parseTaskStatuses(value string) []string {
 		string(model.TaskPending):    {},
 		string(model.TaskQueued):     {},
 		string(model.TaskProcessing): {},
+		string(model.TaskReviewing):  {},
 		string(model.TaskCompleted):  {},
 	}
 	items := parseCSVValues(value)
@@ -242,6 +248,23 @@ func diffUserIDs(newIDs []uint, oldIDs []uint) (added []uint, removed []uint) {
 		}
 	}
 	return added, removed
+}
+
+func userIDsFromUsers(users []model.User) []uint {
+	out := make([]uint, 0, len(users))
+	for _, user := range users {
+		out = append(out, user.ID)
+	}
+	return out
+}
+
+func containsUint(values []uint, target uint) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 type taskAssigneeOption struct {
@@ -397,6 +420,7 @@ func (h *Handler) ListTasks(c *gin.Context) {
 		Select("tasks.*, projects.name AS project_name").
 		Joins("LEFT JOIN projects ON projects.id = tasks.project_id").
 		Preload("Assignees").
+		Preload("Reviewers").
 		Preload("Creator").
 		Preload("Dependencies").
 		Preload("Tags", func(db *gorm.DB) *gorm.DB { return db.Order("tags.name asc") })
@@ -468,6 +492,10 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		respondValidationError(c, err)
 		return
 	}
+	if !validTaskProgress(req.Progress) {
+		respondError(c, http.StatusBadRequest, "INVALID_PROGRESS", "进度必须在 0 到 100 之间")
+		return
+	}
 	startAt, err := parseRFC3339(req.StartAt)
 	if err != nil {
 		respondError(c, http.StatusBadRequest, "INVALID_START_AT", "startAt 必须是 RFC3339 时间格式")
@@ -530,6 +558,18 @@ func (h *Handler) CreateTask(c *gin.Context) {
 				return err
 			}
 		}
+		if len(req.ReviewerIDs) > 0 {
+			reviewers, err := findUsersByIDs(tx, req.ReviewerIDs)
+			if err != nil {
+				return err
+			}
+			if err := replaceAssociation(tx, &item, "Reviewers", &reviewers); err != nil {
+				return err
+			}
+			if err := h.createNotificationsWithDB(tx, req.ReviewerIDs, "你被设为任务审核人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你设为审核人", "tasks", item.ID); err != nil {
+				return err
+			}
+		}
 		tags, err := findTagsByIDs(tx, req.TagIDs)
 		if err != nil {
 			return err
@@ -549,6 +589,7 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		}
 
 		if err := tx.Preload("Assignees").
+			Preload("Reviewers").
 			Preload("Creator").
 			Preload("Dependencies").
 			Preload("Tags", func(db *gorm.DB) *gorm.DB { return db.Order("tags.name asc") }).
@@ -560,7 +601,7 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		respondDBError(c, http.StatusBadRequest, "CREATE_TASK_FAILED", err)
 		return
 	}
-	h.pushNotificationUpdates(req.AssigneeIDs)
+	h.pushNotificationUpdates(append(append([]uint{}, req.AssigneeIDs...), req.ReviewerIDs...))
 
 	if len(item.Assignees) > 0 {
 		assigneeIDs := make([]uint, 0, len(item.Assignees))
@@ -573,10 +614,38 @@ func (h *Handler) CreateTask(c *gin.Context) {
 	c.JSON(http.StatusCreated, item)
 }
 
+func validTaskProgress(progress int) bool {
+	return progress >= 0 && progress <= 100
+}
+
+func (h *Handler) preloadTaskResponse(tx *gorm.DB, item *model.Task) error {
+	return tx.Preload("Assignees").
+		Preload("Reviewers").
+		Preload("Creator").
+		Preload("Dependencies").
+		Preload("Tags", func(db *gorm.DB) *gorm.DB { return db.Order("tags.name asc") }).
+		First(item, item.ID).Error
+}
+
+func (h *Handler) createReviewRequestNotificationsWithDB(tx *gorm.DB, reviewerIDs []uint, item model.Task) error {
+	return h.createNotificationsWithDB(
+		tx,
+		reviewerIDs,
+		"任务待审核",
+		"任务 "+item.TaskNo+" - "+item.Title+" 进度已到 100%，请审核确认完成",
+		"tasks",
+		item.ID,
+	)
+}
+
 func (h *Handler) UpdateTask(c *gin.Context) {
 	var req taskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondValidationError(c, err)
+		return
+	}
+	if !validTaskProgress(req.Progress) {
+		respondError(c, http.StatusBadRequest, "INVALID_PROGRESS", "进度必须在 0 到 100 之间")
 		return
 	}
 
@@ -604,6 +673,34 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 		return
 	}
 
+	var oldAssignees []model.User
+	if err := h.DB.Model(&item).Association("Assignees").Find(&oldAssignees); err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_TASK_ASSIGNEES_FAILED", err)
+		return
+	}
+	var oldReviewers []model.User
+	if err := h.DB.Model(&item).Association("Reviewers").Find(&oldReviewers); err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_TASK_REVIEWERS_FAILED", err)
+		return
+	}
+	oldAssigneeIDs := userIDsFromUsers(oldAssignees)
+	oldReviewerIDs := userIDsFromUsers(oldReviewers)
+	currentUserID := c.GetUint("userId")
+	isCurrentAssignee := containsUint(oldAssigneeIDs, currentUserID)
+	isCurrentReviewer := containsUint(oldReviewerIDs, currentUserID)
+	if isCurrentAssignee && !isCurrentReviewer && item.CreatorID != currentUserID && !h.currentUserIsAdmin(c) {
+		respondError(c, http.StatusForbidden, "TASK_PROGRESS_ONLY", "执行人只能更新进度")
+		return
+	}
+
+	nextStatus := normalizeStatus(req.Status)
+	oldStatus := item.Status
+	oldProgress := item.Progress
+	if nextStatus == model.TaskCompleted && oldStatus != model.TaskCompleted && !isCurrentReviewer {
+		respondError(c, http.StatusForbidden, "TASK_REVIEWER_REQUIRED", "只有任务审核人才能将任务设为已完成")
+		return
+	}
+
 	if req.TaskNo != "" {
 		item.TaskNo = req.TaskNo
 	}
@@ -612,7 +709,7 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	item.CustomField1 = req.CustomField1
 	item.CustomField2 = req.CustomField2
 	item.CustomField3 = req.CustomField3
-	item.Status = normalizeStatus(req.Status)
+	item.Status = nextStatus
 	item.Priority = normalizePriority(req.Priority)
 	item.IsMilestone = req.IsMilestone
 	item.Progress = req.Progress
@@ -628,19 +725,23 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	if !h.ensureProjectVisible(c, strconv.FormatUint(uint64(item.ProjectID), 10)) {
 		return
 	}
+	if item.Progress >= 100 && isCurrentAssignee && item.Status != model.TaskCompleted {
+		item.Status = model.TaskReviewing
+	}
+	if item.Status == model.TaskCompleted && item.Progress < 100 {
+		item.Progress = 100
+	}
+	shouldNotifyReviewers := item.Status == model.TaskReviewing &&
+		isCurrentAssignee &&
+		item.Progress >= 100 &&
+		(oldProgress < 100 || oldStatus != model.TaskReviewing)
 
 	var addedAssigneeIDs []uint
 	var removedAssigneeIDs []uint
+	var addedReviewerIDs []uint
+	var removedReviewerIDs []uint
+	var reviewRequestReviewerIDs []uint
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
-		var oldAssignees []model.User
-		if err := tx.Model(&item).Association("Assignees").Find(&oldAssignees); err != nil {
-			return err
-		}
-		oldIDs := make([]uint, 0, len(oldAssignees))
-		for _, user := range oldAssignees {
-			oldIDs = append(oldIDs, user.ID)
-		}
-
 		if err := tx.Save(&item).Error; err != nil {
 			return err
 		}
@@ -649,6 +750,13 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 			return err
 		}
 		if err := replaceAssociation(tx, &item, "Assignees", &users); err != nil {
+			return err
+		}
+		reviewers, err := findUsersByIDs(tx, req.ReviewerIDs)
+		if err != nil {
+			return err
+		}
+		if err := replaceAssociation(tx, &item, "Reviewers", &reviewers); err != nil {
 			return err
 		}
 		tags, err := findTagsByIDs(tx, req.TagIDs)
@@ -663,23 +771,34 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 				return err
 			}
 		}
-		added, removed := diffUserIDs(req.AssigneeIDs, oldIDs)
+		added, removed := diffUserIDs(req.AssigneeIDs, oldAssigneeIDs)
 		addedAssigneeIDs = append([]uint(nil), added...)
 		removedAssigneeIDs = append([]uint(nil), removed...)
+		addedReviewers, removedReviewers := diffUserIDs(req.ReviewerIDs, oldReviewerIDs)
+		addedReviewerIDs = append([]uint(nil), addedReviewers...)
+		removedReviewerIDs = append([]uint(nil), removedReviewers...)
 		if err := h.createNotificationsWithDB(tx, added, "你被加入任务执行人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你设为执行人", "tasks", item.ID); err != nil {
 			return err
 		}
 		if err := h.createNotificationsWithDB(tx, removed, "你已被移出任务执行人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你移出执行人", "tasks", item.ID); err != nil {
 			return err
 		}
+		if err := h.createNotificationsWithDB(tx, addedReviewers, "你被加入任务审核人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你设为审核人", "tasks", item.ID); err != nil {
+			return err
+		}
+		if err := h.createNotificationsWithDB(tx, removedReviewers, "你已被移出任务审核人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你移出审核人", "tasks", item.ID); err != nil {
+			return err
+		}
+		if shouldNotifyReviewers {
+			reviewRequestReviewerIDs = append([]uint(nil), req.ReviewerIDs...)
+			if err := h.createReviewRequestNotificationsWithDB(tx, reviewRequestReviewerIDs, item); err != nil {
+				return err
+			}
+		}
 		if err := h.triggerFailpoint("tasks.update.after_assignees"); err != nil {
 			return err
 		}
-		if err := tx.Preload("Assignees").
-			Preload("Creator").
-			Preload("Dependencies").
-			Preload("Tags", func(db *gorm.DB) *gorm.DB { return db.Order("tags.name asc") }).
-			First(&item, item.ID).Error; err != nil {
+		if err := h.preloadTaskResponse(tx, &item); err != nil {
 			return err
 		}
 		return h.writeAuditWithDB(c, tx, "tasks", "update", item.ID, true, auditDetailf("更新任务(id=%d)", item.ID))
@@ -694,7 +813,120 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	if len(removedAssigneeIDs) > 0 {
 		h.queueTaskChannelNotifications(removedAssigneeIDs, "你已被移出任务执行人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你移出执行人", item)
 	}
-	h.pushNotificationUpdates(append(addedAssigneeIDs, removedAssigneeIDs...))
+	notifyIDs := append(append([]uint{}, addedAssigneeIDs...), removedAssigneeIDs...)
+	notifyIDs = append(notifyIDs, addedReviewerIDs...)
+	notifyIDs = append(notifyIDs, removedReviewerIDs...)
+	notifyIDs = append(notifyIDs, reviewRequestReviewerIDs...)
+	h.pushNotificationUpdates(notifyIDs)
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *Handler) UpdateTaskProgress(c *gin.Context) {
+	var req taskProgressRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondValidationError(c, err)
+		return
+	}
+	if !validTaskProgress(req.Progress) {
+		respondError(c, http.StatusBadRequest, "INVALID_PROGRESS", "进度必须在 0 到 100 之间")
+		return
+	}
+
+	var item model.Task
+	if err := h.DB.Preload("Assignees").Preload("Reviewers").First(&item, c.Param("id")).Error; err != nil {
+		respondError(c, http.StatusNotFound, "TASK_NOT_FOUND", "任务不存在")
+		return
+	}
+	if !h.ensureProjectVisible(c, strconv.FormatUint(uint64(item.ProjectID), 10)) {
+		return
+	}
+
+	currentUserID := c.GetUint("userId")
+	assigneeIDs := userIDsFromUsers(item.Assignees)
+	if !containsUint(assigneeIDs, currentUserID) {
+		respondError(c, http.StatusForbidden, "TASK_ASSIGNEE_REQUIRED", "只有任务执行人才能更新进度")
+		return
+	}
+	if item.Status == model.TaskCompleted {
+		respondError(c, http.StatusBadRequest, "TASK_ALREADY_COMPLETED", "任务已完成，执行人不能再修改进度")
+		return
+	}
+
+	oldStatus := item.Status
+	oldProgress := item.Progress
+	item.Progress = req.Progress
+	if item.Progress >= 100 && item.Status != model.TaskCompleted {
+		item.Status = model.TaskReviewing
+	}
+	reviewerIDs := userIDsFromUsers(item.Reviewers)
+	shouldNotifyReviewers := item.Status == model.TaskReviewing &&
+		item.Progress >= 100 &&
+		(oldProgress < 100 || oldStatus != model.TaskReviewing)
+
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&item).Updates(map[string]any{
+			"progress": item.Progress,
+			"status":   item.Status,
+		}).Error; err != nil {
+			return err
+		}
+		if shouldNotifyReviewers {
+			if err := h.createReviewRequestNotificationsWithDB(tx, reviewerIDs, item); err != nil {
+				return err
+			}
+		}
+		if err := h.preloadTaskResponse(tx, &item); err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "tasks", "update_progress", item.ID, true, auditDetailf("更新任务进度(id=%d)", item.ID))
+	}); err != nil {
+		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_PROGRESS_FAILED", err)
+		return
+	}
+	if shouldNotifyReviewers {
+		h.pushNotificationUpdates(reviewerIDs)
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *Handler) CompleteTask(c *gin.Context) {
+	var item model.Task
+	if err := h.DB.Preload("Reviewers").First(&item, c.Param("id")).Error; err != nil {
+		respondError(c, http.StatusNotFound, "TASK_NOT_FOUND", "任务不存在")
+		return
+	}
+	if !h.ensureProjectVisible(c, strconv.FormatUint(uint64(item.ProjectID), 10)) {
+		return
+	}
+
+	currentUserID := c.GetUint("userId")
+	reviewerIDs := userIDsFromUsers(item.Reviewers)
+	if !containsUint(reviewerIDs, currentUserID) {
+		respondError(c, http.StatusForbidden, "TASK_REVIEWER_REQUIRED", "只有任务审核人才能将任务设为已完成")
+		return
+	}
+
+	item.Status = model.TaskCompleted
+	if item.Progress < 100 {
+		item.Progress = 100
+	}
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&item).Updates(map[string]any{
+			"status":   item.Status,
+			"progress": item.Progress,
+		}).Error; err != nil {
+			return err
+		}
+		if err := h.preloadTaskResponse(tx, &item); err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "tasks", "complete", item.ID, true, auditDetailf("完成任务审核(id=%d)", item.ID))
+	}); err != nil {
+		respondDBError(c, http.StatusBadRequest, "COMPLETE_TASK_FAILED", err)
+		return
+	}
 
 	c.JSON(http.StatusOK, item)
 }
@@ -710,6 +942,9 @@ func (h *Handler) DeleteTask(c *gin.Context) {
 	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := clearAssociation(tx, &item, "Assignees"); err != nil {
+			return err
+		}
+		if err := clearAssociation(tx, &item, "Reviewers"); err != nil {
 			return err
 		}
 		if err := clearAssociation(tx, &item, "Tags"); err != nil {
@@ -739,6 +974,7 @@ func (h *Handler) TaskTree(c *gin.Context) {
 	if err := h.DB.
 		Preload("Children.Children.Children").
 		Preload("Assignees").
+		Preload("Reviewers").
 		Where("project_id = ? AND parent_id IS NULL", projectID).
 		Find(&roots).Error; err != nil {
 		respondDBError(c, http.StatusInternalServerError, "QUERY_TASK_TREE_FAILED", err)
@@ -767,6 +1003,7 @@ func (h *Handler) Gantt(c *gin.Context) {
 	if err := h.DB.
 		Where("project_id = ?", parsedProjectID).
 		Preload("Assignees").
+		Preload("Reviewers").
 		Preload("Dependencies").
 		Order("COALESCE(start_at, created_at) asc").
 		Find(&tasks).Error; err != nil {
@@ -796,6 +1033,7 @@ func (h *Handler) GanttPortfolio(c *gin.Context) {
 	if err := h.DB.
 		Where("project_id IN ?", visibleProjectIDs).
 		Preload("Assignees").
+		Preload("Reviewers").
 		Preload("Dependencies").
 		Order("project_id asc").
 		Order("COALESCE(start_at, created_at) asc").
@@ -1061,7 +1299,7 @@ func (h *Handler) UpdateTaskSchedule(c *gin.Context) {
 			}
 			updatedCount = nextCount
 		}
-		return tx.Preload("Assignees").Preload("Dependencies").First(&item, item.ID).Error
+		return tx.Preload("Assignees").Preload("Reviewers").Preload("Dependencies").First(&item, item.ID).Error
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_SCHEDULE_FAILED", err)
 		return

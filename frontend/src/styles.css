@@ -1246,6 +1246,7 @@ td .btn + .btn { margin-left: 3px; }
 .pm-gantt-shell .bar-wrapper[class*='--priority-medium'] .bar { fill: #f59e0b; }
 .pm-gantt-shell .bar-wrapper[class*='--priority-low'] .bar { fill: #3b82f6; }
 .pm-gantt-shell .bar-wrapper[class*='--status-completed'] .bar-progress { fill: #22c55e; }
+.pm-gantt-shell .bar-wrapper[class*='--status-reviewing'] .bar-progress { fill: #f97316; }
 .pm-gantt-shell .bar-wrapper[class*='--status-processing'] .bar-progress { fill: #0ea5e9; }
 .pm-gantt-shell .bar-wrapper[class*='--status-queued'] .bar-progress { fill: #6366f1; }
 .pm-gantt-shell .bar-wrapper[class*='--status-pending'] .bar-progress { fill: #94a3b8; }

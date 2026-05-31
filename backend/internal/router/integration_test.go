@@ -1100,6 +1100,128 @@ func TestNotificationFlowOnTaskAssign(t *testing.T) {
 	markAllResp.Body.Close()
 }
 
+func TestTaskReviewerProgressReviewFlow(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "task-review-flow",
+		"description": "task review flow",
+		"permissionIds": []uint{
+			codeToID["projects.read"],
+			codeToID["tasks.read"],
+			codeToID["notifications.read"],
+			codeToID["notifications.update"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create role status expected 201 got %d", roleResp.StatusCode)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "review_flow_assignee",
+		"name":          "Review Flow Assignee",
+		"email":         "review_flow_assignee@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if assigneeResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create assignee status expected 201 got %d", assigneeResp.StatusCode)
+	}
+	assigneeID := uint(assigneeBody["id"].(float64))
+
+	reviewerResp, reviewerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "review_flow_reviewer",
+		"name":          "Review Flow Reviewer",
+		"email":         "review_flow_reviewer@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if reviewerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create reviewer status expected 201 got %d", reviewerResp.StatusCode)
+	}
+	reviewerID := uint(reviewerBody["id"].(float64))
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "REVIEW-FLOW-P1",
+		"name":        "Review Flow Project",
+		"description": "review flow",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create project status expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Review Flow Task",
+		"projectId":   projectID,
+		"status":      "processing",
+		"progress":    20,
+		"assigneeIds": []uint{assigneeID},
+		"reviewerIds": []uint{reviewerID},
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create task status expected 201 got %d", taskResp.StatusCode)
+	}
+	taskID := int(taskBody["id"].(float64))
+
+	assigneeLoginStatus, assigneeLoginBody := loginWithCredentials(t, ts.URL, "review_flow_assignee", "pass1234")
+	if assigneeLoginStatus != http.StatusOK {
+		t.Fatalf("login assignee expected 200 got %d", assigneeLoginStatus)
+	}
+	assigneeToken := assigneeLoginBody["token"].(string)
+	reviewerLoginStatus, reviewerLoginBody := loginWithCredentials(t, ts.URL, "review_flow_reviewer", "pass1234")
+	if reviewerLoginStatus != http.StatusOK {
+		t.Fatalf("login reviewer expected 200 got %d", reviewerLoginStatus)
+	}
+	reviewerToken := reviewerLoginBody["token"].(string)
+
+	progressResp, progressBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/progress", assigneeToken, map[string]any{
+		"progress": 100,
+	})
+	if progressResp.StatusCode != http.StatusOK {
+		t.Fatalf("update progress status expected 200 got %d", progressResp.StatusCode)
+	}
+	if progressBody["status"] != "reviewing" {
+		t.Fatalf("progress 100 should move task to reviewing, got %v", progressBody["status"])
+	}
+
+	completeByAssigneeResp, _ := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/complete", assigneeToken, nil)
+	if completeByAssigneeResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("assignee complete status expected 403 got %d", completeByAssigneeResp.StatusCode)
+	}
+
+	reviewerTasksResp, reviewerTasksBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks", reviewerToken, nil)
+	if reviewerTasksResp.StatusCode != http.StatusOK {
+		t.Fatalf("reviewer list tasks status expected 200 got %d", reviewerTasksResp.StatusCode)
+	}
+	if list, ok := reviewerTasksBody["list"].([]any); !ok || len(list) == 0 {
+		t.Fatalf("reviewer should see assigned review task, got %v", reviewerTasksBody["list"])
+	}
+
+	countResp, countBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/notifications/unread-count", reviewerToken, nil)
+	if countResp.StatusCode != http.StatusOK {
+		t.Fatalf("reviewer notification count status expected 200 got %d", countResp.StatusCode)
+	}
+	if int(countBody["count"].(float64)) < 1 {
+		t.Fatalf("reviewer should receive review notification, got %v", countBody["count"])
+	}
+
+	completeResp, completeBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/complete", reviewerToken, nil)
+	if completeResp.StatusCode != http.StatusOK {
+		t.Fatalf("reviewer complete status expected 200 got %d", completeResp.StatusCode)
+	}
+	if completeBody["status"] != "completed" || int(completeBody["progress"].(float64)) != 100 {
+		t.Fatalf("reviewer complete should finish task with progress 100, got status=%v progress=%v", completeBody["status"], completeBody["progress"])
+	}
+}
+
 func TestMyTasksReturnsEmptyArrays(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

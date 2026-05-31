@@ -44,6 +44,7 @@ Base URL: `http://localhost:8080/api/v1`
 | GET | `/tasks*` | `tasks.read` |
 | POST | `/tasks` | `tasks.create` |
 | PUT | `/tasks/:id` `/tasks/:id/dependencies` | `tasks.update` |
+| PATCH | `/tasks/:id/progress` `/tasks/:id/complete` | `tasks.read` + 任务执行人/审核人关系校验 |
 | PATCH | `/tasks/:id/schedule` | `tasks.update` |
 | DELETE | `/tasks/:id` | `tasks.delete` |
 | GET | `/stats/dashboard` | `stats.read` |

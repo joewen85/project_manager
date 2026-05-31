@@ -45,7 +45,8 @@ func (h *Handler) scopeTasksQuery(c *gin.Context, query *gorm.DB) *gorm.DB {
 	}
 	uid := c.GetUint("userId")
 	return query.Where(
-		"tasks.creator_id = ? OR EXISTS (SELECT 1 FROM task_users tu WHERE tu.task_id = tasks.id AND tu.user_id = ?)",
+		"tasks.creator_id = ? OR EXISTS (SELECT 1 FROM task_users tu WHERE tu.task_id = tasks.id AND tu.user_id = ?) OR EXISTS (SELECT 1 FROM task_reviewers tr WHERE tr.task_id = tasks.id AND tr.user_id = ?)",
+		uid,
 		uid,
 		uid,
 	)
@@ -65,8 +66,10 @@ func (h *Handler) scopeProjectsQuery(c *gin.Context, query *gorm.DB) *gorm.DB {
 			  AND (
 				t.creator_id = ?
 				OR EXISTS (SELECT 1 FROM task_users tu WHERE tu.task_id = t.id AND tu.user_id = ?)
+				OR EXISTS (SELECT 1 FROM task_reviewers tr WHERE tr.task_id = t.id AND tr.user_id = ?)
 			  )
 		)`,
+		uid,
 		uid,
 		uid,
 		uid,

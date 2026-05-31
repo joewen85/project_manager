@@ -76,12 +76,12 @@ func TestStatusSortClause(t *testing.T) {
 		{
 			name:   "status asc",
 			order:  "asc",
-			expect: "CASE tasks.status WHEN 'pending' THEN 0 WHEN 'queued' THEN 1 WHEN 'processing' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END, tasks.created_at desc",
+			expect: "CASE tasks.status WHEN 'pending' THEN 0 WHEN 'queued' THEN 1 WHEN 'processing' THEN 2 WHEN 'reviewing' THEN 3 WHEN 'completed' THEN 4 ELSE 5 END, tasks.created_at desc",
 		},
 		{
 			name:   "status desc",
 			order:  "desc",
-			expect: "CASE tasks.status WHEN 'completed' THEN 0 WHEN 'processing' THEN 1 WHEN 'queued' THEN 2 WHEN 'pending' THEN 3 ELSE 4 END, tasks.created_at desc",
+			expect: "CASE tasks.status WHEN 'completed' THEN 0 WHEN 'reviewing' THEN 1 WHEN 'processing' THEN 2 WHEN 'queued' THEN 3 WHEN 'pending' THEN 4 ELSE 5 END, tasks.created_at desc",
 		},
 	}
 
