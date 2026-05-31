@@ -78,9 +78,15 @@ GO_BUILDER_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/golang:1.25-alpine \
 APP_RUNTIME_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/alpine:latest \
 NODE_BUILDER_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/node:24-alpine \
 NGINX_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/nginx:alpine \
-GO_PROXY=https://goproxy.cn,direct \
+GOPROXY=https://goproxy.cn,direct \
 NPM_REGISTRY=https://registry.npmmirror.com \
 docker compose up -d --build
+```
+后端 Dockerfile 同时兼容旧变量 `GO_PROXY`，但直接执行 `docker build` 时需要显式传入构建参数，例如：
+```bash
+docker build --build-arg GOPROXY=https://goproxy.cn,direct -f backend/Dockerfile backend
+# 兼容旧变量名：
+docker build --build-arg GO_PROXY=https://goproxy.cn,direct -f backend/Dockerfile backend
 ```
 如本机端口冲突，可指定主机端口：
 ```bash

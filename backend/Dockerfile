@@ -1,16 +1,21 @@
 ARG GO_BUILDER_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/golang:1.25-alpine
 ARG APP_RUNTIME_IMAGE=registry.cn-guangzhou.aliyuncs.com/joe/alpine:latest
-ARG GO_PROXY=https://proxy.golang.org,direct
+ARG GO_PROXY=https://goproxy.cn,direct
+ARG GOPROXY
 
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER_IMAGE} AS builder
 ARG GO_PROXY
+ARG GOPROXY
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 ARG TARGETVARIANT
 WORKDIR /app
 COPY go.mod go.sum ./
-ENV GOPROXY=${GO_PROXY}
-RUN go mod download
+RUN set -eux; \
+    GOPROXY_VALUE="${GOPROXY:-${GO_PROXY:-https://goproxy.cn,direct}}"; \
+    go env -w GOPROXY="${GOPROXY_VALUE}"; \
+    go env GOPROXY; \
+    go mod download
 COPY . .
 RUN set -eux; \
     GOARM_VALUE=""; \
