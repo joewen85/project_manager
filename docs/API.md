@@ -58,6 +58,10 @@ Base URL: `http://localhost:8080/api/v1`
 | PUT | `/project-templates/:id` | `templates.update` |
 | DELETE | `/project-templates/:id` | `templates.delete` |
 | POST | `/project-templates/:id/create-project` | `projects.create` + `templates.read` |
+| GET | `/automation-rules` `/automation-rules/logs` | `automations.read` |
+| POST | `/automation-rules` | `automations.create` |
+| PUT | `/automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
+| DELETE | `/automation-rules/:id` | `automations.delete` |
 | GET | `/stats/dashboard` `/stats/project-health` | `stats.read` |
 | GET | `/notifications` `/notifications/unread-count` | `notifications.read` |
 | PATCH | `/notifications/:id/read` `/notifications/read-all` | `notifications.update` |
@@ -297,6 +301,38 @@ Base URL: `http://localhost:8080/api/v1`
 - 请求体: `{ code?, name, description?, startAt?, endAt?, userIds?, departmentIds? }`
 - 效果: 创建项目并按模板任务树生成真实任务；任务编号自动生成；父子关系、里程碑、相对排期和模板内依赖会映射为真实任务关系
 - 响应: `{ templateId, project, tasks }`
+
+## 自动化规则
+
+### GET `/automation-rules`
+- 权限: `automations.read`
+- Query: `page` `pageSize` `keyword` `trigger` `isEnabled`
+- 当前支持触发器: `task_overdue`
+
+### POST `/automation-rules`
+- 权限: `automations.create`
+- 请求体: `{ name, trigger: "task_overdue", isEnabled?, conditions, actions }`
+- `conditions`: `{ overdueDays?, projectIds? }`，`overdueDays` 默认 1，`projectIds` 为空表示不限制项目
+- `actions`: `{ notifyAssignees?, notifyProjectOwners? }`，至少启用一个通知对象；未传时默认同时通知执行人和项目负责人
+
+### PUT `/automation-rules/:id`
+- 权限: `automations.update`
+- 请求体同创建规则
+
+### POST `/automation-rules/:id/run`
+- 权限: `automations.update`
+- 效果: 手动执行规则；非管理员只处理当前用户可见项目内的任务；执行结果写入日志并触发站内通知
+- 响应: `{ id, ruleId, trigger, status, matchedCount, actionCount, message, actorId, runSource, createdAt }`
+
+### GET `/automation-rules/logs`
+- 权限: `automations.read`
+- Query: `page` `pageSize` `ruleId` `status` `trigger`
+
+### DELETE `/automation-rules/:id`
+- 权限: `automations.delete`
+
+### 后台执行
+- 服务启动后会注册小时级后台任务，定时执行已启用规则；后台执行写入 `runSource=scheduled` 的执行日志。
 
 ## 统计分析
 

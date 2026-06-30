@@ -1884,6 +1884,180 @@ func TestProjectTemplateCreateAndGenerateProjectTree(t *testing.T) {
 	}
 }
 
+func TestAutomationRuleOverdueTaskNotification(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "automation-notification-reader",
+		"description": "can receive notifications",
+		"permissionIds": []uint{
+			codeToID["notifications.read"],
+			codeToID["notifications.update"],
+		},
+	})
+	if notificationRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create notification role expected 201 got %d", notificationRoleResp.StatusCode)
+	}
+	notificationRoleID := uint(notificationRoleBody["id"].(float64))
+
+	readOnlyRoleResp, readOnlyRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "automation-read-only",
+		"description": "can read automation only",
+		"permissionIds": []uint{
+			codeToID["automations.read"],
+		},
+	})
+	if readOnlyRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation read-only role expected 201 got %d", readOnlyRoleResp.StatusCode)
+	}
+	readOnlyRoleID := uint(readOnlyRoleBody["id"].(float64))
+
+	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "automation_owner",
+		"name":          "Automation Owner",
+		"email":         "automation_owner@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{notificationRoleID},
+		"departmentIds": []uint{},
+	})
+	if ownerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation owner expected 201 got %d", ownerResp.StatusCode)
+	}
+	ownerID := uint(ownerBody["id"].(float64))
+
+	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "automation_assignee",
+		"name":          "Automation Assignee",
+		"email":         "automation_assignee@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{notificationRoleID},
+		"departmentIds": []uint{},
+	})
+	if assigneeResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation assignee expected 201 got %d", assigneeResp.StatusCode)
+	}
+	assigneeID := uint(assigneeBody["id"].(float64))
+
+	readOnlyUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "automation_read_only",
+		"name":          "Automation Read Only",
+		"email":         "automation_read_only@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{readOnlyRoleID},
+		"departmentIds": []uint{},
+	})
+	if readOnlyUserResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation read-only user expected 201 got %d", readOnlyUserResp.StatusCode)
+	}
+	readOnlyLoginStatus, readOnlyLoginBody := loginWithCredentials(t, ts.URL, "automation_read_only", "pass1234")
+	if readOnlyLoginStatus != http.StatusOK {
+		t.Fatalf("login automation read-only expected 200 got %d", readOnlyLoginStatus)
+	}
+	readOnlyToken := readOnlyLoginBody["token"].(string)
+
+	assigneeLoginStatus, assigneeLoginBody := loginWithCredentials(t, ts.URL, "automation_assignee", "pass1234")
+	if assigneeLoginStatus != http.StatusOK {
+		t.Fatalf("login automation assignee expected 200 got %d", assigneeLoginStatus)
+	}
+	assigneeToken := assigneeLoginBody["token"].(string)
+	ownerLoginStatus, ownerLoginBody := loginWithCredentials(t, ts.URL, "automation_owner", "pass1234")
+	if ownerLoginStatus != http.StatusOK {
+		t.Fatalf("login automation owner expected 200 got %d", ownerLoginStatus)
+	}
+	ownerToken := ownerLoginBody["token"].(string)
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":    "AUTO-P1",
+		"name":    "Automation Project",
+		"userIds": []uint{ownerID},
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Automation overdue task",
+		"projectId":   projectID,
+		"assigneeIds": []uint{assigneeID},
+		"startAt":     "2000-01-01T00:00:00Z",
+		"endAt":       "2000-01-02T00:00:00Z",
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create overdue task expected 201 got %d %#v", taskResp.StatusCode, taskBody)
+	}
+
+	ruleResp, ruleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":      "逾期 1 天提醒",
+		"trigger":   "task_overdue",
+		"isEnabled": true,
+		"conditions": map[string]any{
+			"overdueDays": 1,
+			"projectIds":  []uint{uint(projectID)},
+		},
+		"actions": map[string]any{
+			"notifyAssignees":     true,
+			"notifyProjectOwners": true,
+		},
+	})
+	if ruleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation rule expected 201 got %d %#v", ruleResp.StatusCode, ruleBody)
+	}
+	ruleID := int(ruleBody["id"].(float64))
+
+	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/automation-rules?keyword=逾期", adminToken, nil)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list automation rules expected 200 got %d", listResp.StatusCode)
+	}
+	if list, ok := listBody["list"].([]any); !ok || len(list) != 1 {
+		t.Fatalf("automation list should include rule got %#v", listBody)
+	}
+
+	forbiddenRunResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules/"+strconv.Itoa(ruleID)+"/run", readOnlyToken, nil)
+	if forbiddenRunResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("automation read-only run expected 403 got %d", forbiddenRunResp.StatusCode)
+	}
+
+	runResp, runBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules/"+strconv.Itoa(ruleID)+"/run", adminToken, nil)
+	if runResp.StatusCode != http.StatusOK {
+		t.Fatalf("run automation rule expected 200 got %d %#v", runResp.StatusCode, runBody)
+	}
+	if runBody["status"] != "success" || int(runBody["matchedCount"].(float64)) != 1 || int(runBody["actionCount"].(float64)) != 2 {
+		t.Fatalf("automation run should match 1 task and notify 2 users got %#v", runBody)
+	}
+
+	logResp, logBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/automation-rules/logs?ruleId="+strconv.Itoa(ruleID), adminToken, nil)
+	if logResp.StatusCode != http.StatusOK {
+		t.Fatalf("list automation logs expected 200 got %d", logResp.StatusCode)
+	}
+	logItems, _ := logBody["list"].([]any)
+	if len(logItems) == 0 {
+		t.Fatalf("automation logs should include execution got %#v", logBody)
+	}
+
+	assigneeNotificationResp, assigneeNotificationBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/notifications?module=tasks&keyword=逾期", assigneeToken, nil)
+	if assigneeNotificationResp.StatusCode != http.StatusOK {
+		t.Fatalf("assignee notifications expected 200 got %d", assigneeNotificationResp.StatusCode)
+	}
+	assigneeNotifications, _ := assigneeNotificationBody["list"].([]any)
+	if len(assigneeNotifications) == 0 {
+		t.Fatalf("assignee should receive overdue notification got %#v", assigneeNotificationBody)
+	}
+
+	ownerNotificationResp, ownerNotificationBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/notifications?module=tasks&keyword=逾期", ownerToken, nil)
+	if ownerNotificationResp.StatusCode != http.StatusOK {
+		t.Fatalf("owner notifications expected 200 got %d", ownerNotificationResp.StatusCode)
+	}
+	ownerNotifications, _ := ownerNotificationBody["list"].([]any)
+	if len(ownerNotifications) == 0 {
+		t.Fatalf("project owner should receive overdue notification got %#v", ownerNotificationBody)
+	}
+}
+
 func TestMyTasksReturnsEmptyArrays(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

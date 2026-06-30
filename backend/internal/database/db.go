@@ -26,6 +26,8 @@ func Migrate(db *gorm.DB) error {
 		&model.TaskComment{},
 		&model.TaskActivity{},
 		&model.WorkRequest{},
+		&model.AutomationRule{},
+		&model.AutomationExecutionLog{},
 		&model.AuditLog{},
 		&model.Notification{},
 	)

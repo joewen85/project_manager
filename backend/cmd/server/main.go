@@ -35,6 +35,22 @@ func startAuditRetentionJob(h *handler.Handler) {
 	}()
 }
 
+func startAutomationRuleJob(h *handler.Handler) {
+	ticker := time.NewTicker(time.Hour)
+	go func() {
+		for range ticker.C {
+			executedCount, err := h.RunEnabledAutomationRules(time.Now(), "scheduled")
+			if err != nil {
+				log.Printf("automation rule job failed: %v", err)
+				continue
+			}
+			if executedCount > 0 {
+				log.Printf("automation rule job executed %d rule(s)", executedCount)
+			}
+		}
+	}()
+}
+
 func main() {
 	_ = godotenv.Load(".env")
 	_ = godotenv.Load("../.env")
@@ -58,6 +74,7 @@ func main() {
 
 	h := handler.New(db, cfg)
 	startAuditRetentionJob(h)
+	startAutomationRuleJob(h)
 	r := router.New(cfg, h)
 
 	if err = r.Run(":" + cfg.Port); err != nil {

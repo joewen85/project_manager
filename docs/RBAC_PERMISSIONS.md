@@ -49,6 +49,10 @@
 | `templates.read` | 查看项目模板 |
 | `templates.update` | 更新项目模板 |
 | `templates.delete` | 删除项目模板 |
+| `automations.create` | 创建自动化规则 |
+| `automations.read` | 查看自动化规则与执行日志 |
+| `automations.update` | 更新并执行自动化规则 |
+| `automations.delete` | 删除自动化规则 |
 | `notifications.read` | 查看通知 |
 | `notifications.update` | 标记通知已读 |
 | `stats.read` | 查看统计分析 |
@@ -96,6 +100,10 @@
 | `PUT /project-templates/:id` | `templates.update` |
 | `DELETE /project-templates/:id` | `templates.delete` |
 | `POST /project-templates/:id/create-project` | `projects.create` + `templates.read` |
+| `GET /automation-rules` `GET /automation-rules/logs` | `automations.read` |
+| `POST /automation-rules` | `automations.create` |
+| `PUT /automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
+| `DELETE /automation-rules/:id` | `automations.delete` |
 | `GET /stats/dashboard` `GET /stats/project-health` | `stats.read`；普通用户按任务可见范围聚合 |
 | `GET /notifications` `GET /notifications/unread-count` | `notifications.read` |
 | `PATCH /notifications/:id/read` `PATCH /notifications/read-all` | `notifications.update` |

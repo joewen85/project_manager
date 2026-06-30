@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Building2, CalendarRange, ClipboardList, FolderKanban, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, Shield, Sun, Tag, UserCircle2, Users, X } from 'lucide-react'
+import { BarChart3, Bell, Building2, CalendarRange, ClipboardList, FolderKanban, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, Shield, Sun, Tag, UserCircle2, Users, Workflow, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, clearPermissions, fetchData, fetchPage, getPermissions, hasPermission, readApiError, setPermissions } from '../services/api'
@@ -17,6 +17,7 @@ const menus = [
   { to: '/gantt', label: '甘特模块', icon: CalendarRange, permission: 'projects.read' },
   { to: '/tasks', label: '任务列表', icon: ListChecks, permission: 'tasks.read' },
   { to: '/requests', label: '请求入口', icon: ClipboardList, permission: 'requests.read' },
+  { to: '/automation-rules', label: '自动化规则', icon: Workflow, permission: 'automations.read' },
   { to: '/notifications', label: '站内通知', icon: Bell, permission: 'notifications.read' },
   { to: '/audit', label: '审计日志', icon: NotebookTabs, permission: 'audit.read' },
   { to: '/me', label: '个人工作', icon: UserCircle2, permission: 'tasks.read' }

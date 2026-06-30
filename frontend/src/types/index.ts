@@ -2,6 +2,8 @@ export type Status = 'pending' | 'queued' | 'processing' | 'reviewing' | 'comple
 export type TaskPriority = 'high' | 'medium' | 'low'
 export type WorkRequestType = 'project' | 'task' | 'bug' | 'change'
 export type WorkRequestStatus = 'submitted' | 'approved' | 'rejected' | 'converted'
+export type AutomationTrigger = 'task_overdue'
+export type AutomationExecutionStatus = 'success' | 'skipped' | 'failed'
 
 export interface PageResult<T> {
   list: T[]
@@ -159,6 +161,45 @@ export interface ProjectTemplate {
   description: string
   taskTree: TemplateTask[]
   createdAt?: string
+  updatedAt?: string
+}
+
+export interface AutomationConditions {
+  overdueDays: number
+  projectIds?: number[]
+}
+
+export interface AutomationActions {
+  notifyAssignees: boolean
+  notifyProjectOwners: boolean
+}
+
+export interface AutomationRule {
+  id: number
+  name: string
+  trigger: AutomationTrigger
+  isEnabled: boolean
+  conditions: AutomationConditions
+  actions: AutomationActions
+  lastRunAt?: string
+  createdById?: number
+  createdBy?: User
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AutomationExecutionLog {
+  id: number
+  ruleId: number
+  rule?: AutomationRule
+  trigger: AutomationTrigger
+  status: AutomationExecutionStatus
+  matchedCount: number
+  actionCount: number
+  message: string
+  actorId?: number
+  runSource: 'manual' | 'scheduled'
+  createdAt: string
   updatedAt?: string
 }
 

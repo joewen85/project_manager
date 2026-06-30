@@ -1316,6 +1316,148 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postProjectTemplatesByIdCreateProject
+  /automation-rules:
+    get:
+      summary: 自动化规则列表
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: trigger
+        schema:
+          type: string
+          enum:
+          - task_overdue
+      - in: query
+        name: isEnabled
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationRulePageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getAutomationRules
+    post:
+      summary: 创建自动化规则
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationRuleUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postAutomationRules
+  /automation-rules/logs:
+    get:
+      summary: 自动化执行日志
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - in: query
+        name: ruleId
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - success
+          - skipped
+          - failed
+      - in: query
+        name: trigger
+        schema:
+          type: string
+          enum:
+          - task_overdue
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationExecutionLogPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getAutomationRulesLogs
+  /automation-rules/{id}:
+    put:
+      summary: 更新自动化规则
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationRuleUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putAutomationRulesById
+    delete:
+      summary: 删除自动化规则
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteAutomationRulesById
+  /automation-rules/{id}/run:
+    post:
+      summary: 手动执行自动化规则
+      description: 非管理员只处理当前用户可见项目内的任务；执行结果写入 automation_execution_logs。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationExecutionLog'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postAutomationRulesByIdRun
   /stats/dashboard:
     get:
       summary: 仪表盘统计
@@ -2061,6 +2203,110 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Task'
+    AutomationConditions:
+      type: object
+      properties:
+        overdueDays:
+          type: integer
+          minimum: 0
+          default: 1
+        projectIds:
+          type: array
+          items:
+            type: integer
+    AutomationActions:
+      type: object
+      properties:
+        notifyAssignees:
+          type: boolean
+        notifyProjectOwners:
+          type: boolean
+    AutomationRule:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        trigger:
+          type: string
+          enum:
+          - task_overdue
+        isEnabled:
+          type: boolean
+        conditions:
+          $ref: '#/components/schemas/AutomationConditions'
+        actions:
+          $ref: '#/components/schemas/AutomationActions'
+        lastRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdById:
+          type: integer
+        createdBy:
+          $ref: '#/components/schemas/UserLite'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AutomationRuleUpsertRequest:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+        trigger:
+          type: string
+          enum:
+          - task_overdue
+        isEnabled:
+          type: boolean
+        conditions:
+          $ref: '#/components/schemas/AutomationConditions'
+        actions:
+          $ref: '#/components/schemas/AutomationActions'
+    AutomationExecutionLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        ruleId:
+          type: integer
+        rule:
+          $ref: '#/components/schemas/AutomationRule'
+        trigger:
+          type: string
+          enum:
+          - task_overdue
+        status:
+          type: string
+          enum:
+          - success
+          - skipped
+          - failed
+        matchedCount:
+          type: integer
+        actionCount:
+          type: integer
+        message:
+          type: string
+        actorId:
+          type: integer
+        runSource:
+          type: string
+          enum:
+          - manual
+          - scheduled
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     TaskDependencyRequest:
       type: object
       properties:
@@ -2692,6 +2938,34 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectTemplate'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    AutomationRulePageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationRule'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    AutomationExecutionLogPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationExecutionLog'
         total:
           type: integer
           format: int64

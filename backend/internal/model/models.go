@@ -38,6 +38,20 @@ const (
 	WorkRequestConverted WorkRequestStatus = "converted"
 )
 
+type AutomationTrigger string
+
+const (
+	AutomationTriggerTaskOverdue AutomationTrigger = "task_overdue"
+)
+
+type AutomationExecutionStatus string
+
+const (
+	AutomationExecutionSuccess AutomationExecutionStatus = "success"
+	AutomationExecutionSkipped AutomationExecutionStatus = "skipped"
+	AutomationExecutionFailed  AutomationExecutionStatus = "failed"
+)
+
 type BaseModel struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -215,6 +229,41 @@ type WorkRequest struct {
 	ApprovalNote    string            `gorm:"type:text" json:"approvalNote"`
 	ConvertedTaskID *uint             `gorm:"index" json:"convertedTaskId,omitempty"`
 	ConvertedTask   *Task             `json:"convertedTask,omitempty"`
+}
+
+type AutomationConditions struct {
+	OverdueDays int    `json:"overdueDays"`
+	ProjectIDs  []uint `json:"projectIds"`
+}
+
+type AutomationActions struct {
+	NotifyAssignees     bool `json:"notifyAssignees"`
+	NotifyProjectOwners bool `json:"notifyProjectOwners"`
+}
+
+type AutomationRule struct {
+	BaseModel
+	Name        string               `gorm:"size:150;not null" json:"name"`
+	Trigger     AutomationTrigger    `gorm:"size:50;default:'task_overdue';index" json:"trigger"`
+	IsEnabled   bool                 `gorm:"default:true;index" json:"isEnabled"`
+	Conditions  AutomationConditions `gorm:"serializer:json" json:"conditions"`
+	Actions     AutomationActions    `gorm:"serializer:json" json:"actions"`
+	LastRunAt   *time.Time           `json:"lastRunAt,omitempty"`
+	CreatedByID uint                 `gorm:"index" json:"createdById"`
+	CreatedBy   User                 `json:"createdBy,omitempty"`
+}
+
+type AutomationExecutionLog struct {
+	BaseModel
+	RuleID       uint                      `gorm:"not null;index" json:"ruleId"`
+	Rule         AutomationRule            `gorm:"foreignKey:RuleID;constraint:OnDelete:CASCADE;" json:"rule,omitempty"`
+	Trigger      AutomationTrigger         `gorm:"size:50;index" json:"trigger"`
+	Status       AutomationExecutionStatus `gorm:"size:20;index" json:"status"`
+	MatchedCount int                       `json:"matchedCount"`
+	ActionCount  int                       `json:"actionCount"`
+	Message      string                    `gorm:"type:text" json:"message"`
+	ActorID      uint                      `gorm:"index" json:"actorId"`
+	RunSource    string                    `gorm:"size:20;default:'manual';index" json:"runSource"`
 }
 
 type AuditLog struct {

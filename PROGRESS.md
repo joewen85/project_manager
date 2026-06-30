@@ -72,6 +72,12 @@
 - 完成：模板生成项目会创建真实项目、任务父子树和任务依赖，任务编号自动生成并写入活动与审计
 - 完成：新增模板管理前端页面与侧边导航，支持筛选、JSON 任务树编辑、一键生成项目
 - 完成：补充模板创建/更新/列表/生成项目/依赖映射/权限拦截集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
+- 完成：按 `Improvement.md` 推进 P0-5 基础自动化规则逾期提醒 MVP
+- 完成：新增 `automation_rules` 与 `automation_execution_logs` 模型及显式 SQL 迁移
+- 完成：新增 `automations.create/read/update/delete` 权限，支持规则 CRUD、手动执行、执行日志查询
+- 完成：自动化逾期规则支持按逾期天数和项目范围匹配任务，通知任务执行人与项目负责人，后台小时级巡检启用规则
+- 完成：新增自动化规则前端页面与侧边导航，支持筛选、启停、配置通知对象、手动执行和查看执行日志
+- 完成：补充逾期规则执行/通知/日志/权限拦截集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）
