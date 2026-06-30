@@ -823,6 +823,7 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	var removedReviewerIDs []uint
 	var reviewRequestReviewerIDs []uint
 	var automationNotifyIDs []uint
+	automationEffects := automationExecutionSideEffects{}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Save(&item).Error; err != nil {
 			return err
@@ -888,31 +889,33 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 			return err
 		}
 		if len(addedAssigneeIDs) > 0 || len(removedAssigneeIDs) > 0 {
-			notifiedIDs, err := h.executeTaskAssigneeChangedRulesWithDB(tx, item, addedAssigneeIDs, removedAssigneeIDs, currentUserID)
+			effects, err := h.executeTaskAssigneeChangedRulesWithDB(tx, item, addedAssigneeIDs, removedAssigneeIDs, currentUserID)
 			if err != nil {
 				return err
 			}
-			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+			appendAutomationEffects(&automationEffects, effects)
 		}
 		if oldStatus != item.Status {
-			notifiedIDs, err := h.executeTaskStatusChangedRulesWithDB(tx, item, oldStatus, item.Status, currentUserID)
+			effects, err := h.executeTaskStatusChangedRulesWithDB(tx, item, oldStatus, item.Status, currentUserID)
 			if err != nil {
 				return err
 			}
-			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+			appendAutomationEffects(&automationEffects, effects)
 		}
 		if oldProgress != item.Progress {
-			notifiedIDs, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
+			effects, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
 			if err != nil {
 				return err
 			}
-			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+			appendAutomationEffects(&automationEffects, effects)
 		}
 		return h.writeAuditWithDB(c, tx, "tasks", "update", item.ID, true, auditDetailf("更新任务(id=%d)", item.ID))
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_FAILED", err)
 		return
 	}
+	automationNotifyIDs = append(automationNotifyIDs, automationEffects.NotifiedIDs...)
+	h.deliverAutomationWebhooks(automationEffects.WebhookJobs)
 
 	if len(addedAssigneeIDs) > 0 {
 		h.queueTaskChannelNotifications(addedAssigneeIDs, "你被加入任务执行人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你设为执行人", item)
@@ -972,6 +975,7 @@ func (h *Handler) UpdateTaskProgress(c *gin.Context) {
 		item.Progress >= 100 &&
 		(oldProgress < 100 || oldStatus != model.TaskReviewing)
 	var automationNotifyIDs []uint
+	automationEffects := automationExecutionSideEffects{}
 
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&item).Updates(map[string]any{
@@ -993,24 +997,26 @@ func (h *Handler) UpdateTaskProgress(c *gin.Context) {
 			return err
 		}
 		if oldStatus != item.Status {
-			notifiedIDs, err := h.executeTaskStatusChangedRulesWithDB(tx, item, oldStatus, item.Status, currentUserID)
+			effects, err := h.executeTaskStatusChangedRulesWithDB(tx, item, oldStatus, item.Status, currentUserID)
 			if err != nil {
 				return err
 			}
-			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+			appendAutomationEffects(&automationEffects, effects)
 		}
 		if oldProgress != item.Progress {
-			notifiedIDs, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
+			effects, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
 			if err != nil {
 				return err
 			}
-			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+			appendAutomationEffects(&automationEffects, effects)
 		}
 		return h.writeAuditWithDB(c, tx, "tasks", "update_progress", item.ID, true, auditDetailf("更新任务进度(id=%d)", item.ID))
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_PROGRESS_FAILED", err)
 		return
 	}
+	automationNotifyIDs = append(automationNotifyIDs, automationEffects.NotifiedIDs...)
+	h.deliverAutomationWebhooks(automationEffects.WebhookJobs)
 	notifyIDs := append([]uint{}, automationNotifyIDs...)
 	if shouldNotifyReviewers {
 		notifyIDs = append(notifyIDs, reviewerIDs...)
@@ -1074,6 +1080,7 @@ func (h *Handler) UpdateTaskStatus(c *gin.Context) {
 	}
 
 	var automationNotifyIDs []uint
+	automationEffects := automationExecutionSideEffects{}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&item).Updates(map[string]any{
 			"status":   item.Status,
@@ -1091,23 +1098,25 @@ func (h *Handler) UpdateTaskStatus(c *gin.Context) {
 		if err := h.writeTaskActivityWithDB(tx, item.ID, currentUserID, "task.status_updated", taskActivitySummary("更新状态", item), detail, nil); err != nil {
 			return err
 		}
-		notifiedIDs, err := h.executeTaskStatusChangedRulesWithDB(tx, item, oldStatus, item.Status, currentUserID)
+		effects, err := h.executeTaskStatusChangedRulesWithDB(tx, item, oldStatus, item.Status, currentUserID)
 		if err != nil {
 			return err
 		}
-		automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+		appendAutomationEffects(&automationEffects, effects)
 		if oldProgress != item.Progress {
-			notifiedIDs, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
+			effects, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
 			if err != nil {
 				return err
 			}
-			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+			appendAutomationEffects(&automationEffects, effects)
 		}
 		return h.writeAuditWithDB(c, tx, "tasks", "update_status", item.ID, true, auditDetailf("更新任务状态(id=%d)", item.ID))
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_STATUS_FAILED", err)
 		return
 	}
+	automationNotifyIDs = append(automationNotifyIDs, automationEffects.NotifiedIDs...)
+	h.deliverAutomationWebhooks(automationEffects.WebhookJobs)
 	h.pushNotificationUpdates(automationNotifyIDs)
 
 	c.JSON(http.StatusOK, item)
@@ -1137,6 +1146,7 @@ func (h *Handler) CompleteTask(c *gin.Context) {
 		item.Progress = 100
 	}
 	var automationNotifyIDs []uint
+	automationEffects := automationExecutionSideEffects{}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&item).Updates(map[string]any{
 			"status":   item.Status,
@@ -1152,24 +1162,26 @@ func (h *Handler) CompleteTask(c *gin.Context) {
 			return err
 		}
 		if oldStatus != item.Status {
-			notifiedIDs, err := h.executeTaskStatusChangedRulesWithDB(tx, item, oldStatus, item.Status, currentUserID)
+			effects, err := h.executeTaskStatusChangedRulesWithDB(tx, item, oldStatus, item.Status, currentUserID)
 			if err != nil {
 				return err
 			}
-			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+			appendAutomationEffects(&automationEffects, effects)
 		}
 		if oldProgress != item.Progress {
-			notifiedIDs, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
+			effects, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
 			if err != nil {
 				return err
 			}
-			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+			appendAutomationEffects(&automationEffects, effects)
 		}
 		return h.writeAuditWithDB(c, tx, "tasks", "complete", item.ID, true, auditDetailf("完成任务审核(id=%d)", item.ID))
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "COMPLETE_TASK_FAILED", err)
 		return
 	}
+	automationNotifyIDs = append(automationNotifyIDs, automationEffects.NotifiedIDs...)
+	h.deliverAutomationWebhooks(automationEffects.WebhookJobs)
 	h.pushNotificationUpdates(automationNotifyIDs)
 
 	c.JSON(http.StatusOK, item)

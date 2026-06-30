@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -37,6 +38,7 @@ type Config struct {
 	FeishuAppSecret    string
 	FeishuReceiveID    string
 	FeishuReceiveType  string
+	WebhookPrivateOK   bool
 }
 
 func Load() Config {
@@ -68,6 +70,7 @@ func Load() Config {
 		FeishuAppSecret:    getEnv("FEISHU_APP_SECRET", ""),
 		FeishuReceiveID:    getEnv("FEISHU_RECEIVE_ID", ""),
 		FeishuReceiveType:  getEnv("FEISHU_RECEIVE_ID_TYPE", "email"),
+		WebhookPrivateOK:   getEnvBool("AUTOMATION_WEBHOOK_ALLOW_PRIVATE", false),
 	}
 	return cfg
 }
@@ -92,4 +95,16 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }

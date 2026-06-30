@@ -31,6 +31,8 @@ interface AutomationRuleForm {
   tagIds: number[]
   assignAssignees: boolean
   assigneeIds: number[]
+  callWebhook: boolean
+  webhookUrl: string
 }
 
 const initialForm: AutomationRuleForm = {
@@ -53,7 +55,9 @@ const initialForm: AutomationRuleForm = {
   addTags: false,
   tagIds: [],
   assignAssignees: false,
-  assigneeIds: []
+  assigneeIds: [],
+  callWebhook: false,
+  webhookUrl: ''
 }
 
 const triggerLabel: Record<AutomationTrigger, string> = {
@@ -239,7 +243,9 @@ export function AutomationRulesPage() {
       addTags: item.actions?.addTags ?? false,
       tagIds: item.actions?.tagIds || [],
       assignAssignees: item.actions?.assignAssignees ?? false,
-      assigneeIds: item.actions?.assigneeIds || []
+      assigneeIds: item.actions?.assigneeIds || [],
+      callWebhook: item.actions?.callWebhook ?? false,
+      webhookUrl: item.actions?.webhookUrl || ''
     })
     setFormError('')
     setFormSuccess('')
@@ -254,7 +260,8 @@ export function AutomationRulesPage() {
     const hasCommentAction = isEventTrigger(form.trigger) && form.addComment
     const hasTagAction = form.addTags
     const hasAssignAction = form.assignAssignees
-    if (!hasNotificationAction && !hasCommentAction && !hasTagAction && !hasAssignAction) {
+    const hasWebhookAction = form.callWebhook
+    if (!hasNotificationAction && !hasCommentAction && !hasTagAction && !hasAssignAction && !hasWebhookAction) {
       setFormError('至少选择一个动作')
       return
     }
@@ -264,6 +271,10 @@ export function AutomationRulesPage() {
     }
     if (form.assignAssignees && form.assigneeIds.length === 0) {
       setFormError('至少选择一个要指派的执行人')
+      return
+    }
+    if (form.callWebhook && form.webhookUrl.trim() === '') {
+      setFormError('请填写 Webhook URL')
       return
     }
     if (form.trigger === 'task_status_changed' && form.fromStatuses.length === 0 && form.toStatuses.length === 0) {
@@ -322,7 +333,9 @@ export function AutomationRulesPage() {
           addTags: form.addTags,
           tagIds: form.addTags ? form.tagIds : [],
           assignAssignees: form.assignAssignees,
-          assigneeIds: form.assignAssignees ? form.assigneeIds : []
+          assigneeIds: form.assignAssignees ? form.assigneeIds : [],
+          callWebhook: form.callWebhook,
+          webhookUrl: form.callWebhook ? form.webhookUrl.trim() : ''
         }
       }
       if (form.id) await api.put(`/automation-rules/${form.id}`, payload)
@@ -433,7 +446,8 @@ export function AutomationRulesPage() {
                     item.actions?.notifyProjectOwners ? '通知项目负责人' : '',
                     item.actions?.addComment ? '添加评论' : '',
                     item.actions?.addTags ? `添加标签${item.actions.tagIds?.length ? `（${item.actions.tagIds.map((id) => tagNameById.get(id) || id).join('，')}）` : ''}` : '',
-                    item.actions?.assignAssignees ? `指派执行人${item.actions.assigneeIds?.length ? `（${item.actions.assigneeIds.map((id) => assigneeNameById.get(id) || id).join('，')}）` : ''}` : ''
+                    item.actions?.assignAssignees ? `指派执行人${item.actions.assigneeIds?.length ? `（${item.actions.assigneeIds.map((id) => assigneeNameById.get(id) || id).join('，')}）` : ''}` : '',
+                    item.actions?.callWebhook ? '调用 Webhook' : ''
                   ].filter(Boolean).join('，') || '-'}
                 </td>
                 <td data-label="最近执行">{formatDateTime(item.lastRunAt)}</td>
@@ -655,6 +669,19 @@ export function AutomationRulesPage() {
                   <textarea id="automation-comment-content" value={form.commentContent} onChange={(event) => setForm((prev) => ({ ...prev, commentContent: event.target.value }))} rows={3} />
                 </>
               )}
+            </>
+          )}
+          <label htmlFor="automation-webhook-action">Webhook 动作</label>
+          <div id="automation-webhook-action" className="multi-checklist">
+            <label className="multi-check-item">
+              <input type="checkbox" checked={form.callWebhook} onChange={() => setForm((prev) => ({ ...prev, callWebhook: !prev.callWebhook, webhookUrl: prev.callWebhook ? '' : prev.webhookUrl }))} />
+              <span>调用 Webhook</span>
+            </label>
+          </div>
+          {form.callWebhook && (
+            <>
+              <label className="required-label" htmlFor="automation-webhook-url">Webhook URL</label>
+              <input id="automation-webhook-url" type="url" value={form.webhookUrl} onChange={(event) => setForm((prev) => ({ ...prev, webhookUrl: event.target.value }))} required />
             </>
           )}
           <div className="row-actions">

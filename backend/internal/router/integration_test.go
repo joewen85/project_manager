@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"project-manager/backend/internal/config"
@@ -3137,6 +3138,176 @@ func TestAutomationRuleAssignAssigneesAction(t *testing.T) {
 	assigneeChangeLogItems, _ := assigneeChangeLogBody["list"].([]any)
 	if len(assigneeChangeLogItems) != 0 {
 		t.Fatalf("automation assignment should not recursively trigger assignee changed rules got %#v", assigneeChangeLogBody)
+	}
+}
+
+func TestAutomationRuleWebhookAction(t *testing.T) {
+	validationTS := setupTestRouter(t)
+	defer validationTS.Close()
+	validationAdminToken := loginAndToken(t, validationTS.URL)
+	invalidPrivateResp, invalidPrivateBody := requestJSON(t, http.MethodPost, validationTS.URL+"/api/v1/automation-rules", validationAdminToken, map[string]any{
+		"name":    "内网 Webhook 拦截",
+		"trigger": "task_overdue",
+		"actions": map[string]any{
+			"notifyAssignees":     false,
+			"notifyProjectOwners": false,
+			"callWebhook":         true,
+			"webhookUrl":          "http://127.0.0.1/webhook",
+		},
+	})
+	if invalidPrivateResp.StatusCode != http.StatusBadRequest || invalidPrivateBody["code"] != "INVALID_AUTOMATION_RULE" {
+		t.Fatalf("private webhook URL should be rejected got %d %#v", invalidPrivateResp.StatusCode, invalidPrivateBody)
+	}
+
+	payloads := make(chan map[string]any, 2)
+	successWebhookTS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("webhook method expected POST got %s", r.Method)
+		}
+		if contentType := r.Header.Get("Content-Type"); !strings.Contains(contentType, "application/json") {
+			t.Errorf("webhook content type expected json got %s", contentType)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode webhook payload failed: %v", err)
+		}
+		payloads <- payload
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer successWebhookTS.Close()
+
+	var failedWebhookCalls int32
+	failedWebhookTS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&failedWebhookCalls, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("downstream failed"))
+	}))
+	defer failedWebhookTS.Close()
+
+	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
+		h.Cfg.WebhookPrivateOK = true
+	})
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code": "AUTO-WEBHOOK-P1",
+		"name": "Automation Webhook Project",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create webhook automation project expected 201 got %d %#v", projectResp.StatusCode, projectBody)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	overdueTaskResp, overdueTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":     "Automation overdue webhook task",
+		"projectId": projectID,
+		"status":    "processing",
+		"progress":  20,
+		"startAt":   "2000-01-01T00:00:00Z",
+		"endAt":     "2000-01-02T00:00:00Z",
+	})
+	if overdueTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create overdue webhook task expected 201 got %d %#v", overdueTaskResp.StatusCode, overdueTaskBody)
+	}
+
+	overdueRuleResp, overdueRuleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":      "逾期调用 Webhook",
+		"trigger":   "task_overdue",
+		"isEnabled": true,
+		"conditions": map[string]any{
+			"overdueDays": 1,
+			"projectIds":  []uint{uint(projectID)},
+		},
+		"actions": map[string]any{
+			"notifyAssignees":     false,
+			"notifyProjectOwners": false,
+			"callWebhook":         true,
+			"webhookUrl":          successWebhookTS.URL,
+		},
+	})
+	if overdueRuleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create overdue webhook rule expected 201 got %d %#v", overdueRuleResp.StatusCode, overdueRuleBody)
+	}
+	overdueRuleID := int(overdueRuleBody["id"].(float64))
+
+	runResp, runBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules/"+strconv.Itoa(overdueRuleID)+"/run", adminToken, nil)
+	if runResp.StatusCode != http.StatusOK {
+		t.Fatalf("run overdue webhook rule expected 200 got %d %#v", runResp.StatusCode, runBody)
+	}
+	if runBody["status"] != "success" || int(runBody["matchedCount"].(float64)) != 1 || int(runBody["actionCount"].(float64)) != 1 {
+		t.Fatalf("overdue webhook run should count one successful webhook got %#v", runBody)
+	}
+	select {
+	case payload := <-payloads:
+		if payload["event"] != "task_overdue" || payload["runSource"] != "manual" {
+			t.Fatalf("unexpected overdue webhook payload metadata %#v", payload)
+		}
+		taskPayload, _ := payload["task"].(map[string]any)
+		if taskPayload["title"] != "Automation overdue webhook task" {
+			t.Fatalf("webhook payload should include task data got %#v", payload)
+		}
+	default:
+		t.Fatalf("expected overdue webhook request")
+	}
+
+	statusTaskResp, statusTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":     "Automation failed webhook status task",
+		"projectId": projectID,
+		"status":    "pending",
+		"progress":  10,
+	})
+	if statusTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status webhook task expected 201 got %d %#v", statusTaskResp.StatusCode, statusTaskBody)
+	}
+	statusTaskID := int(statusTaskBody["id"].(float64))
+
+	statusRuleResp, statusRuleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":      "状态变更 Webhook 失败不回滚",
+		"trigger":   "task_status_changed",
+		"isEnabled": true,
+		"conditions": map[string]any{
+			"projectIds":   []uint{uint(projectID)},
+			"fromStatuses": []string{"pending"},
+			"toStatuses":   []string{"processing"},
+		},
+		"actions": map[string]any{
+			"notifyAssignees":     false,
+			"notifyProjectOwners": false,
+			"callWebhook":         true,
+			"webhookUrl":          failedWebhookTS.URL,
+		},
+	})
+	if statusRuleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status failed webhook rule expected 201 got %d %#v", statusRuleResp.StatusCode, statusRuleBody)
+	}
+	statusRuleID := int(statusRuleBody["id"].(float64))
+
+	statusResp, statusBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/tasks/"+strconv.Itoa(statusTaskID)+"/status", adminToken, map[string]any{
+		"status": "processing",
+	})
+	if statusResp.StatusCode != http.StatusOK {
+		t.Fatalf("patch status with failed webhook expected 200 got %d %#v", statusResp.StatusCode, statusBody)
+	}
+	if statusBody["status"] != "processing" {
+		t.Fatalf("failed webhook should not roll back task status got %#v", statusBody)
+	}
+	if atomic.LoadInt32(&failedWebhookCalls) != 1 {
+		t.Fatalf("failed webhook should be called once got %d", failedWebhookCalls)
+	}
+
+	statusLogResp, statusLogBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/automation-rules/logs?ruleId="+strconv.Itoa(statusRuleID)+"&trigger=task_status_changed", adminToken, nil)
+	if statusLogResp.StatusCode != http.StatusOK {
+		t.Fatalf("list failed webhook logs expected 200 got %d", statusLogResp.StatusCode)
+	}
+	statusLogItems, _ := statusLogBody["list"].([]any)
+	if len(statusLogItems) != 1 {
+		t.Fatalf("failed webhook should create one event log got %#v", statusLogBody)
+	}
+	statusLogItem := statusLogItems[0].(map[string]any)
+	message, _ := statusLogItem["message"].(string)
+	if statusLogItem["status"] != "failed" || statusLogItem["runSource"] != "event" || int(statusLogItem["matchedCount"].(float64)) != 1 || int(statusLogItem["actionCount"].(float64)) != 0 || !strings.Contains(message, "Webhook 调用成功 0 次，失败 1 次") {
+		t.Fatalf("failed webhook log should record non-blocking failure got %#v", statusLogItem)
 	}
 }
 

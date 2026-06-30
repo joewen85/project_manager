@@ -105,6 +105,12 @@
 - 完成：指派执行人动作保持幂等，重复执行不重复写入 `task_users`，且不会递归触发执行人变更规则
 - 完成：自动化规则前端页面支持读取任务执行人候选、配置指派执行人动作并在规则列表展示目标执行人
 - 完成：补充指派执行人动作目标校验/逾期手动执行/状态事件执行/重复执行/非递归集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
+- 完成：按 `Improvement.md` 完成 P0-5 基础自动化规则 Webhook 动作 MVP
+- 完成：自动化动作新增 `callWebhook/webhookUrl`，支持逾期手动/定时规则和状态/进度/执行人事件规则按匹配任务发送 JSON POST
+- 完成：Webhook 默认拦截本机、内网和保留地址，测试/内网部署可通过 `AUTOMATION_WEBHOOK_ALLOW_PRIVATE=true` 显式放开
+- 完成：Webhook 在规则事务提交后投递，失败会把执行日志标记为失败并记录原因，不回滚任务更新、标签追加或执行人追加
+- 完成：自动化规则前端页面支持配置 Webhook 动作，并在规则列表展示调用 Webhook
+- 完成：补充 Webhook URL 校验/逾期手动投递/事件投递失败不回滚集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

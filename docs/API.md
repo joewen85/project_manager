@@ -316,7 +316,8 @@ Base URL: `http://localhost:8080/api/v1`
 - `task_status_changed` 条件: `{ projectIds?, fromStatuses?, toStatuses? }`；状态取值为 `pending`、`queued`、`processing`、`reviewing`、`completed`；至少配置一个变更前或变更后状态
 - `task_progress_changed` 条件: `{ projectIds?, fromProgressMin?, fromProgressMax?, toProgressMin?, toProgressMax? }`；进度边界取值 0-100；至少配置一个变更前或变更后进度边界
 - `task_assignee_changed` 条件: `{ projectIds?, assigneeChangeTypes }`；`assigneeChangeTypes` 取值为 `added`、`removed`，至少选择一种执行人变更类型
-- `actions`: `{ notifyAssignees?, notifyProjectOwners?, addComment?, commentContent?, addTags?, tagIds?, assignAssignees?, assigneeIds? }`；逾期规则至少启用通知、添加标签或指派执行人；状态/进度/执行人变更规则至少启用通知、添加评论、添加标签或指派执行人；`addTags=true` 时必须配置 `tagIds`，执行时只追加任务缺失标签；`assignAssignees=true` 时必须配置 `assigneeIds`，执行时只追加缺失执行人且不会递归触发执行人变更规则；未传通知对象时默认同时通知执行人和项目负责人
+- `actions`: `{ notifyAssignees?, notifyProjectOwners?, addComment?, commentContent?, addTags?, tagIds?, assignAssignees?, assigneeIds?, callWebhook?, webhookUrl? }`；逾期规则至少启用通知、添加标签、指派执行人或调用 Webhook；状态/进度/执行人变更规则至少启用通知、添加评论、添加标签、指派执行人或调用 Webhook；`addTags=true` 时必须配置 `tagIds`，执行时只追加任务缺失标签；`assignAssignees=true` 时必须配置 `assigneeIds`，执行时只追加缺失执行人且不会递归触发执行人变更规则；`callWebhook=true` 时必须配置 `webhookUrl`，系统会向每个匹配任务发送 JSON POST；未传通知对象时默认同时通知执行人和项目负责人
+- Webhook URL 默认只允许 `http`/`https` 且禁止本机、内网和保留地址；测试或内网部署如需允许私有地址，可通过后端环境变量 `AUTOMATION_WEBHOOK_ALLOW_PRIVATE=true` 开启。Webhook 在规则事务提交后投递，失败会把对应执行日志标记为 `failed` 并追加失败原因，但不会回滚已完成的任务更新、标签追加或执行人追加。
 - 状态/进度变更规则会在 `PUT /tasks/:id`、`PATCH /tasks/:id/status`、`PATCH /tasks/:id/progress`、`PATCH /tasks/:id/complete` 改变状态或进度时执行；执行人变更规则会在 `PUT /tasks/:id` 改变执行人集合时执行；事件规则写入 `runSource=event` 的执行日志
 
 ### PUT `/automation-rules/:id`
@@ -325,7 +326,7 @@ Base URL: `http://localhost:8080/api/v1`
 
 ### POST `/automation-rules/:id/run`
 - 权限: `automations.update`
-- 效果: 手动执行规则；非管理员只处理当前用户可见项目内的任务；执行结果写入日志并触发站内通知；`task_status_changed`、`task_progress_changed` 和 `task_assignee_changed` 仅响应事件，手动执行会记录为跳过
+- 效果: 手动执行规则；非管理员只处理当前用户可见项目内的任务；执行结果写入日志并触发站内通知或 Webhook；`task_status_changed`、`task_progress_changed` 和 `task_assignee_changed` 仅响应事件，手动执行会记录为跳过
 - 响应: `{ id, ruleId, trigger, status, matchedCount, actionCount, message, actorId, runSource, createdAt }`
 
 ### GET `/automation-rules/logs`

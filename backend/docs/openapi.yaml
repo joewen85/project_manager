@@ -2286,6 +2286,11 @@ components:
           type: array
           items:
             type: integer
+        callWebhook:
+          type: boolean
+        webhookUrl:
+          type: string
+          format: uri
     AutomationRule:
       type: object
       properties:

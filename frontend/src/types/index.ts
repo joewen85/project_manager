@@ -186,6 +186,8 @@ export interface AutomationActions {
   tagIds?: number[]
   assignAssignees?: boolean
   assigneeIds?: number[]
+  callWebhook?: boolean
+  webhookUrl?: string
 }
 
 export interface AutomationRule {

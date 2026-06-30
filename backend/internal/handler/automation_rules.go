@@ -1,8 +1,14 @@
 package handler
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -42,6 +48,8 @@ type automationActionsRequest struct {
 	TagIDs              []uint `json:"tagIds"`
 	AssignAssignees     *bool  `json:"assignAssignees"`
 	AssigneeIDs         []uint `json:"assigneeIds"`
+	CallWebhook         *bool  `json:"callWebhook"`
+	WebhookURL          string `json:"webhookUrl"`
 }
 
 func normalizeAutomationTrigger(value string) (model.AutomationTrigger, bool) {
@@ -180,6 +188,27 @@ func boolValue(value *bool, fallback bool) bool {
 	return *value
 }
 
+func normalizeAutomationWebhookURL(rawURL string) (string, error) {
+	value := strings.TrimSpace(rawURL)
+	if value == "" {
+		return "", fmt.Errorf("Webhook URL 不能为空")
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("Webhook URL 格式不正确")
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("Webhook URL 仅支持 http 或 https")
+	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("Webhook URL 不允许包含用户名或密码")
+	}
+	parsed.Scheme = scheme
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
 func normalizeAutomationActions(req automationActionsRequest, trigger model.AutomationTrigger) (model.AutomationActions, error) {
 	defaultActions := req.NotifyAssignees == nil && req.NotifyProjectOwners == nil
 	actions := model.AutomationActions{
@@ -191,6 +220,8 @@ func normalizeAutomationActions(req automationActionsRequest, trigger model.Auto
 		TagIDs:              uniqueUint(req.TagIDs),
 		AssignAssignees:     boolValue(req.AssignAssignees, false),
 		AssigneeIDs:         uniqueUint(req.AssigneeIDs),
+		CallWebhook:         boolValue(req.CallWebhook, false),
+		WebhookURL:          strings.TrimSpace(req.WebhookURL),
 	}
 	if !actions.AddTags {
 		actions.TagIDs = nil
@@ -198,11 +229,21 @@ func normalizeAutomationActions(req automationActionsRequest, trigger model.Auto
 	if !actions.AssignAssignees {
 		actions.AssigneeIDs = nil
 	}
+	if !actions.CallWebhook {
+		actions.WebhookURL = ""
+	}
 	if actions.AddTags && len(actions.TagIDs) == 0 {
 		return model.AutomationActions{}, fmt.Errorf("添加标签动作至少需要选择一个标签")
 	}
 	if actions.AssignAssignees && len(actions.AssigneeIDs) == 0 {
 		return model.AutomationActions{}, fmt.Errorf("指派执行人动作至少需要选择一个执行人")
+	}
+	if actions.CallWebhook {
+		webhookURL, err := normalizeAutomationWebhookURL(actions.WebhookURL)
+		if err != nil {
+			return model.AutomationActions{}, err
+		}
+		actions.WebhookURL = webhookURL
 	}
 	if automationEventTriggerAllowsComment(trigger) && actions.AddComment {
 		return actions, nil
@@ -211,6 +252,9 @@ func normalizeAutomationActions(req automationActionsRequest, trigger model.Auto
 		return actions, nil
 	}
 	if actions.AssignAssignees {
+		return actions, nil
+	}
+	if actions.CallWebhook {
 		return actions, nil
 	}
 	if !actions.NotifyAssignees && !actions.NotifyProjectOwners {
@@ -280,11 +324,67 @@ func (h *Handler) validateAutomationActionAssignees(actions model.AutomationActi
 	return nil
 }
 
+func validateAutomationWebhookPublicIP(ip net.IP) error {
+	if ip == nil ||
+		ip.IsUnspecified() ||
+		ip.IsLoopback() ||
+		ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() {
+		return fmt.Errorf("Webhook URL 不能指向本机、内网或保留地址")
+	}
+	return nil
+}
+
+func validateAutomationWebhookHost(host string, allowPrivate bool) error {
+	if allowPrivate {
+		return nil
+	}
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return fmt.Errorf("Webhook URL Host 不能为空")
+	}
+	if strings.Contains(host, "%") {
+		return fmt.Errorf("Webhook URL 不支持带网络区域的地址")
+	}
+	normalizedHost := strings.ToLower(strings.TrimSuffix(host, "."))
+	if normalizedHost == "localhost" || strings.HasSuffix(normalizedHost, ".localhost") {
+		return fmt.Errorf("Webhook URL 不能指向本机地址")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return validateAutomationWebhookPublicIP(ip)
+	}
+	return nil
+}
+
+func validateAutomationWebhookEndpoint(rawURL string, allowPrivate bool) error {
+	normalizedURL, err := normalizeAutomationWebhookURL(rawURL)
+	if err != nil {
+		return err
+	}
+	parsed, err := url.Parse(normalizedURL)
+	if err != nil {
+		return fmt.Errorf("Webhook URL 格式不正确")
+	}
+	return validateAutomationWebhookHost(parsed.Hostname(), allowPrivate)
+}
+
+func (h *Handler) validateAutomationActionWebhook(actions model.AutomationActions) error {
+	if !actions.CallWebhook {
+		return nil
+	}
+	return validateAutomationWebhookEndpoint(actions.WebhookURL, h.Cfg.WebhookPrivateOK)
+}
+
 func (h *Handler) validateAutomationActionTargets(actions model.AutomationActions) error {
 	if err := h.validateAutomationActionTags(actions); err != nil {
 		return err
 	}
-	return h.validateAutomationActionAssignees(actions)
+	if err := h.validateAutomationActionAssignees(actions); err != nil {
+		return err
+	}
+	return h.validateAutomationActionWebhook(actions)
 }
 
 func (h *Handler) ListAutomationRules(c *gin.Context) {
@@ -502,6 +602,241 @@ func overdueDays(now time.Time, endAt *time.Time) int {
 	return int(now.Sub(*endAt).Hours() / 24)
 }
 
+type automationExecutionSideEffects struct {
+	NotifiedIDs []uint
+	WebhookJobs []automationWebhookJob
+}
+
+type automationWebhookJob struct {
+	LogID   uint
+	URL     string
+	Payload automationWebhookPayload
+}
+
+type automationWebhookPayload struct {
+	Event       model.AutomationTrigger      `json:"event"`
+	RunSource   string                       `json:"runSource"`
+	TriggeredAt time.Time                    `json:"triggeredAt"`
+	ActorID     uint                         `json:"actorId,omitempty"`
+	Rule        automationWebhookRulePayload `json:"rule"`
+	Task        automationWebhookTaskPayload `json:"task"`
+	Change      map[string]any               `json:"change,omitempty"`
+}
+
+type automationWebhookRulePayload struct {
+	ID      uint                    `json:"id"`
+	Name    string                  `json:"name"`
+	Trigger model.AutomationTrigger `json:"trigger"`
+}
+
+type automationWebhookTaskPayload struct {
+	ID        uint             `json:"id"`
+	TaskNo    string           `json:"taskNo"`
+	Title     string           `json:"title"`
+	Status    model.TaskStatus `json:"status"`
+	Progress  int              `json:"progress"`
+	ProjectID uint             `json:"projectId"`
+	EndAt     *time.Time       `json:"endAt,omitempty"`
+}
+
+func appendAutomationEffects(target *automationExecutionSideEffects, next automationExecutionSideEffects) {
+	target.NotifiedIDs = append(target.NotifiedIDs, next.NotifiedIDs...)
+	target.WebhookJobs = append(target.WebhookJobs, next.WebhookJobs...)
+}
+
+func attachAutomationLogID(jobs []automationWebhookJob, logID uint) []automationWebhookJob {
+	if len(jobs) == 0 || logID == 0 {
+		return jobs
+	}
+	for index := range jobs {
+		jobs[index].LogID = logID
+	}
+	return jobs
+}
+
+func buildAutomationWebhookJob(rule model.AutomationRule, task model.Task, runSource string, actorID uint, change map[string]any) (automationWebhookJob, bool) {
+	if !rule.Actions.CallWebhook || strings.TrimSpace(rule.Actions.WebhookURL) == "" {
+		return automationWebhookJob{}, false
+	}
+	if runSource == "" {
+		runSource = "event"
+	}
+	return automationWebhookJob{
+		URL: rule.Actions.WebhookURL,
+		Payload: automationWebhookPayload{
+			Event:       rule.Trigger,
+			RunSource:   runSource,
+			TriggeredAt: time.Now(),
+			ActorID:     actorID,
+			Rule: automationWebhookRulePayload{
+				ID:      rule.ID,
+				Name:    rule.Name,
+				Trigger: rule.Trigger,
+			},
+			Task: automationWebhookTaskPayload{
+				ID:        task.ID,
+				TaskNo:    task.TaskNo,
+				Title:     task.Title,
+				Status:    task.Status,
+				Progress:  task.Progress,
+				ProjectID: task.ProjectID,
+				EndAt:     task.EndAt,
+			},
+			Change: change,
+		},
+	}, true
+}
+
+func newAutomationWebhookHTTPClient(allowPrivate bool) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if !allowPrivate {
+		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return nil, err
+			}
+			if err := validateAutomationWebhookHost(host, false); err != nil {
+				return nil, err
+			}
+			ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+			if err != nil {
+				return nil, err
+			}
+			for _, ip := range ips {
+				if err := validateAutomationWebhookPublicIP(ip); err != nil {
+					return nil, fmt.Errorf("Webhook URL 不能解析到本机、内网或保留地址")
+				}
+			}
+			var dialer net.Dialer
+			return dialer.DialContext(ctx, network, address)
+		}
+	}
+	return &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("Webhook 重定向次数过多")
+			}
+			return validateAutomationWebhookEndpoint(req.URL.String(), allowPrivate)
+		},
+	}
+}
+
+func automationWebhookErrorText(err error) string {
+	message := strings.TrimSpace(err.Error())
+	if message == "" {
+		return "unknown error"
+	}
+	const maxLen = 200
+	if len(message) > maxLen {
+		return message[:maxLen] + "..."
+	}
+	return message
+}
+
+func automationWebhookResultMessage(successCount int, failureMessages []string) string {
+	if successCount == 0 && len(failureMessages) == 0 {
+		return ""
+	}
+	if len(failureMessages) == 0 {
+		return fmt.Sprintf("Webhook 调用成功 %d 次", successCount)
+	}
+	details := failureMessages
+	if len(details) > 3 {
+		details = details[:3]
+	}
+	return fmt.Sprintf("Webhook 调用成功 %d 次，失败 %d 次：%s", successCount, len(failureMessages), strings.Join(details, "；"))
+}
+
+func (h *Handler) sendAutomationWebhook(job automationWebhookJob) error {
+	if err := validateAutomationWebhookEndpoint(job.URL, h.Cfg.WebhookPrivateOK); err != nil {
+		return err
+	}
+	rawBody, err := json.Marshal(job.Payload)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, job.URL, bytes.NewReader(rawBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "project-manager-automation-webhook/1.0")
+	req.Header.Set("X-Project-Manager-Event", string(job.Payload.Event))
+	req.Header.Set("X-Project-Manager-Rule-ID", strconv.FormatUint(uint64(job.Payload.Rule.ID), 10))
+
+	resp, err := newAutomationWebhookHTTPClient(h.Cfg.WebhookPrivateOK).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	rawResp, err := io.ReadAll(io.LimitReader(resp.Body, 2048))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		bodyText := strings.TrimSpace(string(rawResp))
+		if bodyText == "" {
+			return fmt.Errorf("Webhook 返回状态 %d", resp.StatusCode)
+		}
+		return fmt.Errorf("Webhook 返回状态 %d: %s", resp.StatusCode, bodyText)
+	}
+	return nil
+}
+
+func (h *Handler) deliverAutomationWebhooks(jobs []automationWebhookJob) {
+	if len(jobs) == 0 {
+		return
+	}
+	type deliveryResult struct {
+		successCount    int
+		failureMessages []string
+	}
+	results := make(map[uint]*deliveryResult)
+	for _, job := range jobs {
+		if job.LogID == 0 {
+			continue
+		}
+		result := results[job.LogID]
+		if result == nil {
+			result = &deliveryResult{}
+			results[job.LogID] = result
+		}
+		if err := h.sendAutomationWebhook(job); err != nil {
+			result.failureMessages = append(result.failureMessages, automationWebhookErrorText(err))
+			continue
+		}
+		result.successCount += 1
+	}
+	for logID, result := range results {
+		var logItem model.AutomationExecutionLog
+		if err := h.DB.First(&logItem, logID).Error; err != nil {
+			continue
+		}
+		message := strings.TrimSpace(logItem.Message)
+		resultText := automationWebhookResultMessage(result.successCount, result.failureMessages)
+		if resultText != "" {
+			if message == "" {
+				message = resultText
+			} else {
+				message += "；" + resultText
+			}
+		}
+		updates := map[string]any{
+			"action_count": logItem.ActionCount + result.successCount,
+			"message":      message,
+		}
+		if len(result.failureMessages) > 0 {
+			updates["status"] = model.AutomationExecutionFailed
+		}
+		_ = h.DB.Model(&model.AutomationExecutionLog{}).Where("id = ?", logID).Updates(updates).Error
+	}
+}
+
 func automationTagNames(tags []model.Tag) string {
 	if len(tags) == 0 {
 		return ""
@@ -612,10 +947,10 @@ func (h *Handler) appendAutomationTaskAssigneesWithDB(tx *gorm.DB, task model.Ta
 	return len(users), addedAssigneeIDs, nil
 }
 
-func (h *Handler) executeTaskOverdueRule(tx *gorm.DB, c *gin.Context, rule model.AutomationRule, now time.Time, actorID uint) (matchedCount int, actionCount int, notifiedIDs []uint, message string, err error) {
+func (h *Handler) executeTaskOverdueRule(tx *gorm.DB, c *gin.Context, rule model.AutomationRule, now time.Time, actorID uint, source string) (matchedCount int, actionCount int, sideEffects automationExecutionSideEffects, message string, err error) {
 	tasks, err := h.automationOverdueTasks(tx, c, rule.Conditions, now)
 	if err != nil {
-		return 0, 0, nil, "", err
+		return 0, 0, sideEffects, "", err
 	}
 	tagActionCount := 0
 	assigneeActionCount := 0
@@ -625,26 +960,32 @@ func (h *Handler) executeTaskOverdueRule(tx *gorm.DB, c *gin.Context, rule model
 			days := overdueDays(now, task.EndAt)
 			content := fmt.Sprintf("任务 %s - %s 已逾期 %d 天，请尽快处理", task.TaskNo, task.Title, days)
 			if err := h.createNotificationsWithDB(tx, recipients, "任务已逾期", content, "tasks", task.ID); err != nil {
-				return len(tasks), actionCount, notifiedIDs, "", err
+				return len(tasks), actionCount, sideEffects, "", err
 			}
 			actionCount += len(recipients)
-			notifiedIDs = append(notifiedIDs, recipients...)
+			sideEffects.NotifiedIDs = append(sideEffects.NotifiedIDs, recipients...)
 		}
 		addedTags, err := h.appendAutomationTaskTagsWithDB(tx, task, rule.Actions, actorID)
 		if err != nil {
-			return len(tasks), actionCount, notifiedIDs, "", err
+			return len(tasks), actionCount, sideEffects, "", err
 		}
 		actionCount += addedTags
 		tagActionCount += addedTags
 		addedAssignees, assigneeNotifyIDs, err := h.appendAutomationTaskAssigneesWithDB(tx, task, rule.Actions, actorID)
 		if err != nil {
-			return len(tasks), actionCount, notifiedIDs, "", err
+			return len(tasks), actionCount, sideEffects, "", err
 		}
 		actionCount += addedAssignees
 		assigneeActionCount += addedAssignees
-		notifiedIDs = append(notifiedIDs, assigneeNotifyIDs...)
+		sideEffects.NotifiedIDs = append(sideEffects.NotifiedIDs, assigneeNotifyIDs...)
+		if job, ok := buildAutomationWebhookJob(rule, task, source, actorID, map[string]any{
+			"overdueDays": overdueDays(now, task.EndAt),
+		}); ok {
+			sideEffects.WebhookJobs = append(sideEffects.WebhookJobs, job)
+		}
 	}
-	return len(tasks), actionCount, uniqueUint(notifiedIDs), fmt.Sprintf("匹配 %d 个逾期任务，发送 %d 条通知，添加 %d 个标签，指派 %d 个执行人", len(tasks), len(notifiedIDs), tagActionCount, assigneeActionCount), nil
+	sideEffects.NotifiedIDs = uniqueUint(sideEffects.NotifiedIDs)
+	return len(tasks), actionCount, sideEffects, fmt.Sprintf("匹配 %d 个逾期任务，发送 %d 条通知，添加 %d 个标签，指派 %d 个执行人", len(tasks), len(sideEffects.NotifiedIDs), tagActionCount, assigneeActionCount), nil
 }
 
 func containsTaskStatus(values []model.TaskStatus, target model.TaskStatus) bool {
@@ -805,22 +1146,22 @@ func taskAssigneeChangedNotificationContent(task model.Task, addedAssigneeNames 
 	return fmt.Sprintf("任务 %s - %s 执行人已变更，新增：%s，移除：%s", task.TaskNo, task.Title, addedAssigneeNames, removedAssigneeNames)
 }
 
-func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus, actorID uint) ([]uint, error) {
+func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus, actorID uint) (automationExecutionSideEffects, error) {
+	sideEffects := automationExecutionSideEffects{}
 	if oldStatus == newStatus {
-		return nil, nil
+		return sideEffects, nil
 	}
 
 	if err := tx.Preload("Assignees").Preload("Project.Users").First(&task, task.ID).Error; err != nil {
-		return nil, err
+		return sideEffects, err
 	}
 
 	var rules []model.AutomationRule
 	if err := tx.Where("is_enabled = ? AND trigger = ?", true, model.AutomationTriggerTaskStatusChanged).Order("id asc").Find(&rules).Error; err != nil {
-		return nil, err
+		return sideEffects, err
 	}
 
 	now := time.Now()
-	notifiedIDs := make([]uint, 0)
 	for _, rule := range rules {
 		if !taskStatusChangeRuleMatches(rule.Conditions, task, oldStatus, newStatus) {
 			continue
@@ -831,10 +1172,10 @@ func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Ta
 		if len(recipients) > 0 {
 			content := taskStatusChangedNotificationContent(task, oldStatus, newStatus)
 			if err := h.createNotificationsWithDB(tx, recipients, "任务状态已变更", content, "tasks", task.ID); err != nil {
-				return notifiedIDs, err
+				return sideEffects, err
 			}
 			actionCount += len(recipients)
-			notifiedIDs = append(notifiedIDs, recipients...)
+			sideEffects.NotifiedIDs = append(sideEffects.NotifiedIDs, recipients...)
 		}
 
 		if rule.Actions.AddComment {
@@ -844,25 +1185,32 @@ func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Ta
 				Content:  renderAutomationCommentContent(rule.Actions.CommentContent, task, oldStatus, newStatus),
 			}
 			if err := tx.Create(&comment).Error; err != nil {
-				return notifiedIDs, err
+				return sideEffects, err
 			}
 			commentID := comment.ID
 			if err := h.writeTaskActivityWithDB(tx, task.ID, actorID, "automation.comment_created", "自动化评论", comment.Content, &commentID); err != nil {
-				return notifiedIDs, err
+				return sideEffects, err
 			}
 			actionCount += 1
 		}
 		addedTags, err := h.appendAutomationTaskTagsWithDB(tx, task, rule.Actions, actorID)
 		if err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
 		actionCount += addedTags
 		addedAssignees, assigneeNotifyIDs, err := h.appendAutomationTaskAssigneesWithDB(tx, task, rule.Actions, actorID)
 		if err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
 		actionCount += addedAssignees
-		notifiedIDs = append(notifiedIDs, assigneeNotifyIDs...)
+		sideEffects.NotifiedIDs = append(sideEffects.NotifiedIDs, assigneeNotifyIDs...)
+		var webhookJobs []automationWebhookJob
+		if job, ok := buildAutomationWebhookJob(rule, task, "event", actorID, map[string]any{
+			"fromStatus": oldStatus,
+			"toStatus":   newStatus,
+		}); ok {
+			webhookJobs = append(webhookJobs, job)
+		}
 
 		logItem := model.AutomationExecutionLog{
 			RuleID:       rule.ID,
@@ -875,31 +1223,33 @@ func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Ta
 			RunSource:    "event",
 		}
 		if err := tx.Create(&logItem).Error; err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
 		if err := tx.Model(&model.AutomationRule{}).Where("id = ?", rule.ID).Update("last_run_at", now).Error; err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
+		sideEffects.WebhookJobs = append(sideEffects.WebhookJobs, attachAutomationLogID(webhookJobs, logItem.ID)...)
 	}
-	return uniqueUint(notifiedIDs), nil
+	sideEffects.NotifiedIDs = uniqueUint(sideEffects.NotifiedIDs)
+	return sideEffects, nil
 }
 
-func (h *Handler) executeTaskProgressChangedRulesWithDB(tx *gorm.DB, task model.Task, oldProgress int, newProgress int, actorID uint) ([]uint, error) {
+func (h *Handler) executeTaskProgressChangedRulesWithDB(tx *gorm.DB, task model.Task, oldProgress int, newProgress int, actorID uint) (automationExecutionSideEffects, error) {
+	sideEffects := automationExecutionSideEffects{}
 	if oldProgress == newProgress {
-		return nil, nil
+		return sideEffects, nil
 	}
 
 	if err := tx.Preload("Assignees").Preload("Project.Users").First(&task, task.ID).Error; err != nil {
-		return nil, err
+		return sideEffects, err
 	}
 
 	var rules []model.AutomationRule
 	if err := tx.Where("is_enabled = ? AND trigger = ?", true, model.AutomationTriggerTaskProgressChanged).Order("id asc").Find(&rules).Error; err != nil {
-		return nil, err
+		return sideEffects, err
 	}
 
 	now := time.Now()
-	notifiedIDs := make([]uint, 0)
 	for _, rule := range rules {
 		if !taskProgressChangeRuleMatches(rule.Conditions, task, oldProgress, newProgress) {
 			continue
@@ -910,10 +1260,10 @@ func (h *Handler) executeTaskProgressChangedRulesWithDB(tx *gorm.DB, task model.
 		if len(recipients) > 0 {
 			content := taskProgressChangedNotificationContent(task, oldProgress, newProgress)
 			if err := h.createNotificationsWithDB(tx, recipients, "任务进度已变更", content, "tasks", task.ID); err != nil {
-				return notifiedIDs, err
+				return sideEffects, err
 			}
 			actionCount += len(recipients)
-			notifiedIDs = append(notifiedIDs, recipients...)
+			sideEffects.NotifiedIDs = append(sideEffects.NotifiedIDs, recipients...)
 		}
 
 		if rule.Actions.AddComment {
@@ -923,25 +1273,32 @@ func (h *Handler) executeTaskProgressChangedRulesWithDB(tx *gorm.DB, task model.
 				Content:  renderAutomationProgressCommentContent(rule.Actions.CommentContent, task, oldProgress, newProgress),
 			}
 			if err := tx.Create(&comment).Error; err != nil {
-				return notifiedIDs, err
+				return sideEffects, err
 			}
 			commentID := comment.ID
 			if err := h.writeTaskActivityWithDB(tx, task.ID, actorID, "automation.comment_created", "自动化评论", comment.Content, &commentID); err != nil {
-				return notifiedIDs, err
+				return sideEffects, err
 			}
 			actionCount += 1
 		}
 		addedTags, err := h.appendAutomationTaskTagsWithDB(tx, task, rule.Actions, actorID)
 		if err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
 		actionCount += addedTags
 		addedAssignees, assigneeNotifyIDs, err := h.appendAutomationTaskAssigneesWithDB(tx, task, rule.Actions, actorID)
 		if err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
 		actionCount += addedAssignees
-		notifiedIDs = append(notifiedIDs, assigneeNotifyIDs...)
+		sideEffects.NotifiedIDs = append(sideEffects.NotifiedIDs, assigneeNotifyIDs...)
+		var webhookJobs []automationWebhookJob
+		if job, ok := buildAutomationWebhookJob(rule, task, "event", actorID, map[string]any{
+			"fromProgress": oldProgress,
+			"toProgress":   newProgress,
+		}); ok {
+			webhookJobs = append(webhookJobs, job)
+		}
 
 		logItem := model.AutomationExecutionLog{
 			RuleID:       rule.ID,
@@ -954,41 +1311,43 @@ func (h *Handler) executeTaskProgressChangedRulesWithDB(tx *gorm.DB, task model.
 			RunSource:    "event",
 		}
 		if err := tx.Create(&logItem).Error; err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
 		if err := tx.Model(&model.AutomationRule{}).Where("id = ?", rule.ID).Update("last_run_at", now).Error; err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
+		sideEffects.WebhookJobs = append(sideEffects.WebhookJobs, attachAutomationLogID(webhookJobs, logItem.ID)...)
 	}
-	return uniqueUint(notifiedIDs), nil
+	sideEffects.NotifiedIDs = uniqueUint(sideEffects.NotifiedIDs)
+	return sideEffects, nil
 }
 
-func (h *Handler) executeTaskAssigneeChangedRulesWithDB(tx *gorm.DB, task model.Task, addedAssigneeIDs []uint, removedAssigneeIDs []uint, actorID uint) ([]uint, error) {
+func (h *Handler) executeTaskAssigneeChangedRulesWithDB(tx *gorm.DB, task model.Task, addedAssigneeIDs []uint, removedAssigneeIDs []uint, actorID uint) (automationExecutionSideEffects, error) {
+	sideEffects := automationExecutionSideEffects{}
 	if len(addedAssigneeIDs) == 0 && len(removedAssigneeIDs) == 0 {
-		return nil, nil
+		return sideEffects, nil
 	}
 
 	if err := tx.Preload("Assignees").Preload("Project.Users").First(&task, task.ID).Error; err != nil {
-		return nil, err
+		return sideEffects, err
 	}
 
 	var rules []model.AutomationRule
 	if err := tx.Where("is_enabled = ? AND trigger = ?", true, model.AutomationTriggerTaskAssigneeChanged).Order("id asc").Find(&rules).Error; err != nil {
-		return nil, err
+		return sideEffects, err
 	}
 
 	changedAssigneeIDs := uniqueUint(append(append([]uint{}, addedAssigneeIDs...), removedAssigneeIDs...))
 	var changedAssignees []model.User
 	if len(changedAssigneeIDs) > 0 {
 		if err := tx.Where("id IN ?", changedAssigneeIDs).Find(&changedAssignees).Error; err != nil {
-			return nil, err
+			return sideEffects, err
 		}
 	}
 	addedAssigneeNames := automationAssigneeNames(changedAssignees, addedAssigneeIDs)
 	removedAssigneeNames := automationAssigneeNames(changedAssignees, removedAssigneeIDs)
 
 	now := time.Now()
-	notifiedIDs := make([]uint, 0)
 	for _, rule := range rules {
 		if !taskAssigneeChangeRuleMatches(rule.Conditions, task, addedAssigneeIDs, removedAssigneeIDs) {
 			continue
@@ -999,10 +1358,10 @@ func (h *Handler) executeTaskAssigneeChangedRulesWithDB(tx *gorm.DB, task model.
 		if len(recipients) > 0 {
 			content := taskAssigneeChangedNotificationContent(task, addedAssigneeNames, removedAssigneeNames)
 			if err := h.createNotificationsWithDB(tx, recipients, "任务执行人已变更", content, "tasks", task.ID); err != nil {
-				return notifiedIDs, err
+				return sideEffects, err
 			}
 			actionCount += len(recipients)
-			notifiedIDs = append(notifiedIDs, recipients...)
+			sideEffects.NotifiedIDs = append(sideEffects.NotifiedIDs, recipients...)
 		}
 
 		if rule.Actions.AddComment {
@@ -1012,25 +1371,34 @@ func (h *Handler) executeTaskAssigneeChangedRulesWithDB(tx *gorm.DB, task model.
 				Content:  renderAutomationAssigneeCommentContent(rule.Actions.CommentContent, task, addedAssigneeNames, removedAssigneeNames),
 			}
 			if err := tx.Create(&comment).Error; err != nil {
-				return notifiedIDs, err
+				return sideEffects, err
 			}
 			commentID := comment.ID
 			if err := h.writeTaskActivityWithDB(tx, task.ID, actorID, "automation.comment_created", "自动化评论", comment.Content, &commentID); err != nil {
-				return notifiedIDs, err
+				return sideEffects, err
 			}
 			actionCount += 1
 		}
 		addedTags, err := h.appendAutomationTaskTagsWithDB(tx, task, rule.Actions, actorID)
 		if err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
 		actionCount += addedTags
 		addedAssignees, assigneeNotifyIDs, err := h.appendAutomationTaskAssigneesWithDB(tx, task, rule.Actions, actorID)
 		if err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
 		actionCount += addedAssignees
-		notifiedIDs = append(notifiedIDs, assigneeNotifyIDs...)
+		sideEffects.NotifiedIDs = append(sideEffects.NotifiedIDs, assigneeNotifyIDs...)
+		var webhookJobs []automationWebhookJob
+		if job, ok := buildAutomationWebhookJob(rule, task, "event", actorID, map[string]any{
+			"addedAssigneeIds":   addedAssigneeIDs,
+			"removedAssigneeIds": removedAssigneeIDs,
+			"addedAssignees":     addedAssigneeNames,
+			"removedAssignees":   removedAssigneeNames,
+		}); ok {
+			webhookJobs = append(webhookJobs, job)
+		}
 
 		logItem := model.AutomationExecutionLog{
 			RuleID:       rule.ID,
@@ -1043,13 +1411,15 @@ func (h *Handler) executeTaskAssigneeChangedRulesWithDB(tx *gorm.DB, task model.
 			RunSource:    "event",
 		}
 		if err := tx.Create(&logItem).Error; err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
 		if err := tx.Model(&model.AutomationRule{}).Where("id = ?", rule.ID).Update("last_run_at", now).Error; err != nil {
-			return notifiedIDs, err
+			return sideEffects, err
 		}
+		sideEffects.WebhookJobs = append(sideEffects.WebhookJobs, attachAutomationLogID(webhookJobs, logItem.ID)...)
 	}
-	return uniqueUint(notifiedIDs), nil
+	sideEffects.NotifiedIDs = uniqueUint(sideEffects.NotifiedIDs)
+	return sideEffects, nil
 }
 
 func (h *Handler) recordAutomationFailure(rule model.AutomationRule, actorID uint, source string, execErr error) model.AutomationExecutionLog {
@@ -1076,7 +1446,7 @@ func (h *Handler) executeAutomationRule(c *gin.Context, rule model.AutomationRul
 		ActorID:   actorID,
 		RunSource: source,
 	}
-	var notifiedIDs []uint
+	sideEffects := automationExecutionSideEffects{}
 
 	if !rule.IsEnabled {
 		logItem.Status = model.AutomationExecutionSkipped
@@ -1091,7 +1461,7 @@ func (h *Handler) executeAutomationRule(c *gin.Context, rule model.AutomationRul
 		var err error
 		switch rule.Trigger {
 		case model.AutomationTriggerTaskOverdue:
-			logItem.MatchedCount, logItem.ActionCount, notifiedIDs, logItem.Message, err = h.executeTaskOverdueRule(tx, c, rule, now, actorID)
+			logItem.MatchedCount, logItem.ActionCount, sideEffects, logItem.Message, err = h.executeTaskOverdueRule(tx, c, rule, now, actorID, source)
 		case model.AutomationTriggerTaskStatusChanged:
 			logItem.Status = model.AutomationExecutionSkipped
 			logItem.Message = "状态变更规则仅在任务状态变更事件中执行"
@@ -1113,13 +1483,18 @@ func (h *Handler) executeAutomationRule(c *gin.Context, rule model.AutomationRul
 		if err := tx.Create(&logItem).Error; err != nil {
 			return err
 		}
+		sideEffects.WebhookJobs = attachAutomationLogID(sideEffects.WebhookJobs, logItem.ID)
 		return tx.Model(&model.AutomationRule{}).Where("id = ?", rule.ID).Update("last_run_at", now).Error
 	})
 	if err != nil {
 		failedLog := h.recordAutomationFailure(rule, actorID, source, err)
 		return failedLog, nil, err
 	}
-	return logItem, notifiedIDs, nil
+	h.deliverAutomationWebhooks(sideEffects.WebhookJobs)
+	if len(sideEffects.WebhookJobs) > 0 {
+		_ = h.DB.First(&logItem, logItem.ID).Error
+	}
+	return logItem, sideEffects.NotifiedIDs, nil
 }
 
 func (h *Handler) RunAutomationRule(c *gin.Context) {

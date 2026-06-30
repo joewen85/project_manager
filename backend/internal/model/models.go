@@ -262,6 +262,8 @@ type AutomationActions struct {
 	TagIDs              []uint `json:"tagIds"`
 	AssignAssignees     bool   `json:"assignAssignees"`
 	AssigneeIDs         []uint `json:"assigneeIds"`
+	CallWebhook         bool   `json:"callWebhook"`
+	WebhookURL          string `json:"webhookUrl"`
 }
 
 type AutomationRule struct {
