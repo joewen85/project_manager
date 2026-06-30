@@ -131,19 +131,20 @@ func (h *Handler) MemberWorkload(c *gin.Context) {
 }
 
 type projectHealthItem struct {
-	ProjectID        uint     `json:"projectId"`
-	ProjectCode      string   `json:"projectCode"`
-	ProjectName      string   `json:"projectName"`
-	Health           string   `json:"health"`
-	Score            int      `json:"score"`
-	CompletionRate   float64  `json:"completionRate"`
-	TotalTasks       int64    `json:"totalTasks"`
-	CompletedTasks   int64    `json:"completedTasks"`
-	OverdueTasks     int64    `json:"overdueTasks"`
-	MilestoneOverdue int64    `json:"milestoneOverdue"`
-	UnscheduledTasks int64    `json:"unscheduledTasks"`
-	ReviewingTasks   int64    `json:"reviewingTasks"`
-	Reasons          []string `json:"reasons"`
+	ProjectID            uint     `json:"projectId"`
+	ProjectCode          string   `json:"projectCode"`
+	ProjectName          string   `json:"projectName"`
+	Health               string   `json:"health"`
+	Score                int      `json:"score"`
+	CompletionRate       float64  `json:"completionRate"`
+	TotalTasks           int64    `json:"totalTasks"`
+	CompletedTasks       int64    `json:"completedTasks"`
+	OverdueTasks         int64    `json:"overdueTasks"`
+	MilestoneOverdue     int64    `json:"milestoneOverdue"`
+	UnscheduledTasks     int64    `json:"unscheduledTasks"`
+	ReviewingTasks       int64    `json:"reviewingTasks"`
+	CriticalOverdueTasks int64    `json:"criticalOverdueTasks"`
+	Reasons              []string `json:"reasons"`
 }
 
 type projectHealthRow struct {
@@ -160,17 +161,18 @@ type projectHealthRow struct {
 }
 
 type projectHealthAccumulator struct {
-	projectID        uint
-	projectCode      string
-	projectName      string
-	totalTasks       int64
-	completedTasks   int64
-	overdueTasks     int64
-	milestoneOverdue int64
-	unscheduledTasks int64
-	reviewingTasks   int64
-	weightedScore    float64
-	weightTotal      float64
+	projectID            uint
+	projectCode          string
+	projectName          string
+	totalTasks           int64
+	completedTasks       int64
+	overdueTasks         int64
+	milestoneOverdue     int64
+	unscheduledTasks     int64
+	reviewingTasks       int64
+	criticalOverdueTasks int64
+	weightedScore        float64
+	weightTotal          float64
 }
 
 func clampPercent(value float64) float64 {
@@ -270,6 +272,9 @@ func calculateProjectHealth(acc projectHealthAccumulator) projectHealthItem {
 	if acc.overdueTasks > 0 {
 		reasons = append(reasons, countReason(acc.overdueTasks, "个任务已逾期"))
 	}
+	if acc.criticalOverdueTasks > 0 {
+		reasons = append(reasons, formatCriticalReason(acc.criticalOverdueTasks))
+	}
 	if acc.milestoneOverdue > 0 {
 		reasons = append(reasons, countReason(acc.milestoneOverdue, "个里程碑逾期"))
 	}
@@ -284,7 +289,7 @@ func calculateProjectHealth(acc projectHealthAccumulator) projectHealthItem {
 	}
 
 	health := "green"
-	if acc.milestoneOverdue > 0 || acc.overdueTasks >= 3 || score < 60 {
+	if acc.criticalOverdueTasks > 0 || acc.milestoneOverdue > 0 || acc.overdueTasks >= 3 || score < 60 {
 		health = "red"
 	} else if acc.overdueTasks > 0 || acc.reviewingTasks >= 3 || acc.unscheduledTasks > 0 || score < 85 {
 		health = "yellow"
@@ -294,19 +299,20 @@ func calculateProjectHealth(acc projectHealthAccumulator) projectHealthItem {
 	}
 
 	return projectHealthItem{
-		ProjectID:        acc.projectID,
-		ProjectCode:      acc.projectCode,
-		ProjectName:      acc.projectName,
-		Health:           health,
-		Score:            score,
-		CompletionRate:   completionRate,
-		TotalTasks:       acc.totalTasks,
-		CompletedTasks:   acc.completedTasks,
-		OverdueTasks:     acc.overdueTasks,
-		MilestoneOverdue: acc.milestoneOverdue,
-		UnscheduledTasks: acc.unscheduledTasks,
-		ReviewingTasks:   acc.reviewingTasks,
-		Reasons:          reasons,
+		ProjectID:            acc.projectID,
+		ProjectCode:          acc.projectCode,
+		ProjectName:          acc.projectName,
+		Health:               health,
+		Score:                score,
+		CompletionRate:       completionRate,
+		TotalTasks:           acc.totalTasks,
+		CompletedTasks:       acc.completedTasks,
+		OverdueTasks:         acc.overdueTasks,
+		MilestoneOverdue:     acc.milestoneOverdue,
+		UnscheduledTasks:     acc.unscheduledTasks,
+		ReviewingTasks:       acc.reviewingTasks,
+		CriticalOverdueTasks: acc.criticalOverdueTasks,
+		Reasons:              reasons,
 	}
 }
 
@@ -349,6 +355,16 @@ func (h *Handler) ProjectHealth(c *gin.Context) {
 			projects[row.ProjectID] = acc
 		}
 		acc.addTask(row, now)
+	}
+	criticalOverdueByProject, err := h.criticalOverdueByVisibleProject(c, now)
+	if err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_PROJECT_HEALTH_CRITICAL_PATH_FAILED", err)
+		return
+	}
+	for projectID, count := range criticalOverdueByProject {
+		if acc, ok := projects[projectID]; ok {
+			acc.criticalOverdueTasks = count
+		}
 	}
 
 	items := make([]projectHealthItem, 0, len(projects))

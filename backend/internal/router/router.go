@@ -99,7 +99,16 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			projects.GET("/:id/gantt", middleware.RequirePermission(h.DB, "projects.read"), h.Gantt)
 			projects.POST("/:id/gantt/auto-resolve", middleware.RequirePermission(h.DB, "projects.update"), h.AutoResolveProjectDependencies)
 			projects.GET("/:id/task-tree", middleware.RequirePermission(h.DB, "projects.read"), h.TaskTree)
+			projects.GET("/:id/critical-path", middleware.RequirePermission(h.DB, "baselines.read"), h.ProjectCriticalPath)
 			projects.GET("/:id", middleware.RequirePermission(h.DB, "projects.read"), h.ProjectDetail)
+		}
+
+		baselines := authGroup.Group("/project-baselines")
+		{
+			baselines.GET("", middleware.RequirePermission(h.DB, "baselines.read"), h.ListProjectBaselines)
+			baselines.POST("", middleware.RequirePermission(h.DB, "baselines.create"), h.CreateProjectBaseline)
+			baselines.GET("/:id", middleware.RequirePermission(h.DB, "baselines.read"), h.ProjectBaselineDetail)
+			baselines.DELETE("/:id", middleware.RequirePermission(h.DB, "baselines.delete"), h.DeleteProjectBaseline)
 		}
 
 		tasks := authGroup.Group("/tasks")

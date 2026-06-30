@@ -388,6 +388,89 @@ export interface WebhookDelivery {
   updatedAt?: string
 }
 
+export interface ProjectBaselineTaskSnapshot {
+  taskId: number
+  taskNo: string
+  title: string
+  status: Status
+  progress: number
+  isMilestone: boolean
+  startAt?: string
+  endAt?: string
+  parentId?: number
+}
+
+export interface ProjectBaseline {
+  id: number
+  projectId: number
+  project?: Project
+  name: string
+  description?: string
+  taskCount: number
+  completedTaskCount: number
+  plannedStartAt?: string
+  plannedEndAt?: string
+  snapshot?: ProjectBaselineTaskSnapshot[]
+  createdById: number
+  createdBy?: User
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ProjectBaselineTaskVariance {
+  taskId: number
+  taskNo: string
+  title: string
+  baselineStartAt?: string
+  baselineEndAt?: string
+  currentStartAt?: string
+  currentEndAt?: string
+  startVarianceDays: number
+  endVarianceDays: number
+  statusChanged: boolean
+  progressChanged: boolean
+  missingCurrentTask: boolean
+}
+
+export interface ProjectBaselineCompare {
+  baselineTaskCount: number
+  currentTaskCount: number
+  baselineCompletedCount: number
+  currentCompletedCount: number
+  baselinePlannedEndAt?: string
+  currentPlannedEndAt?: string
+  endVarianceDays: number
+  delayedTaskCount: number
+  missingTaskCount: number
+  changedTasks: ProjectBaselineTaskVariance[]
+}
+
+export interface ProjectBaselineDetail extends ProjectBaseline {
+  compare: ProjectBaselineCompare
+}
+
+export interface CriticalPathTask {
+  id: number
+  taskNo: string
+  title: string
+  status: Status
+  progress: number
+  priority?: TaskPriority
+  isMilestone: boolean
+  startAt?: string
+  endAt?: string
+  durationDays: number
+}
+
+export interface CriticalPathResult {
+  projectId: number
+  projectEndAt?: string
+  totalDurationDays: number
+  criticalTaskIds: number[]
+  tasks: CriticalPathTask[]
+  hasCycle: boolean
+}
+
 export type ProjectHealthLevel = 'green' | 'yellow' | 'red'
 
 export interface ProjectHealth {
@@ -403,6 +486,7 @@ export interface ProjectHealth {
   milestoneOverdue: number
   unscheduledTasks: number
   reviewingTasks: number
+  criticalOverdueTasks?: number
   reasons: string[]
 }
 

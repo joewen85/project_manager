@@ -38,11 +38,14 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/tags` | `tags.create` |
 | PUT | `/tags/:id` | `tags.update` |
 | DELETE | `/tags/:id` | `tags.delete` |
-| GET | `/projects*` | `projects.read` |
+| GET | `/projects` `/projects/:id` `/projects/export` `/projects/editor-options` `/projects/:id/gantt` `/projects/gantt-portfolio` `/projects/:id/task-tree` | `projects.read` |
 | POST | `/projects` | `projects.create` |
 | PUT | `/projects/:id` | `projects.update` |
 | POST | `/projects/:id/gantt/auto-resolve` | `projects.update` |
 | DELETE | `/projects/:id` | `projects.delete` |
+| GET | `/projects/:id/critical-path` `/project-baselines` `/project-baselines/:id` | `baselines.read` |
+| POST | `/project-baselines` | `baselines.create` |
+| DELETE | `/project-baselines/:id` | `baselines.delete` |
 | GET | `/tasks*` `/tasks/calendar` `/tasks/calendar.ics` | `tasks.read` |
 | POST | `/tasks` | `tasks.create` |
 | PUT | `/tasks/:id` `/tasks/:id/dependencies` | `tasks.update` |
@@ -186,6 +189,37 @@ Base URL: `http://localhost:8080/api/v1`
 
 ### GET `/projects/:projectId/task-tree`
 - 项目分解树结构（任务树）
+
+## 项目基线与关键路径
+
+### GET `/project-baselines`
+- 权限: `baselines.read`
+- Query: `page` `pageSize` `keyword` `projectId`
+- 范围: 管理员查看全部；普通用户仅查看自己创建的项目基线
+- 响应: `{ list, total, page, pageSize }`
+
+### POST `/project-baselines`
+- 权限: `baselines.create`
+- 请求体: `{ projectId, name, description? }`
+- 范围: `projectId` 必须是当前用户可见项目
+- 效果: 对当前用户可见任务生成计划快照，记录任务数、完成数、计划开始/结束时间和任务状态/进度/排期
+
+### GET `/project-baselines/:id`
+- 权限: `baselines.read`
+- 范围: 管理员或基线创建人，且基线项目仍需当前用户可见
+- 响应: 基线详情 + `compare`
+- `compare`: `{ baselineTaskCount, currentTaskCount, baselineCompletedCount, currentCompletedCount, baselinePlannedEndAt, currentPlannedEndAt, endVarianceDays, delayedTaskCount, missingTaskCount, changedTasks }`
+
+### DELETE `/project-baselines/:id`
+- 权限: `baselines.delete`
+- 范围: 管理员或基线创建人
+
+### GET `/projects/:projectId/critical-path`
+- 权限: `baselines.read`
+- 范围: 项目必须当前用户可见；只使用当前用户可见任务及其可见依赖计算
+- 响应: `{ projectId, projectEndAt, totalDurationDays, criticalTaskIds, tasks, hasCycle }`
+- 规则: 若可见依赖存在环，返回 `400` 与错误码 `CRITICAL_PATH_CYCLE`
+- 健康度联动: 未完成的关键路径任务逾期时，`/stats/project-health` 的 `criticalOverdueTasks` 会计数，并将项目健康度置为 `red`
 
 ## 任务管理
 
@@ -523,10 +557,10 @@ API Token 用于外部系统以服务账号身份调用接口。请求仍使用 
 - 权限: `stats.read`
 - 范围: 管理员查看全量任务聚合；普通用户仅按任务可见范围聚合项目。
 - 响应: `{ projects: ProjectHealth[] }`
-- `ProjectHealth`: `{ projectId, projectCode, projectName, health, score, completionRate, totalTasks, completedTasks, overdueTasks, milestoneOverdue, unscheduledTasks, reviewingTasks, reasons }`
+- `ProjectHealth`: `{ projectId, projectCode, projectName, health, score, completionRate, totalTasks, completedTasks, overdueTasks, milestoneOverdue, unscheduledTasks, reviewingTasks, criticalOverdueTasks, reasons }`
 - `score` 口径: 按任务“计划进度 - 实际进度”的滞后程度计算；实际进度为 `completed=100`，否则取 `progress`；计划进度按 `startAt/endAt` 和当前时间线性计算。
 - 权重: `high=3`、`medium=2`、`low=1`，里程碑任务额外 `+1`。
-- `health`: `green` 健康、`yellow` 关注、`red` 高风险；逾期、里程碑逾期、未排期、待审核堆积会进入 `reasons`。
+- `health`: `green` 健康、`yellow` 关注、`red` 高风险；逾期、关键路径逾期、里程碑逾期、未排期、待审核堆积会进入 `reasons`。
 
 ### GET `/stats/member-workload`
 - 权限: `stats.read`

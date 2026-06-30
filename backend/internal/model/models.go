@@ -154,6 +154,33 @@ type Project struct {
 	Tasks       []Task       `json:"tasks,omitempty"`
 }
 
+type ProjectBaselineTaskSnapshot struct {
+	TaskID      uint       `json:"taskId"`
+	TaskNo      string     `json:"taskNo"`
+	Title       string     `json:"title"`
+	Status      TaskStatus `json:"status"`
+	Progress    int        `json:"progress"`
+	IsMilestone bool       `json:"isMilestone"`
+	StartAt     *time.Time `json:"startAt"`
+	EndAt       *time.Time `json:"endAt"`
+	ParentID    *uint      `json:"parentId"`
+}
+
+type ProjectBaseline struct {
+	BaseModel
+	ProjectID          uint                          `gorm:"not null;index" json:"projectId"`
+	Project            Project                       `json:"project,omitempty"`
+	Name               string                        `gorm:"size:150;not null;index" json:"name"`
+	Description        string                        `gorm:"type:text" json:"description"`
+	TaskCount          int                           `json:"taskCount"`
+	CompletedTaskCount int                           `json:"completedTaskCount"`
+	PlannedStartAt     *time.Time                    `json:"plannedStartAt"`
+	PlannedEndAt       *time.Time                    `json:"plannedEndAt"`
+	Snapshot           []ProjectBaselineTaskSnapshot `gorm:"serializer:json" json:"snapshot"`
+	CreatedByID        uint                          `gorm:"not null;index" json:"createdById"`
+	CreatedBy          User                          `json:"createdBy,omitempty"`
+}
+
 type TemplateTaskDependency struct {
 	DependsOnKey string `json:"dependsOnKey"`
 	LagDays      int    `json:"lagDays"`

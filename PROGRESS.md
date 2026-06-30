@@ -140,6 +140,13 @@
 - 完成：新增 `api_tokens.create/read/update/delete` 权限与 `/api-tokens` 管理接口，创建 Token 时自动生成服务账号用户和独立角色
 - 完成：API Token 认证复用 `Authorization: Bearer`，以服务账号身份执行现有 RBAC、任务/项目可见范围与审计；支持独立停用、重新启用和撤销
 - 完成：前端新增“API Token”页面，支持 Token 筛选、创建、编辑、停用/启用、撤销和权限选择；补充最小权限/禁用/撤销/审计集成测试并同步 API/OpenAPI/RBAC/README/PLAN
+- 完成：按 `Improvement.md` 推进 P2-1 项目基线与关键路径 MVP，变更控制留到下一切片
+- 完成：新增 `project_baselines` 模型和显式 SQL 迁移，项目基线快照只保存当前用户可见任务的状态、进度和排期
+- 完成：新增 `baselines.create/read/delete` 权限与 `/project-baselines` 管理接口，普通用户仅查看/删除自己创建的基线，项目仍按可见范围校验
+- 完成：新增 `/projects/:id/critical-path`，按当前用户可见任务和可见依赖计算关键路径，依赖成环时返回 `CRITICAL_PATH_CYCLE`
+- 完成：项目健康度新增 `criticalOverdueTasks`，关键路径任务逾期且未完成时项目自动置红并输出原因
+- 完成：前端新增“基线关键路径”页面，支持基线筛选、创建、详情对比、关键路径查看；Dashboard 健康榜展示关键逾期数
+- 完成：补充基线创建/偏差比较/关键路径/健康度联动/删除集成测试，并同步 README、API、OpenAPI、RBAC、PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

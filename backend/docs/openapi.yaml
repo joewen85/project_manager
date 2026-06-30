@@ -699,6 +699,104 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: getProjectsByIdTaskTree
+  /projects/{id}/critical-path:
+    get:
+      summary: 项目关键路径
+      description: 基于当前用户可见任务和可见依赖计算单项目关键路径；依赖成环时返回 CRITICAL_PATH_CYCLE。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CriticalPathResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectsByIdCriticalPath
+  /project-baselines:
+    get:
+      summary: 项目基线列表
+      description: 管理员查看全部；普通用户仅查看自己创建的项目基线。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: projectId
+        schema:
+          type: integer
+        description: 按项目筛选
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectBaselinePageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectBaselines
+    post:
+      summary: 创建项目基线
+      description: 对当前用户可见任务生成计划快照。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectBaselineUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectBaseline'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postProjectBaselines
+  /project-baselines/{id}:
+    get:
+      summary: 项目基线详情与偏差
+      description: 返回基线快照和相对当前可见任务的偏差比较。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectBaselineDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectBaselinesById
+    delete:
+      summary: 删除项目基线
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteProjectBaselinesById
   /tasks:
     get:
       summary: 任务列表
@@ -2731,6 +2829,204 @@ components:
           type: array
           items:
             type: integer
+    ProjectBaselineTaskSnapshot:
+      type: object
+      properties:
+        taskId:
+          type: integer
+        taskNo:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - queued
+          - processing
+          - reviewing
+          - completed
+        progress:
+          type: integer
+        isMilestone:
+          type: boolean
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        parentId:
+          type: integer
+    ProjectBaseline:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        project:
+          $ref: '#/components/schemas/Project'
+        name:
+          type: string
+        description:
+          type: string
+        taskCount:
+          type: integer
+        completedTaskCount:
+          type: integer
+        plannedStartAt:
+          type: string
+          format: date-time
+        plannedEndAt:
+          type: string
+          format: date-time
+        snapshot:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectBaselineTaskSnapshot'
+        createdById:
+          type: integer
+        createdBy:
+          $ref: '#/components/schemas/User'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProjectBaselineUpsertRequest:
+      type: object
+      required:
+      - projectId
+      - name
+      properties:
+        projectId:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+    ProjectBaselineTaskVariance:
+      type: object
+      properties:
+        taskId:
+          type: integer
+        taskNo:
+          type: string
+        title:
+          type: string
+        baselineStartAt:
+          type: string
+          format: date-time
+        baselineEndAt:
+          type: string
+          format: date-time
+        currentStartAt:
+          type: string
+          format: date-time
+        currentEndAt:
+          type: string
+          format: date-time
+        startVarianceDays:
+          type: integer
+        endVarianceDays:
+          type: integer
+        statusChanged:
+          type: boolean
+        progressChanged:
+          type: boolean
+        missingCurrentTask:
+          type: boolean
+    ProjectBaselineCompare:
+      type: object
+      properties:
+        baselineTaskCount:
+          type: integer
+        currentTaskCount:
+          type: integer
+        baselineCompletedCount:
+          type: integer
+        currentCompletedCount:
+          type: integer
+        baselinePlannedEndAt:
+          type: string
+          format: date-time
+        currentPlannedEndAt:
+          type: string
+          format: date-time
+        endVarianceDays:
+          type: integer
+        delayedTaskCount:
+          type: integer
+        missingTaskCount:
+          type: integer
+        changedTasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectBaselineTaskVariance'
+    ProjectBaselineDetail:
+      allOf:
+      - $ref: '#/components/schemas/ProjectBaseline'
+      - type: object
+        properties:
+          compare:
+            $ref: '#/components/schemas/ProjectBaselineCompare'
+    CriticalPathTask:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskNo:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - queued
+          - processing
+          - reviewing
+          - completed
+        progress:
+          type: integer
+        priority:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+        isMilestone:
+          type: boolean
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        durationDays:
+          type: integer
+    CriticalPathResult:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        projectEndAt:
+          type: string
+          format: date-time
+        totalDurationDays:
+          type: integer
+        criticalTaskIds:
+          type: array
+          items:
+            type: integer
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/CriticalPathTask'
+        hasCycle:
+          type: boolean
     TemplateTaskDependency:
       type: object
       required:
@@ -3899,6 +4195,9 @@ components:
         reviewingTasks:
           type: integer
           format: int64
+        criticalOverdueTasks:
+          type: integer
+          format: int64
         reasons:
           type: array
           items:
@@ -4086,6 +4385,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Project'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    ProjectBaselinePageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectBaseline'
         total:
           type: integer
           format: int64

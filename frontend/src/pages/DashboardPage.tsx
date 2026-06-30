@@ -167,6 +167,7 @@ export function DashboardPage() {
                   </div>
                   <div className="dashboard-health-metrics">
                     <span>逾期 {item.overdueTasks}</span>
+                    <span>关键逾期 {item.criticalOverdueTasks || 0}</span>
                     <span>里程碑 {item.milestoneOverdue}</span>
                     <span>未排期 {item.unscheduledTasks}</span>
                     <span>待审核 {item.reviewingTasks}</span>

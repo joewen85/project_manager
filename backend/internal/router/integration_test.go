@@ -1346,6 +1346,149 @@ func TestProjectHealthUsesVisibleTaskScope(t *testing.T) {
 	}
 }
 
+func TestProjectBaselineAndCriticalPathMVP(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+	for _, code := range []string{"baselines.create", "baselines.read", "baselines.delete"} {
+		if codeToID[code] == 0 {
+			t.Fatalf("baseline permission seed missing: %s", code)
+		}
+	}
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "BASELINE-P1",
+		"name":        "Baseline Project",
+		"description": "baseline project",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create baseline project expected 201 got %d, body=%v", projectResp.StatusCode, projectBody)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	createTask := func(title, status string, progress int, startAt, endAt string) int {
+		resp, body := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+			"title":     title,
+			"projectId": projectID,
+			"status":    status,
+			"progress":  progress,
+			"startAt":   startAt,
+			"endAt":     endAt,
+		})
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("create task %s expected 201 got %d, body=%v", title, resp.StatusCode, body)
+		}
+		return int(body["id"].(float64))
+	}
+
+	taskAID := createTask("Baseline A", "completed", 100, "2000-01-01T00:00:00Z", "2000-01-02T00:00:00Z")
+	taskBID := createTask("Baseline B", "completed", 100, "2000-01-02T00:00:00Z", "2000-01-04T00:00:00Z")
+	taskCID := createTask("Baseline C", "processing", 60, "2000-01-04T00:00:00Z", "2000-01-05T00:00:00Z")
+
+	dependencyResp, dependencyBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskBID)+"/dependencies", adminToken, map[string]any{
+		"dependencies": []map[string]any{{"dependsOnTaskId": taskAID, "lagDays": 0, "type": "FS"}},
+	})
+	if dependencyResp.StatusCode != http.StatusOK {
+		t.Fatalf("set B dependencies expected 200 got %d, body=%v", dependencyResp.StatusCode, dependencyBody)
+	}
+	dependencyResp, dependencyBody = requestJSON(t, http.MethodPut, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskCID)+"/dependencies", adminToken, map[string]any{
+		"dependencies": []map[string]any{{"dependsOnTaskId": taskBID, "lagDays": 0, "type": "FS"}},
+	})
+	if dependencyResp.StatusCode != http.StatusOK {
+		t.Fatalf("set C dependencies expected 200 got %d, body=%v", dependencyResp.StatusCode, dependencyBody)
+	}
+
+	createBaselineResp, createBaselineBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-baselines", adminToken, map[string]any{
+		"projectId":   projectID,
+		"name":        "Baseline V1",
+		"description": "initial plan",
+	})
+	if createBaselineResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create baseline expected 201 got %d, body=%v", createBaselineResp.StatusCode, createBaselineBody)
+	}
+	baselineID := int(createBaselineBody["id"].(float64))
+	if int(createBaselineBody["taskCount"].(float64)) != 3 || int(createBaselineBody["completedTaskCount"].(float64)) != 2 {
+		t.Fatalf("baseline snapshot counts unexpected: %v", createBaselineBody)
+	}
+	snapshot, _ := createBaselineBody["snapshot"].([]any)
+	if len(snapshot) != 3 {
+		t.Fatalf("baseline snapshot should contain three tasks got %v", createBaselineBody["snapshot"])
+	}
+
+	updateScheduleResp, updateScheduleBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskCID)+"/schedule?autoResolve=false", adminToken, map[string]any{
+		"startAt": "2000-01-06T00:00:00Z",
+		"endAt":   "2000-01-08T00:00:00Z",
+	})
+	if updateScheduleResp.StatusCode != http.StatusOK {
+		t.Fatalf("update C schedule expected 200 got %d, body=%v", updateScheduleResp.StatusCode, updateScheduleBody)
+	}
+
+	detailResp, detailBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/project-baselines/"+strconv.Itoa(baselineID), adminToken, nil)
+	if detailResp.StatusCode != http.StatusOK {
+		t.Fatalf("baseline detail expected 200 got %d, body=%v", detailResp.StatusCode, detailBody)
+	}
+	compare, _ := detailBody["compare"].(map[string]any)
+	if int(compare["delayedTaskCount"].(float64)) != 1 || int(compare["endVarianceDays"].(float64)) <= 0 {
+		t.Fatalf("baseline compare should detect delayed critical task got %v", compare)
+	}
+	changedTasks, _ := compare["changedTasks"].([]any)
+	if len(changedTasks) == 0 {
+		t.Fatalf("baseline compare should include changed tasks got %v", compare)
+	}
+
+	criticalResp, criticalBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/projects/"+strconv.Itoa(projectID)+"/critical-path", adminToken, nil)
+	if criticalResp.StatusCode != http.StatusOK {
+		t.Fatalf("critical path expected 200 got %d, body=%v", criticalResp.StatusCode, criticalBody)
+	}
+	criticalIDs, _ := criticalBody["criticalTaskIds"].([]any)
+	if len(criticalIDs) != 3 ||
+		int(criticalIDs[0].(float64)) != taskAID ||
+		int(criticalIDs[1].(float64)) != taskBID ||
+		int(criticalIDs[2].(float64)) != taskCID {
+		t.Fatalf("critical path should follow A->B->C got %v", criticalIDs)
+	}
+	if int(criticalBody["totalDurationDays"].(float64)) < 5 {
+		t.Fatalf("critical path duration should include updated C duration got %v", criticalBody)
+	}
+
+	healthResp, healthBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/stats/project-health", adminToken, nil)
+	if healthResp.StatusCode != http.StatusOK {
+		t.Fatalf("project health expected 200 got %d, body=%v", healthResp.StatusCode, healthBody)
+	}
+	projects, _ := healthBody["projects"].([]any)
+	var healthProject map[string]any
+	for _, raw := range projects {
+		item, _ := raw.(map[string]any)
+		if int(item["projectId"].(float64)) == projectID {
+			healthProject = item
+			break
+		}
+	}
+	if healthProject == nil {
+		t.Fatalf("project health should include baseline project got %v", healthBody)
+	}
+	if healthProject["health"] != "red" || int(healthProject["criticalOverdueTasks"].(float64)) != 1 {
+		t.Fatalf("critical overdue should make project red got %v", healthProject)
+	}
+	reasons, _ := healthProject["reasons"].([]any)
+	hasCriticalReason := false
+	for _, raw := range reasons {
+		if strings.Contains(raw.(string), "关键路径") {
+			hasCriticalReason = true
+		}
+	}
+	if !hasCriticalReason {
+		t.Fatalf("health reasons should mention critical path got %v", reasons)
+	}
+
+	deleteBaselineResp, deleteBaselineBody := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/project-baselines/"+strconv.Itoa(baselineID), adminToken, nil)
+	if deleteBaselineResp.StatusCode != http.StatusOK {
+		t.Fatalf("delete baseline expected 200 got %d, body=%v", deleteBaselineResp.StatusCode, deleteBaselineBody)
+	}
+}
+
 func TestMemberWorkloadUsesCapacityAndTaskScope(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

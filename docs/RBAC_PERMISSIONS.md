@@ -35,6 +35,9 @@
 | `projects.read` | 查看项目 |
 | `projects.update` | 更新项目 |
 | `projects.delete` | 删除项目 |
+| `baselines.create` | 创建项目基线 |
+| `baselines.read` | 查看项目基线与关键路径 |
+| `baselines.delete` | 删除项目基线 |
 | `tasks.create` | 创建任务 |
 | `tasks.read` | 查看任务 |
 | `tasks.update` | 更新任务（含依赖/排期/工时） |
@@ -96,10 +99,13 @@
 | `POST /tags` | `tags.create` |
 | `PUT /tags/:id` | `tags.update` |
 | `DELETE /tags/:id` | `tags.delete` |
-| `GET /projects*` | `projects.read` |
+| `GET /projects` `GET /projects/:id` `GET /projects/export` `GET /projects/editor-options` `GET /projects/:id/gantt` `GET /projects/gantt-portfolio` `GET /projects/:id/task-tree` | `projects.read` |
 | `POST /projects` | `projects.create` |
 | `PUT /projects/:id` `POST /projects/:id/gantt/auto-resolve` | `projects.update` |
 | `DELETE /projects/:id` | `projects.delete` |
+| `GET /projects/:id/critical-path` `GET /project-baselines` `GET /project-baselines/:id` | `baselines.read`；关键路径与基线比较只使用当前用户可见任务和依赖 |
+| `POST /project-baselines` | `baselines.create`；项目必须当前用户可见，快照只包含当前用户可见任务 |
+| `DELETE /project-baselines/:id` | `baselines.delete`；普通用户仅删除自己创建的基线 |
 | `GET /tasks*` `GET /tasks/calendar` `GET /tasks/calendar.ics` | `tasks.read`；日程和 iCal 导出仅返回当前用户可见任务 |
 | `POST /tasks` | `tasks.create`；可写入估算/实际/剩余工时 |
 | `PATCH /tasks/:id/progress` `PATCH /tasks/:id/status` `PATCH /tasks/:id/complete` | `tasks.read` + 任务执行人/审核人关系校验 |
@@ -140,7 +146,7 @@
 | `PUT /automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
 | `DELETE /automation-rules/:id` | `automations.delete` |
 | 自动化状态/进度/执行人变更触发的通知/评论/添加标签/指派执行人/Webhook | 通知、评论、添加标签和指派执行人由已启用规则在任务写事务内执行，Webhook 在事务提交后投递；触发人仍需通过任务接口原有权限与可见范围校验，不额外要求 `comments.create`、`notifications.update`、`tags.update` 或 `tasks.update`；指派动作会让新增执行人获得该任务可见性，Webhook 会调用外部地址，配置与手动运行受 `automations.create/update` 控制 |
-| `GET /stats/dashboard` `GET /stats/project-health` `GET /stats/member-workload` | `stats.read`；普通用户按任务可见范围聚合，成员负载按执行人周容量标记过载 |
+| `GET /stats/dashboard` `GET /stats/project-health` `GET /stats/member-workload` | `stats.read`；普通用户按任务可见范围聚合，成员负载按执行人周容量标记过载，关键路径逾期会影响项目健康度 |
 | `GET /notifications` `GET /notifications/unread-count` | `notifications.read` |
 | `PATCH /notifications/:id/read` `PATCH /notifications/read-all` | `notifications.update` |
 | `GET /audit/logs` | `audit.read` |
