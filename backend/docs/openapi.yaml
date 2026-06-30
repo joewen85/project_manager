@@ -1333,6 +1333,7 @@ paths:
           - task_overdue
           - task_status_changed
           - task_progress_changed
+          - task_assignee_changed
       - in: query
         name: isEnabled
         schema:
@@ -1395,6 +1396,7 @@ paths:
           - task_overdue
           - task_status_changed
           - task_progress_changed
+          - task_assignee_changed
       responses:
         '200':
           description: OK
@@ -2254,6 +2256,13 @@ components:
           type: integer
           minimum: 0
           maximum: 100
+        assigneeChangeTypes:
+          type: array
+          items:
+            type: string
+            enum:
+            - added
+            - removed
     AutomationActions:
       type: object
       properties:
@@ -2278,6 +2287,7 @@ components:
           - task_overdue
           - task_status_changed
           - task_progress_changed
+          - task_assignee_changed
         isEnabled:
           type: boolean
         conditions:
@@ -2311,6 +2321,7 @@ components:
           - task_overdue
           - task_status_changed
           - task_progress_changed
+          - task_assignee_changed
         isEnabled:
           type: boolean
         conditions:
@@ -2332,6 +2343,7 @@ components:
           - task_overdue
           - task_status_changed
           - task_progress_changed
+          - task_assignee_changed
         status:
           type: string
           enum:

@@ -44,6 +44,7 @@ const (
 	AutomationTriggerTaskOverdue         AutomationTrigger = "task_overdue"
 	AutomationTriggerTaskStatusChanged   AutomationTrigger = "task_status_changed"
 	AutomationTriggerTaskProgressChanged AutomationTrigger = "task_progress_changed"
+	AutomationTriggerTaskAssigneeChanged AutomationTrigger = "task_assignee_changed"
 )
 
 type AutomationExecutionStatus string
@@ -52,6 +53,13 @@ const (
 	AutomationExecutionSuccess AutomationExecutionStatus = "success"
 	AutomationExecutionSkipped AutomationExecutionStatus = "skipped"
 	AutomationExecutionFailed  AutomationExecutionStatus = "failed"
+)
+
+type AssigneeChangeType string
+
+const (
+	AssigneeChangeAdded   AssigneeChangeType = "added"
+	AssigneeChangeRemoved AssigneeChangeType = "removed"
 )
 
 type BaseModel struct {
@@ -234,14 +242,15 @@ type WorkRequest struct {
 }
 
 type AutomationConditions struct {
-	OverdueDays     int          `json:"overdueDays"`
-	ProjectIDs      []uint       `json:"projectIds"`
-	FromStatuses    []TaskStatus `json:"fromStatuses"`
-	ToStatuses      []TaskStatus `json:"toStatuses"`
-	FromProgressMin *int         `json:"fromProgressMin,omitempty"`
-	FromProgressMax *int         `json:"fromProgressMax,omitempty"`
-	ToProgressMin   *int         `json:"toProgressMin,omitempty"`
-	ToProgressMax   *int         `json:"toProgressMax,omitempty"`
+	OverdueDays         int                  `json:"overdueDays"`
+	ProjectIDs          []uint               `json:"projectIds"`
+	FromStatuses        []TaskStatus         `json:"fromStatuses"`
+	ToStatuses          []TaskStatus         `json:"toStatuses"`
+	FromProgressMin     *int                 `json:"fromProgressMin,omitempty"`
+	FromProgressMax     *int                 `json:"fromProgressMax,omitempty"`
+	ToProgressMin       *int                 `json:"toProgressMin,omitempty"`
+	ToProgressMax       *int                 `json:"toProgressMax,omitempty"`
+	AssigneeChangeTypes []AssigneeChangeType `json:"assigneeChangeTypes"`
 }
 
 type AutomationActions struct {

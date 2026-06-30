@@ -2489,6 +2489,220 @@ func TestAutomationRuleTaskProgressChangedCommentAndNotification(t *testing.T) {
 	}
 }
 
+func TestAutomationRuleTaskAssigneeChangedCommentAndNotification(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "automation-assignee-notification-reader",
+		"description": "can read automation assignee notifications",
+		"permissionIds": []uint{
+			codeToID["notifications.read"],
+			codeToID["notifications.update"],
+		},
+	})
+	if notificationRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation assignee notification role expected 201 got %d", notificationRoleResp.StatusCode)
+	}
+	notificationRoleID := uint(notificationRoleBody["id"].(float64))
+
+	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "automation_assignee_owner",
+		"name":          "Automation Assignee Owner",
+		"email":         "automation_assignee_owner@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{notificationRoleID},
+		"departmentIds": []uint{},
+	})
+	if ownerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation assignee owner expected 201 got %d", ownerResp.StatusCode)
+	}
+	ownerID := uint(ownerBody["id"].(float64))
+
+	oldAssigneeResp, oldAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "automation_assignee_old",
+		"name":          "Automation Assignee Old",
+		"email":         "automation_assignee_old@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{notificationRoleID},
+		"departmentIds": []uint{},
+	})
+	if oldAssigneeResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create old automation assignee expected 201 got %d", oldAssigneeResp.StatusCode)
+	}
+	oldAssigneeID := uint(oldAssigneeBody["id"].(float64))
+
+	newAssigneeResp, newAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "automation_assignee_new",
+		"name":          "Automation Assignee New",
+		"email":         "automation_assignee_new@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{notificationRoleID},
+		"departmentIds": []uint{},
+	})
+	if newAssigneeResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create new automation assignee expected 201 got %d", newAssigneeResp.StatusCode)
+	}
+	newAssigneeID := uint(newAssigneeBody["id"].(float64))
+
+	newAssigneeLoginStatus, newAssigneeLoginBody := loginWithCredentials(t, ts.URL, "automation_assignee_new", "pass1234")
+	if newAssigneeLoginStatus != http.StatusOK {
+		t.Fatalf("login new automation assignee expected 200 got %d", newAssigneeLoginStatus)
+	}
+	newAssigneeToken := newAssigneeLoginBody["token"].(string)
+	ownerLoginStatus, ownerLoginBody := loginWithCredentials(t, ts.URL, "automation_assignee_owner", "pass1234")
+	if ownerLoginStatus != http.StatusOK {
+		t.Fatalf("login automation assignee owner expected 200 got %d", ownerLoginStatus)
+	}
+	ownerToken := ownerLoginBody["token"].(string)
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":    "AUTO-ASSIGNEE-P1",
+		"name":    "Automation Assignee Project",
+		"userIds": []uint{ownerID},
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation assignee project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Automation assignee task",
+		"projectId":   projectID,
+		"status":      "processing",
+		"progress":    20,
+		"assigneeIds": []uint{oldAssigneeID},
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation assignee task expected 201 got %d %#v", taskResp.StatusCode, taskBody)
+	}
+	taskID := int(taskBody["id"].(float64))
+	taskNo := taskBody["taskNo"].(string)
+
+	invalidRuleResp, invalidRuleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":       "缺少执行人变更类型",
+		"trigger":    "task_assignee_changed",
+		"conditions": map[string]any{},
+		"actions": map[string]any{
+			"addComment": true,
+		},
+	})
+	if invalidRuleResp.StatusCode != http.StatusBadRequest || invalidRuleBody["code"] != "INVALID_AUTOMATION_RULE" {
+		t.Fatalf("missing assignee change type expected 400 INVALID_AUTOMATION_RULE got %d %#v", invalidRuleResp.StatusCode, invalidRuleBody)
+	}
+
+	ruleResp, ruleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":      "执行人新增提醒",
+		"trigger":   "task_assignee_changed",
+		"isEnabled": true,
+		"conditions": map[string]any{
+			"projectIds":          []uint{uint(projectID)},
+			"assigneeChangeTypes": []string{"added"},
+		},
+		"actions": map[string]any{
+			"notifyAssignees":     true,
+			"notifyProjectOwners": true,
+			"addComment":          true,
+			"commentContent":      "执行人新增 {addedAssignees} 移除 {removedAssignees}: {taskNo}",
+		},
+	})
+	if ruleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create assignee automation rule expected 201 got %d %#v", ruleResp.StatusCode, ruleBody)
+	}
+	ruleID := int(ruleBody["id"].(float64))
+
+	runResp, runBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules/"+strconv.Itoa(ruleID)+"/run", adminToken, nil)
+	if runResp.StatusCode != http.StatusOK {
+		t.Fatalf("manual run assignee automation expected 200 got %d %#v", runResp.StatusCode, runBody)
+	}
+	if runBody["status"] != "skipped" {
+		t.Fatalf("manual run assignee automation should be skipped got %#v", runBody)
+	}
+
+	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/automation-rules?trigger=task_assignee_changed&keyword=执行人", adminToken, nil)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list assignee automation rules expected 200 got %d", listResp.StatusCode)
+	}
+	if list, ok := listBody["list"].([]any); !ok || len(list) != 1 {
+		t.Fatalf("assignee automation list should include rule got %#v", listBody)
+	}
+
+	updatePayload := map[string]any{
+		"title":       "Automation assignee task",
+		"projectId":   projectID,
+		"status":      "processing",
+		"priority":    "high",
+		"progress":    20,
+		"assigneeIds": []uint{oldAssigneeID, newAssigneeID},
+		"reviewerIds": []uint{},
+		"tagIds":      []uint{},
+	}
+	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID), adminToken, updatePayload)
+	if updateResp.StatusCode != http.StatusOK {
+		t.Fatalf("update task assignees expected 200 got %d %#v", updateResp.StatusCode, updateBody)
+	}
+
+	commentResp, commentBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/comments", adminToken, nil)
+	if commentResp.StatusCode != http.StatusOK {
+		t.Fatalf("list automation assignee comments expected 200 got %d", commentResp.StatusCode)
+	}
+	comments, _ := commentBody["list"].([]any)
+	if len(comments) != 1 {
+		t.Fatalf("assignee automation should create one comment got %#v", commentBody)
+	}
+	comment := comments[0].(map[string]any)
+	if !strings.Contains(comment["content"].(string), "执行人新增 Automation Assignee New 移除 无: "+taskNo) {
+		t.Fatalf("automation assignee comment should render assignee placeholders got %#v", comment)
+	}
+
+	logResp, logBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/automation-rules/logs?ruleId="+strconv.Itoa(ruleID)+"&trigger=task_assignee_changed", adminToken, nil)
+	if logResp.StatusCode != http.StatusOK {
+		t.Fatalf("list assignee automation logs expected 200 got %d", logResp.StatusCode)
+	}
+	logItems, _ := logBody["list"].([]any)
+	if len(logItems) != 2 {
+		t.Fatalf("assignee automation should include manual skip and one event log got %#v", logBody)
+	}
+	logItem := logItems[0].(map[string]any)
+	if logItem["status"] != "success" || logItem["runSource"] != "event" || int(logItem["matchedCount"].(float64)) != 1 || int(logItem["actionCount"].(float64)) != 4 {
+		t.Fatalf("assignee automation log should record event success with 4 actions got %#v", logItem)
+	}
+
+	newAssigneeNotificationResp, newAssigneeNotificationBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/notifications?module=tasks&keyword=执行人已变更", newAssigneeToken, nil)
+	if newAssigneeNotificationResp.StatusCode != http.StatusOK {
+		t.Fatalf("new assignee notifications expected 200 got %d", newAssigneeNotificationResp.StatusCode)
+	}
+	newAssigneeNotifications, _ := newAssigneeNotificationBody["list"].([]any)
+	if len(newAssigneeNotifications) == 0 {
+		t.Fatalf("new assignee should receive assignee automation notification got %#v", newAssigneeNotificationBody)
+	}
+
+	ownerNotificationResp, ownerNotificationBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/notifications?module=tasks&keyword=执行人已变更", ownerToken, nil)
+	if ownerNotificationResp.StatusCode != http.StatusOK {
+		t.Fatalf("owner assignee notifications expected 200 got %d", ownerNotificationResp.StatusCode)
+	}
+	ownerNotifications, _ := ownerNotificationBody["list"].([]any)
+	if len(ownerNotifications) == 0 {
+		t.Fatalf("project owner should receive assignee automation notification got %#v", ownerNotificationBody)
+	}
+
+	sameAssigneesResp, sameAssigneesBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID), adminToken, updatePayload)
+	if sameAssigneesResp.StatusCode != http.StatusOK {
+		t.Fatalf("update same assignees expected 200 got %d %#v", sameAssigneesResp.StatusCode, sameAssigneesBody)
+	}
+	duplicateLogResp, duplicateLogBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/automation-rules/logs?ruleId="+strconv.Itoa(ruleID), adminToken, nil)
+	if duplicateLogResp.StatusCode != http.StatusOK {
+		t.Fatalf("list duplicate assignee automation logs expected 200 got %d", duplicateLogResp.StatusCode)
+	}
+	duplicateLogItems, _ := duplicateLogBody["list"].([]any)
+	if len(duplicateLogItems) != 2 {
+		t.Fatalf("same assignee update should not trigger automation again got %#v", duplicateLogBody)
+	}
+}
+
 func TestMyTasksReturnsEmptyArrays(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

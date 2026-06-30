@@ -5,7 +5,7 @@ import { FilterPanel } from '../components/FilterPanel'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { SearchField } from '../components/SearchField'
-import { AutomationExecutionLog, AutomationRule, AutomationTrigger, Project, Status } from '../types'
+import { AssigneeChangeType, AutomationExecutionLog, AutomationRule, AutomationTrigger, Project, Status } from '../types'
 import { formatDateTime } from '../utils/datetime'
 import { usePermissions } from '../hooks/usePermissions'
 
@@ -22,6 +22,7 @@ interface AutomationRuleForm {
   fromProgressMax: string
   toProgressMin: string
   toProgressMax: string
+  assigneeChangeTypes: AssigneeChangeType[]
   notifyAssignees: boolean
   notifyProjectOwners: boolean
   addComment: boolean
@@ -40,6 +41,7 @@ const initialForm: AutomationRuleForm = {
   fromProgressMax: '',
   toProgressMin: '',
   toProgressMax: '',
+  assigneeChangeTypes: ['added', 'removed'],
   notifyAssignees: true,
   notifyProjectOwners: true,
   addComment: false,
@@ -49,7 +51,13 @@ const initialForm: AutomationRuleForm = {
 const triggerLabel: Record<AutomationTrigger, string> = {
   task_overdue: '任务逾期',
   task_status_changed: '任务状态变更',
-  task_progress_changed: '任务进度变更'
+  task_progress_changed: '任务进度变更',
+  task_assignee_changed: '任务执行人变更'
+}
+
+const assigneeChangeTypeLabel: Record<AssigneeChangeType, string> = {
+  added: '新增执行人',
+  removed: '移除执行人'
 }
 
 const taskStatusLabel: Record<Status, string> = {
@@ -73,9 +81,12 @@ const sourceLabel = {
 }
 
 const statusOptions: Status[] = ['pending', 'queued', 'processing', 'reviewing', 'completed']
+const assigneeChangeTypeOptions: AssigneeChangeType[] = ['added', 'removed']
 const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
 const toggleStatus = (list: Status[], status: Status) => list.includes(status) ? list.filter((item) => item !== status) : [...list, status]
+const toggleAssigneeChangeType = (list: AssigneeChangeType[], changeType: AssigneeChangeType) => list.includes(changeType) ? list.filter((item) => item !== changeType) : [...list, changeType]
 const formatStatuses = (statuses?: Status[]) => statuses?.length ? statuses.map((status) => taskStatusLabel[status]).join('，') : '任意'
+const formatAssigneeChangeTypes = (changeTypes?: AssigneeChangeType[]) => changeTypes?.length ? changeTypes.map((changeType) => assigneeChangeTypeLabel[changeType]).join('，') : '未设置'
 const optionalProgress = (value: string) => value.trim() === '' ? undefined : Number(value)
 const progressText = (min?: number, max?: number) => {
   if (min === undefined && max === undefined) return '任意'
@@ -83,7 +94,7 @@ const progressText = (min?: number, max?: number) => {
   if (min !== undefined) return `不低于 ${min}%`
   return `不高于 ${max}%`
 }
-const isEventTrigger = (trigger: AutomationTrigger) => trigger === 'task_status_changed' || trigger === 'task_progress_changed'
+const isEventTrigger = (trigger: AutomationTrigger) => trigger === 'task_status_changed' || trigger === 'task_progress_changed' || trigger === 'task_assignee_changed'
 
 export function AutomationRulesPage() {
   const permissions = usePermissions()
@@ -186,6 +197,7 @@ export function AutomationRulesPage() {
       fromProgressMax: item.conditions?.fromProgressMax === undefined ? '' : String(item.conditions.fromProgressMax),
       toProgressMin: item.conditions?.toProgressMin === undefined ? '' : String(item.conditions.toProgressMin),
       toProgressMax: item.conditions?.toProgressMax === undefined ? '' : String(item.conditions.toProgressMax),
+      assigneeChangeTypes: item.conditions?.assigneeChangeTypes?.length ? item.conditions.assigneeChangeTypes : ['added', 'removed'],
       notifyAssignees: item.actions?.notifyAssignees ?? true,
       notifyProjectOwners: item.actions?.notifyProjectOwners ?? true,
       addComment: item.actions?.addComment ?? false,
@@ -213,6 +225,10 @@ export function AutomationRulesPage() {
     const progressValues = [form.fromProgressMin, form.fromProgressMax, form.toProgressMin, form.toProgressMax]
     if (form.trigger === 'task_progress_changed' && progressValues.every((value) => value.trim() === '')) {
       setFormError('至少填写一个进度条件')
+      return
+    }
+    if (form.trigger === 'task_assignee_changed' && form.assigneeChangeTypes.length === 0) {
+      setFormError('至少选择一种执行人变更类型')
       return
     }
     if (form.trigger === 'task_progress_changed') {
@@ -247,7 +263,8 @@ export function AutomationRulesPage() {
           fromProgressMin: form.trigger === 'task_progress_changed' ? optionalProgress(form.fromProgressMin) : undefined,
           fromProgressMax: form.trigger === 'task_progress_changed' ? optionalProgress(form.fromProgressMax) : undefined,
           toProgressMin: form.trigger === 'task_progress_changed' ? optionalProgress(form.toProgressMin) : undefined,
-          toProgressMax: form.trigger === 'task_progress_changed' ? optionalProgress(form.toProgressMax) : undefined
+          toProgressMax: form.trigger === 'task_progress_changed' ? optionalProgress(form.toProgressMax) : undefined,
+          assigneeChangeTypes: form.trigger === 'task_assignee_changed' ? form.assigneeChangeTypes : []
         },
         actions: {
           notifyAssignees: form.notifyAssignees,
@@ -329,6 +346,7 @@ export function AutomationRulesPage() {
           <option value="task_overdue">任务逾期</option>
           <option value="task_status_changed">任务状态变更</option>
           <option value="task_progress_changed">任务进度变更</option>
+          <option value="task_assignee_changed">任务执行人变更</option>
         </select>
         <div className="row-actions">
           <button className="btn" onClick={() => { setPage(1); setKeyword(keywordInput.trim()) }}>查询</button>
@@ -352,7 +370,9 @@ export function AutomationRulesPage() {
                     ? `逾期 ${item.conditions?.overdueDays ?? 1} 天`
                     : item.trigger === 'task_status_changed'
                       ? `从 ${formatStatuses(item.conditions?.fromStatuses)} 到 ${formatStatuses(item.conditions?.toStatuses)}`
-                      : `从 ${progressText(item.conditions?.fromProgressMin, item.conditions?.fromProgressMax)} 到 ${progressText(item.conditions?.toProgressMin, item.conditions?.toProgressMax)}`}
+                      : item.trigger === 'task_progress_changed'
+                        ? `从 ${progressText(item.conditions?.fromProgressMin, item.conditions?.fromProgressMax)} 到 ${progressText(item.conditions?.toProgressMin, item.conditions?.toProgressMax)}`
+                        : formatAssigneeChangeTypes(item.conditions?.assigneeChangeTypes)}
                   {item.conditions?.projectIds?.length ? `；项目 ${item.conditions.projectIds.map((id) => projectNameById.get(id) || id).join('，')}` : ''}
                 </td>
                 <td data-label="动作">
@@ -411,22 +431,27 @@ export function AutomationRulesPage() {
           <select
             id="automation-trigger"
             value={form.trigger}
-            onChange={(event) => setForm((prev) => ({
-              ...prev,
-              trigger: event.target.value as AutomationTrigger,
-              fromStatuses: [],
-              toStatuses: [],
-              fromProgressMin: '',
-              fromProgressMax: '',
-              toProgressMin: '',
-              toProgressMax: '',
-              addComment: false,
-              commentContent: ''
-            }))}
+            onChange={(event) => {
+              const nextTrigger = event.target.value as AutomationTrigger
+              setForm((prev) => ({
+                ...prev,
+                trigger: nextTrigger,
+                fromStatuses: [],
+                toStatuses: [],
+                fromProgressMin: '',
+                fromProgressMax: '',
+                toProgressMin: '',
+                toProgressMax: '',
+                assigneeChangeTypes: nextTrigger === 'task_assignee_changed' ? ['added', 'removed'] : [],
+                addComment: false,
+                commentContent: ''
+              }))
+            }}
           >
             <option value="task_overdue">任务逾期</option>
             <option value="task_status_changed">任务状态变更</option>
             <option value="task_progress_changed">任务进度变更</option>
+            <option value="task_assignee_changed">任务执行人变更</option>
           </select>
           <label htmlFor="automation-enabled">启用状态</label>
           <select id="automation-enabled" value={form.isEnabled ? 'enabled' : 'disabled'} onChange={(event) => setForm((prev) => ({ ...prev, isEnabled: event.target.value === 'enabled' }))}>
@@ -471,6 +496,19 @@ export function AutomationRulesPage() {
               <input id="automation-to-progress-min" type="number" min={0} max={100} value={form.toProgressMin} onChange={(event) => setForm((prev) => ({ ...prev, toProgressMin: event.target.value }))} />
               <label htmlFor="automation-to-progress-max">变更后进度上限</label>
               <input id="automation-to-progress-max" type="number" min={0} max={100} value={form.toProgressMax} onChange={(event) => setForm((prev) => ({ ...prev, toProgressMax: event.target.value }))} />
+            </>
+          )}
+          {form.trigger === 'task_assignee_changed' && (
+            <>
+              <label htmlFor="automation-assignee-change-types">执行人变更类型</label>
+              <div id="automation-assignee-change-types" className="multi-checklist">
+                {assigneeChangeTypeOptions.map((changeType) => (
+                  <label key={changeType} className="multi-check-item">
+                    <input type="checkbox" checked={form.assigneeChangeTypes.includes(changeType)} onChange={() => setForm((prev) => ({ ...prev, assigneeChangeTypes: toggleAssigneeChangeType(prev.assigneeChangeTypes, changeType) }))} />
+                    <span>{assigneeChangeTypeLabel[changeType]}</span>
+                  </label>
+                ))}
+              </div>
             </>
           )}
           {canReadProjects && (

@@ -22,14 +22,15 @@ type automationRuleRequest struct {
 }
 
 type automationConditionsRequest struct {
-	OverdueDays     *int     `json:"overdueDays"`
-	ProjectIDs      []uint   `json:"projectIds"`
-	FromStatuses    []string `json:"fromStatuses"`
-	ToStatuses      []string `json:"toStatuses"`
-	FromProgressMin *int     `json:"fromProgressMin"`
-	FromProgressMax *int     `json:"fromProgressMax"`
-	ToProgressMin   *int     `json:"toProgressMin"`
-	ToProgressMax   *int     `json:"toProgressMax"`
+	OverdueDays         *int     `json:"overdueDays"`
+	ProjectIDs          []uint   `json:"projectIds"`
+	FromStatuses        []string `json:"fromStatuses"`
+	ToStatuses          []string `json:"toStatuses"`
+	FromProgressMin     *int     `json:"fromProgressMin"`
+	FromProgressMax     *int     `json:"fromProgressMax"`
+	ToProgressMin       *int     `json:"toProgressMin"`
+	ToProgressMax       *int     `json:"toProgressMax"`
+	AssigneeChangeTypes []string `json:"assigneeChangeTypes"`
 }
 
 type automationActionsRequest struct {
@@ -47,6 +48,8 @@ func normalizeAutomationTrigger(value string) (model.AutomationTrigger, bool) {
 		return model.AutomationTriggerTaskStatusChanged, true
 	case model.AutomationTriggerTaskProgressChanged:
 		return model.AutomationTriggerTaskProgressChanged, true
+	case model.AutomationTriggerTaskAssigneeChanged:
+		return model.AutomationTriggerTaskAssigneeChanged, true
 	default:
 		return model.AutomationTriggerTaskOverdue, false
 	}
@@ -95,6 +98,28 @@ func validateAutomationProgressRange(minValue *int, maxValue *int, label string)
 	return nil
 }
 
+func normalizeAutomationAssigneeChangeTypeList(values []string) ([]model.AssigneeChangeType, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	result := make([]model.AssigneeChangeType, 0, len(values))
+	seen := map[model.AssigneeChangeType]struct{}{}
+	for _, value := range values {
+		changeType := model.AssigneeChangeType(strings.TrimSpace(value))
+		switch changeType {
+		case model.AssigneeChangeAdded, model.AssigneeChangeRemoved:
+		default:
+			return nil, fmt.Errorf("assigneeChangeTypes 只能包含 added 或 removed")
+		}
+		if _, exists := seen[changeType]; exists {
+			continue
+		}
+		seen[changeType] = struct{}{}
+		result = append(result, changeType)
+	}
+	return result, nil
+}
+
 func normalizeAutomationConditions(req automationConditionsRequest, trigger model.AutomationTrigger) (model.AutomationConditions, error) {
 	overdueDays := 1
 	if req.OverdueDays != nil {
@@ -124,15 +149,23 @@ func normalizeAutomationConditions(req automationConditionsRequest, trigger mode
 		req.FromProgressMin == nil && req.FromProgressMax == nil && req.ToProgressMin == nil && req.ToProgressMax == nil {
 		return model.AutomationConditions{}, fmt.Errorf("进度变更规则至少需要设置变更前或变更后进度条件")
 	}
+	assigneeChangeTypes, err := normalizeAutomationAssigneeChangeTypeList(req.AssigneeChangeTypes)
+	if err != nil {
+		return model.AutomationConditions{}, err
+	}
+	if trigger == model.AutomationTriggerTaskAssigneeChanged && len(assigneeChangeTypes) == 0 {
+		return model.AutomationConditions{}, fmt.Errorf("执行人变更规则至少需要选择新增或移除执行人")
+	}
 	return model.AutomationConditions{
-		OverdueDays:     overdueDays,
-		ProjectIDs:      uniqueUint(req.ProjectIDs),
-		FromStatuses:    fromStatuses,
-		ToStatuses:      toStatuses,
-		FromProgressMin: req.FromProgressMin,
-		FromProgressMax: req.FromProgressMax,
-		ToProgressMin:   req.ToProgressMin,
-		ToProgressMax:   req.ToProgressMax,
+		OverdueDays:         overdueDays,
+		ProjectIDs:          uniqueUint(req.ProjectIDs),
+		FromStatuses:        fromStatuses,
+		ToStatuses:          toStatuses,
+		FromProgressMin:     req.FromProgressMin,
+		FromProgressMax:     req.FromProgressMax,
+		ToProgressMin:       req.ToProgressMin,
+		ToProgressMax:       req.ToProgressMax,
+		AssigneeChangeTypes: assigneeChangeTypes,
 	}, nil
 }
 
@@ -151,13 +184,19 @@ func normalizeAutomationActions(req automationActionsRequest, trigger model.Auto
 		AddComment:          boolValue(req.AddComment, false),
 		CommentContent:      strings.TrimSpace(req.CommentContent),
 	}
-	if (trigger == model.AutomationTriggerTaskStatusChanged || trigger == model.AutomationTriggerTaskProgressChanged) && actions.AddComment {
+	if automationEventTriggerAllowsComment(trigger) && actions.AddComment {
 		return actions, nil
 	}
 	if !actions.NotifyAssignees && !actions.NotifyProjectOwners {
 		return model.AutomationActions{}, fmt.Errorf("至少需要启用一个通知对象")
 	}
 	return actions, nil
+}
+
+func automationEventTriggerAllowsComment(trigger model.AutomationTrigger) bool {
+	return trigger == model.AutomationTriggerTaskStatusChanged ||
+		trigger == model.AutomationTriggerTaskProgressChanged ||
+		trigger == model.AutomationTriggerTaskAssigneeChanged
 }
 
 func buildAutomationRuleFromRequest(req automationRuleRequest, actorID uint) (model.AutomationRule, error) {
@@ -167,7 +206,7 @@ func buildAutomationRuleFromRequest(req automationRuleRequest, actorID uint) (mo
 	}
 	trigger, ok := normalizeAutomationTrigger(req.Trigger)
 	if !ok {
-		return model.AutomationRule{}, fmt.Errorf("触发器必须是 task_overdue、task_status_changed 或 task_progress_changed")
+		return model.AutomationRule{}, fmt.Errorf("触发器必须是 task_overdue、task_status_changed、task_progress_changed 或 task_assignee_changed")
 	}
 	conditions, err := normalizeAutomationConditions(req.Conditions, trigger)
 	if err != nil {
@@ -466,6 +505,27 @@ func taskProgressChangeRuleMatches(conditions model.AutomationConditions, task m
 	return true
 }
 
+func containsAssigneeChangeType(values []model.AssigneeChangeType, target model.AssigneeChangeType) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func taskAssigneeChangeRuleMatches(conditions model.AutomationConditions, task model.Task, addedAssigneeIDs []uint, removedAssigneeIDs []uint) bool {
+	if len(addedAssigneeIDs) == 0 && len(removedAssigneeIDs) == 0 {
+		return false
+	}
+	if len(conditions.ProjectIDs) > 0 && !containsUint(conditions.ProjectIDs, task.ProjectID) {
+		return false
+	}
+	addedMatches := len(addedAssigneeIDs) > 0 && containsAssigneeChangeType(conditions.AssigneeChangeTypes, model.AssigneeChangeAdded)
+	removedMatches := len(removedAssigneeIDs) > 0 && containsAssigneeChangeType(conditions.AssigneeChangeTypes, model.AssigneeChangeRemoved)
+	return addedMatches || removedMatches
+}
+
 func renderAutomationCommentContent(template string, task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus) string {
 	content := strings.TrimSpace(template)
 	if content == "" {
@@ -494,12 +554,62 @@ func renderAutomationProgressCommentContent(template string, task model.Task, ol
 	return replacer.Replace(content)
 }
 
+func renderAutomationAssigneeCommentContent(template string, task model.Task, addedAssigneeNames string, removedAssigneeNames string) string {
+	content := strings.TrimSpace(template)
+	if content == "" {
+		content = "自动化：任务执行人已变更"
+	}
+	replacer := strings.NewReplacer(
+		"{taskNo}", task.TaskNo,
+		"{title}", task.Title,
+		"{addedAssignees}", addedAssigneeNames,
+		"{removedAssignees}", removedAssigneeNames,
+	)
+	return replacer.Replace(content)
+}
+
 func taskStatusChangedNotificationContent(task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus) string {
 	return fmt.Sprintf("任务 %s - %s 状态已从 %s 更新为 %s", task.TaskNo, task.Title, oldStatus, newStatus)
 }
 
 func taskProgressChangedNotificationContent(task model.Task, oldProgress int, newProgress int) string {
 	return fmt.Sprintf("任务 %s - %s 进度已从 %d%% 更新为 %d%%", task.TaskNo, task.Title, oldProgress, newProgress)
+}
+
+func automationAssigneeDisplayName(user model.User) string {
+	if name := strings.TrimSpace(user.Name); name != "" {
+		return name
+	}
+	if username := strings.TrimSpace(user.Username); username != "" {
+		return username
+	}
+	if email := strings.TrimSpace(user.Email); email != "" {
+		return email
+	}
+	return strconv.FormatUint(uint64(user.ID), 10)
+}
+
+func automationAssigneeNames(users []model.User, ids []uint) string {
+	if len(ids) == 0 {
+		return "无"
+	}
+	nameByID := make(map[uint]string, len(users))
+	for _, user := range users {
+		nameByID[user.ID] = automationAssigneeDisplayName(user)
+	}
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if name := strings.TrimSpace(nameByID[id]); name != "" {
+			parts = append(parts, name)
+			continue
+		}
+		parts = append(parts, strconv.FormatUint(uint64(id), 10))
+	}
+	return strings.Join(parts, "、")
+}
+
+func taskAssigneeChangedNotificationContent(task model.Task, addedAssigneeNames string, removedAssigneeNames string) string {
+	return fmt.Sprintf("任务 %s - %s 执行人已变更，新增：%s，移除：%s", task.TaskNo, task.Title, addedAssigneeNames, removedAssigneeNames)
 }
 
 func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus, actorID uint) ([]uint, error) {
@@ -638,6 +748,84 @@ func (h *Handler) executeTaskProgressChangedRulesWithDB(tx *gorm.DB, task model.
 	return uniqueUint(notifiedIDs), nil
 }
 
+func (h *Handler) executeTaskAssigneeChangedRulesWithDB(tx *gorm.DB, task model.Task, addedAssigneeIDs []uint, removedAssigneeIDs []uint, actorID uint) ([]uint, error) {
+	if len(addedAssigneeIDs) == 0 && len(removedAssigneeIDs) == 0 {
+		return nil, nil
+	}
+
+	if err := tx.Preload("Assignees").Preload("Project.Users").First(&task, task.ID).Error; err != nil {
+		return nil, err
+	}
+
+	var rules []model.AutomationRule
+	if err := tx.Where("is_enabled = ? AND trigger = ?", true, model.AutomationTriggerTaskAssigneeChanged).Order("id asc").Find(&rules).Error; err != nil {
+		return nil, err
+	}
+
+	changedAssigneeIDs := uniqueUint(append(append([]uint{}, addedAssigneeIDs...), removedAssigneeIDs...))
+	var changedAssignees []model.User
+	if len(changedAssigneeIDs) > 0 {
+		if err := tx.Where("id IN ?", changedAssigneeIDs).Find(&changedAssignees).Error; err != nil {
+			return nil, err
+		}
+	}
+	addedAssigneeNames := automationAssigneeNames(changedAssignees, addedAssigneeIDs)
+	removedAssigneeNames := automationAssigneeNames(changedAssignees, removedAssigneeIDs)
+
+	now := time.Now()
+	notifiedIDs := make([]uint, 0)
+	for _, rule := range rules {
+		if !taskAssigneeChangeRuleMatches(rule.Conditions, task, addedAssigneeIDs, removedAssigneeIDs) {
+			continue
+		}
+
+		actionCount := 0
+		recipients := automationTaskRecipients(task, rule.Actions)
+		if len(recipients) > 0 {
+			content := taskAssigneeChangedNotificationContent(task, addedAssigneeNames, removedAssigneeNames)
+			if err := h.createNotificationsWithDB(tx, recipients, "任务执行人已变更", content, "tasks", task.ID); err != nil {
+				return notifiedIDs, err
+			}
+			actionCount += len(recipients)
+			notifiedIDs = append(notifiedIDs, recipients...)
+		}
+
+		if rule.Actions.AddComment {
+			comment := model.TaskComment{
+				TaskID:   task.ID,
+				AuthorID: actorID,
+				Content:  renderAutomationAssigneeCommentContent(rule.Actions.CommentContent, task, addedAssigneeNames, removedAssigneeNames),
+			}
+			if err := tx.Create(&comment).Error; err != nil {
+				return notifiedIDs, err
+			}
+			commentID := comment.ID
+			if err := h.writeTaskActivityWithDB(tx, task.ID, actorID, "automation.comment_created", "自动化评论", comment.Content, &commentID); err != nil {
+				return notifiedIDs, err
+			}
+			actionCount += 1
+		}
+
+		logItem := model.AutomationExecutionLog{
+			RuleID:       rule.ID,
+			Trigger:      rule.Trigger,
+			Status:       model.AutomationExecutionSuccess,
+			MatchedCount: 1,
+			ActionCount:  actionCount,
+			Message:      fmt.Sprintf("任务 %s 执行人变更，新增 %d 人，移除 %d 人，执行 %d 个动作", task.TaskNo, len(addedAssigneeIDs), len(removedAssigneeIDs), actionCount),
+			ActorID:      actorID,
+			RunSource:    "event",
+		}
+		if err := tx.Create(&logItem).Error; err != nil {
+			return notifiedIDs, err
+		}
+		if err := tx.Model(&model.AutomationRule{}).Where("id = ?", rule.ID).Update("last_run_at", now).Error; err != nil {
+			return notifiedIDs, err
+		}
+	}
+	return uniqueUint(notifiedIDs), nil
+}
+
 func (h *Handler) recordAutomationFailure(rule model.AutomationRule, actorID uint, source string, execErr error) model.AutomationExecutionLog {
 	logItem := model.AutomationExecutionLog{
 		RuleID:    rule.ID,
@@ -684,6 +872,9 @@ func (h *Handler) executeAutomationRule(c *gin.Context, rule model.AutomationRul
 		case model.AutomationTriggerTaskProgressChanged:
 			logItem.Status = model.AutomationExecutionSkipped
 			logItem.Message = "进度变更规则仅在任务进度变更事件中执行"
+		case model.AutomationTriggerTaskAssigneeChanged:
+			logItem.Status = model.AutomationExecutionSkipped
+			logItem.Message = "执行人变更规则仅在任务执行人变更事件中执行"
 		default:
 			err = fmt.Errorf("不支持的自动化触发器：%s", rule.Trigger)
 		}

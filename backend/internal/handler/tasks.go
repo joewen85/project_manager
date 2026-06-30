@@ -887,6 +887,13 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 		if err := h.writeTaskActivityWithDB(tx, item.ID, currentUserID, "task.updated", taskActivitySummary("更新任务", item), detail, nil); err != nil {
 			return err
 		}
+		if len(addedAssigneeIDs) > 0 || len(removedAssigneeIDs) > 0 {
+			notifiedIDs, err := h.executeTaskAssigneeChangedRulesWithDB(tx, item, addedAssigneeIDs, removedAssigneeIDs, currentUserID)
+			if err != nil {
+				return err
+			}
+			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+		}
 		if oldStatus != item.Status {
 			notifiedIDs, err := h.executeTaskStatusChangedRulesWithDB(tx, item, oldStatus, item.Status, currentUserID)
 			if err != nil {
