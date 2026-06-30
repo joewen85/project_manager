@@ -187,6 +187,34 @@ type SavedReport struct {
 	CreatedBy   User                   `json:"createdBy,omitempty"`
 }
 
+type SprintStatus string
+
+const (
+	SprintPlanned SprintStatus = "planned"
+	SprintActive  SprintStatus = "active"
+	SprintClosed  SprintStatus = "closed"
+)
+
+type Sprint struct {
+	BaseModel
+	Name          string       `gorm:"size:150;not null;index" json:"name"`
+	Goal          string       `gorm:"type:text" json:"goal"`
+	Status        SprintStatus `gorm:"size:20;not null;default:'planned';index" json:"status"`
+	StartAt       *time.Time   `json:"startAt"`
+	EndAt         *time.Time   `json:"endAt"`
+	CapacityHours float64      `gorm:"type:decimal(10,2);default:0" json:"capacityHours"`
+	CreatedByID   uint         `gorm:"not null;index" json:"createdById"`
+	CreatedBy     User         `json:"createdBy,omitempty"`
+}
+
+type SprintTask struct {
+	SprintID  uint      `gorm:"primaryKey;index" json:"sprintId"`
+	TaskID    uint      `gorm:"primaryKey;index" json:"taskId"`
+	CreatedAt time.Time `json:"createdAt"`
+	Sprint    Sprint    `gorm:"foreignKey:SprintID;constraint:OnDelete:CASCADE;" json:"-"`
+	Task      Task      `gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE;" json:"-"`
+}
+
 type Task struct {
 	BaseModel
 	TaskNo         string           `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`

@@ -12,6 +12,7 @@ const NotificationsPage = lazy(async () => import('./pages/NotificationsPage').t
 const ProjectTemplatesPage = lazy(async () => import('./pages/ProjectTemplatesPage').then((module) => ({ default: module.ProjectTemplatesPage })))
 const ReportsPage = lazy(async () => import('./pages/ReportsPage').then((module) => ({ default: module.ReportsPage })))
 const RequestsPage = lazy(async () => import('./pages/RequestsPage').then((module) => ({ default: module.RequestsPage })))
+const SprintsPage = lazy(async () => import('./pages/SprintsPage').then((module) => ({ default: module.SprintsPage })))
 const TagsPage = lazy(async () => import('./pages/TagsPage').then((module) => ({ default: module.TagsPage })))
 const ProjectsPage = lazy(async () => import('./pages/ProjectsPage').then((module) => ({ default: module.ProjectsPage })))
 const GanttPage = lazy(async () => import('./pages/GanttPage').then((module) => ({ default: module.GanttPage })))
@@ -49,6 +50,7 @@ const protectedRoutes = [
   { path: '/project-templates', permission: 'templates.read' },
   { path: '/gantt', permission: 'projects.read' },
   { path: '/tasks', permission: 'tasks.read' },
+  { path: '/sprints', permission: 'sprints.read' },
   { path: '/calendar', permission: 'tasks.read' },
   { path: '/reports', permission: 'reports.read' },
   { path: '/requests', permission: 'requests.read' },
@@ -146,6 +148,7 @@ export default function App() {
           <Route path="project-templates" element={<PermissionGuard permission="templates.read"><ProjectTemplatesPage /></PermissionGuard>} />
           <Route path="gantt" element={<PermissionGuard permission="projects.read"><GanttPage /></PermissionGuard>} />
           <Route path="tasks" element={<PermissionGuard permission="tasks.read"><TasksPage /></PermissionGuard>} />
+          <Route path="sprints" element={<PermissionGuard permission="sprints.read"><SprintsPage /></PermissionGuard>} />
           <Route path="calendar" element={<PermissionGuard permission="tasks.read"><CalendarPage /></PermissionGuard>} />
           <Route path="reports" element={<PermissionGuard permission="reports.read"><ReportsPage /></PermissionGuard>} />
           <Route path="requests" element={<PermissionGuard permission="requests.read"><RequestsPage /></PermissionGuard>} />

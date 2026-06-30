@@ -2398,6 +2398,173 @@ func TestSavedReportsCRUDAndOwnerScope(t *testing.T) {
 	}
 }
 
+func TestSprintsCRUDTaskMembershipAndTaskFilter(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "sprint-manager",
+		"description": "sprint manager",
+		"permissionIds": []uint{
+			codeToID["sprints.create"],
+			codeToID["sprints.read"],
+			codeToID["sprints.update"],
+			codeToID["sprints.delete"],
+			codeToID["tasks.read"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create sprint role expected 201 got %d", roleResp.StatusCode)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "sprint_manager",
+		"name":          "Sprint Manager",
+		"email":         "sprint_manager@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if userResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create sprint manager expected 201 got %d", userResp.StatusCode)
+	}
+	managerID := uint(userBody["id"].(float64))
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":    "SPR-P1",
+		"name":    "Sprint Project",
+		"userIds": []uint{managerID},
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create sprint project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := uint(projectBody["id"].(float64))
+
+	openTaskResp, openTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "实现迭代计划",
+		"projectId":   projectID,
+		"assigneeIds": []uint{managerID},
+		"status":      "processing",
+	})
+	if openTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible sprint task expected 201 got %d %#v", openTaskResp.StatusCode, openTaskBody)
+	}
+	openTaskID := uint(openTaskBody["id"].(float64))
+
+	doneTaskResp, doneTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "完成迭代评审",
+		"projectId":   projectID,
+		"assigneeIds": []uint{managerID},
+		"status":      "completed",
+		"progress":    100,
+	})
+	if doneTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create completed sprint task expected 201 got %d %#v", doneTaskResp.StatusCode, doneTaskBody)
+	}
+	doneTaskID := uint(doneTaskBody["id"].(float64))
+
+	hiddenTaskResp, hiddenTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":     "隐藏迭代任务",
+		"projectId": projectID,
+		"status":    "queued",
+	})
+	if hiddenTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden sprint task expected 201 got %d %#v", hiddenTaskResp.StatusCode, hiddenTaskBody)
+	}
+	hiddenTaskID := uint(hiddenTaskBody["id"].(float64))
+
+	loginStatus, loginBody := loginWithCredentials(t, ts.URL, "sprint_manager", "pass1234")
+	if loginStatus != http.StatusOK {
+		t.Fatalf("login sprint manager expected 200 got %d", loginStatus)
+	}
+	managerToken := loginBody["token"].(string)
+
+	invalidResp, invalidBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/sprints", managerToken, map[string]any{
+		"name":   "坏迭代",
+		"status": "paused",
+	})
+	if invalidResp.StatusCode != http.StatusBadRequest || invalidBody["code"] != "INVALID_SPRINT_STATUS" {
+		t.Fatalf("invalid sprint status expected 400 INVALID_SPRINT_STATUS got %d %#v", invalidResp.StatusCode, invalidBody)
+	}
+
+	createResp, createBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/sprints", managerToken, map[string]any{
+		"name":          "研发 Sprint 1",
+		"goal":          "交付迭代 MVP",
+		"status":        "active",
+		"startAt":       "2026-07-01T00:00:00Z",
+		"endAt":         "2026-07-14T00:00:00Z",
+		"capacityHours": 80,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create sprint expected 201 got %d %#v", createResp.StatusCode, createBody)
+	}
+	sprintID := int(createBody["id"].(float64))
+	if createBody["status"] != "active" || int(createBody["taskCount"].(float64)) != 0 {
+		t.Fatalf("created sprint should be active with no tasks got %#v", createBody)
+	}
+
+	hiddenAddResp, hiddenAddBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/sprints/"+strconv.Itoa(sprintID)+"/tasks", managerToken, map[string]any{
+		"taskIds": []uint{openTaskID, hiddenTaskID},
+	})
+	if hiddenAddResp.StatusCode != http.StatusNotFound || hiddenAddBody["code"] != "TASK_NOT_FOUND" {
+		t.Fatalf("add hidden sprint task expected 404 TASK_NOT_FOUND got %d %#v", hiddenAddResp.StatusCode, hiddenAddBody)
+	}
+
+	addResp, addBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/sprints/"+strconv.Itoa(sprintID)+"/tasks", managerToken, map[string]any{
+		"taskIds": []uint{openTaskID, doneTaskID, openTaskID},
+	})
+	if addResp.StatusCode != http.StatusOK {
+		t.Fatalf("add sprint tasks expected 200 got %d %#v", addResp.StatusCode, addBody)
+	}
+	if int(addBody["taskCount"].(float64)) != 2 || int(addBody["completedTaskCount"].(float64)) != 1 {
+		t.Fatalf("sprint stats should count visible completed tasks got %#v", addBody)
+	}
+	if int(addBody["completionRate"].(float64)) != 50 {
+		t.Fatalf("sprint completion should be 50 got %#v", addBody["completionRate"])
+	}
+
+	filterResp, filterBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks?sprintId="+strconv.Itoa(sprintID)+"&page=1&pageSize=20", managerToken, nil)
+	if filterResp.StatusCode != http.StatusOK {
+		t.Fatalf("task sprint filter expected 200 got %d %#v", filterResp.StatusCode, filterBody)
+	}
+	filteredTasks, _ := filterBody["list"].([]any)
+	if len(filteredTasks) != 2 {
+		t.Fatalf("sprint task filter should return two visible tasks got %#v", filterBody)
+	}
+
+	removeResp, removeBody := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/sprints/"+strconv.Itoa(sprintID)+"/tasks/"+strconv.Itoa(int(openTaskID)), managerToken, nil)
+	if removeResp.StatusCode != http.StatusOK {
+		t.Fatalf("remove sprint task expected 200 got %d %#v", removeResp.StatusCode, removeBody)
+	}
+	if int(removeBody["taskCount"].(float64)) != 1 || int(removeBody["completedTaskCount"].(float64)) != 1 {
+		t.Fatalf("sprint stats after remove should keep completed task got %#v", removeBody)
+	}
+
+	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/sprints/"+strconv.Itoa(sprintID), managerToken, map[string]any{
+		"name":          "研发 Sprint 1 复盘",
+		"goal":          "完成复盘",
+		"status":        "closed",
+		"startAt":       "2026-07-01T00:00:00Z",
+		"endAt":         "2026-07-14T00:00:00Z",
+		"capacityHours": 80,
+	})
+	if updateResp.StatusCode != http.StatusOK {
+		t.Fatalf("update sprint expected 200 got %d %#v", updateResp.StatusCode, updateBody)
+	}
+	if updateBody["status"] != "closed" || updateBody["name"] != "研发 Sprint 1 复盘" {
+		t.Fatalf("sprint should update got %#v", updateBody)
+	}
+
+	deleteResp, _ := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/sprints/"+strconv.Itoa(sprintID), managerToken, nil)
+	if deleteResp.StatusCode != http.StatusOK {
+		t.Fatalf("delete sprint expected 200 got %d", deleteResp.StatusCode)
+	}
+}
+
 func TestAutomationRuleOverdueTaskNotification(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

@@ -125,6 +125,11 @@
 - 完成：新增 `reports.create/read/update/delete` 权限与 `/reports` CRUD 接口，普通用户仅管理自己创建的保存报表，管理员可管理全部
 - 完成：前端新增“报表中心”页面，展示项目健康/成员负载/任务状态预览，并支持保存报表配置的新增、编辑、删除
 - 完成：补充保存报表 CRUD/非法类型/创建人范围集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
+- 完成：按 `Improvement.md` 推进 P1-4 敏捷/迭代管理 MVP
+- 完成：新增 `sprints` 与 `sprint_tasks` 模型和显式 SQL 迁移，迭代任务范围不写入任务主表
+- 完成：新增 `sprints.create/read/update/delete` 权限与 `/sprints` CRUD、任务加入/移除接口，普通用户仅读取自己创建或包含自己可见任务的迭代，任务范围写入额外要求 `tasks.read`
+- 完成：任务列表新增 `sprintId` 过滤，前端新增“迭代管理”页面，并支持任务列表/Kanban 按迭代筛选
+- 完成：补充迭代 CRUD/非法状态/任务可见范围/完成率/任务筛选集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

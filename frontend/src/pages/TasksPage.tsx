@@ -13,7 +13,7 @@ import { SearchableSelect } from '../components/SearchableSelect'
 import { TableHeaderFilter } from '../components/TableHeaderFilter'
 import { RemoteProjectSelect } from '../components/RemoteProjectSelect'
 import { formatDateTime } from '../utils/datetime'
-import { Project, Status, Tag, Task, TaskActivity, TaskComment, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
+import { Project, Sprint, Status, Tag, Task, TaskActivity, TaskComment, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { AttachmentField } from '../components/AttachmentField'
 import { DateTimeQuickField } from '../components/DateTimeQuickField'
 import { usePermissions } from '../hooks/usePermissions'
@@ -212,17 +212,20 @@ export function TasksPage() {
   const canDeleteComment = hasPermission('comments.delete', permissions)
   const canCreateTag = hasPermission('tags.create', permissions)
   const canUploadAttachment = hasPermission('uploads.create', permissions)
+  const canReadSprints = hasPermission('sprints.read', permissions)
   const [searchParams, setSearchParams] = useSearchParams()
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [reviewerUsers, setReviewerUsers] = useState<User[]>([])
   const [filterUsers, setFilterUsers] = useState<User[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [sprints, setSprints] = useState<Sprint[]>([])
   const [filterTags, setFilterTags] = useState<Tag[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [parentTasks, setParentTasks] = useState<Task[]>([])
   const [keyword, setKeyword] = useState('')
   const [projectFilter, setProjectFilter] = useState('')
+  const [sprintFilter, setSprintFilter] = useState('')
   const [assigneeFilters, setAssigneeFilters] = useState<string[]>([])
   const [statusFilters, setStatusFilters] = useState<string[]>([])
   const [priorityFilters, setPriorityFilters] = useState<string[]>([])
@@ -298,6 +301,7 @@ export function TasksPage() {
   const activeFilterCount =
     Number(Boolean(keyword.trim()) && searchableFields.length > 0) +
     Number(Boolean(projectFilter) && isProjectFilterEnabled) +
+    Number(Boolean(sprintFilter) && canReadSprints) +
     Number(assigneeFilters.length > 0 && isAssigneeFilterEnabled) +
     Number(statusFilters.length > 0 && isStatusFilterEnabled) +
     Number(priorityFilters.length > 0 && isPriorityFilterEnabled) +
@@ -349,6 +353,7 @@ export function TasksPage() {
             pageSize,
             keyword: searchableFields.length > 0 ? keyword : '',
             projectId: isProjectFilterEnabled ? projectFilter : '',
+            sprintId: canReadSprints ? sprintFilter : '',
             assigneeIds: isAssigneeFilterEnabled ? assigneeFilters.join(',') : '',
             statuses: isStatusFilterEnabled ? statusFilters.join(',') : '',
             priorities: isPriorityFilterEnabled ? priorityFilters.join(',') : '',
@@ -379,7 +384,7 @@ export function TasksPage() {
 
   useEffect(() => {
     void load()
-  }, [page, pageSize, keyword, projectFilter, assigneeFilters, statusFilters, priorityFilters, tagFilters, sortKey, sortOrder, searchableFields, isProjectFilterEnabled, isAssigneeFilterEnabled, isStatusFilterEnabled, isPriorityFilterEnabled, isTagFilterEnabled])
+  }, [page, pageSize, keyword, projectFilter, sprintFilter, assigneeFilters, statusFilters, priorityFilters, tagFilters, sortKey, sortOrder, searchableFields, isProjectFilterEnabled, canReadSprints, isAssigneeFilterEnabled, isStatusFilterEnabled, isPriorityFilterEnabled, isTagFilterEnabled])
 
   useEffect(() => {
     void fetchData<User>('/auth/profile', undefined, { silent: true })
@@ -415,6 +420,17 @@ export function TasksPage() {
       .then((data) => setFilterTags(data.list || []))
       .catch(() => setFilterTags([]))
   }, [])
+
+  useEffect(() => {
+    if (!canReadSprints) {
+      setSprints([])
+      setSprintFilter('')
+      return
+    }
+    void fetchPage<Sprint>('/sprints', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true })
+      .then((data) => setSprints(data.list || []))
+      .catch(() => setSprints([]))
+  }, [canReadSprints])
 
   useEffect(() => {
     localStorage.setItem(taskFieldSettingsStorageKey, JSON.stringify(fieldSettings))
@@ -767,6 +783,10 @@ export function TasksPage() {
       keywords: [user.username, user.name, user.email].filter(Boolean)
     }))
   ), [filterUsers])
+
+  const sprintFilterOptions = useMemo(() => (
+    sprints.map((sprint) => ({ value: String(sprint.id), label: `${sprint.name}（${Number(sprint.taskCount || 0)} 项）` }))
+  ), [sprints])
 
   const statusFilterOptions = useMemo(() => (
     Object.entries(statusLabel).map(([value, label]) => ({ value, label }))
@@ -1180,6 +1200,12 @@ export function TasksPage() {
               setPage(1)
             }}
           />
+        )}
+        {canReadSprints && (
+          <select aria-label="任务迭代筛选" value={sprintFilter} onChange={(event) => { setSprintFilter(event.target.value); setPage(1) }}>
+            <option value="">全部迭代</option>
+            {sprintFilterOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
         )}
         {isAssigneeFilterEnabled && (
           <SearchableMultiSelect

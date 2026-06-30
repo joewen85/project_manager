@@ -743,6 +743,11 @@ paths:
         schema:
           type: integer
       - in: query
+        name: sprintId
+        schema:
+          type: integer
+        description: 按迭代筛选，仍受任务可见范围限制
+      - in: query
         name: sortBy
         schema:
           type: string
@@ -1482,6 +1487,159 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: deleteReportsById
+  /sprints:
+    get:
+      summary: 迭代列表
+      description: 普通用户仅返回自己创建或包含自己可见任务的迭代；管理员可查看全部。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - planned
+          - active
+          - closed
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SprintPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getSprints
+    post:
+      summary: 创建迭代
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SprintUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sprint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postSprints
+  /sprints/{id}:
+    get:
+      summary: 迭代详情
+      description: 返回当前用户可见的迭代任务列表。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sprint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getSprintsById
+    put:
+      summary: 更新迭代
+      description: 普通用户仅可更新自己创建的迭代；管理员可更新全部。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SprintUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sprint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putSprintsById
+    delete:
+      summary: 删除迭代
+      description: 普通用户仅可删除自己创建的迭代；管理员可删除全部。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteSprintsById
+  /sprints/{id}/tasks:
+    post:
+      summary: 迭代加入任务
+      description: 需要 sprints.update 与 tasks.read；普通用户仅可更新自己创建的迭代，且 taskIds 必须全部为当前用户可见任务。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SprintTaskRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sprint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postSprintsByIdTasks
+  /sprints/{id}/tasks/{taskId}:
+    delete:
+      summary: 迭代移除任务
+      description: 需要 sprints.update 与 tasks.read；普通用户仅可更新自己创建的迭代，且任务必须当前用户可见。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      - in: path
+        name: taskId
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sprint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteSprintsByIdTasksByTaskId
   /automation-rules:
     get:
       summary: 自动化规则列表
@@ -2486,6 +2644,86 @@ components:
           $ref: '#/components/schemas/SavedReportFilters'
         chartConfig:
           $ref: '#/components/schemas/SavedReportChartConfig'
+    Sprint:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        goal:
+          type: string
+        status:
+          type: string
+          enum:
+          - planned
+          - active
+          - closed
+        startAt:
+          type: string
+          format: date-time
+          nullable: true
+        endAt:
+          type: string
+          format: date-time
+          nullable: true
+        capacityHours:
+          type: number
+          format: double
+        createdById:
+          type: integer
+        createdBy:
+          $ref: '#/components/schemas/User'
+        taskCount:
+          type: integer
+          format: int64
+        completedTaskCount:
+          type: integer
+          format: int64
+        completionRate:
+          type: number
+          format: double
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SprintUpsertRequest:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+        goal:
+          type: string
+        status:
+          type: string
+          enum:
+          - planned
+          - active
+          - closed
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        capacityHours:
+          type: number
+          format: double
+    SprintTaskRequest:
+      type: object
+      properties:
+        taskIds:
+          type: array
+          items:
+            type: integer
     AutomationConditions:
       type: object
       properties:
@@ -3419,6 +3657,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SavedReport'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    SprintPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/Sprint'
         total:
           type: integer
           format: int64

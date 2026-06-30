@@ -22,6 +22,8 @@ func Migrate(db *gorm.DB) error {
 		&model.Project{},
 		&model.ProjectTemplate{},
 		&model.SavedReport{},
+		&model.Sprint{},
+		&model.SprintTask{},
 		&model.Task{},
 		&model.TaskDependency{},
 		&model.TaskComment{},

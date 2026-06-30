@@ -5,6 +5,7 @@ export type WorkRequestStatus = 'submitted' | 'approved' | 'rejected' | 'convert
 export type AutomationTrigger = 'task_overdue' | 'task_status_changed' | 'task_progress_changed' | 'task_assignee_changed'
 export type AssigneeChangeType = 'added' | 'removed'
 export type AutomationExecutionStatus = 'success' | 'skipped' | 'failed'
+export type SprintStatus = 'planned' | 'active' | 'closed'
 
 export interface PageResult<T> {
   list: T[]
@@ -309,6 +310,24 @@ export interface SavedReport {
   chartConfig?: SavedReportChartConfig
   createdById: number
   createdBy?: User
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface Sprint {
+  id: number
+  name: string
+  goal?: string
+  status: SprintStatus
+  startAt?: string
+  endAt?: string
+  capacityHours?: number
+  createdById: number
+  createdBy?: User
+  taskCount?: number
+  completedTaskCount?: number
+  completionRate?: number
+  tasks?: Task[]
   createdAt?: string
   updatedAt?: string
 }

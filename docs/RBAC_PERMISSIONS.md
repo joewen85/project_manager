@@ -53,6 +53,10 @@
 | `reports.read` | 查看报表中心与保存报表 |
 | `reports.update` | 更新保存报表 |
 | `reports.delete` | 删除保存报表 |
+| `sprints.create` | 创建迭代周期 |
+| `sprints.read` | 查看迭代周期与迭代任务 |
+| `sprints.update` | 更新迭代周期与任务范围 |
+| `sprints.delete` | 删除迭代周期 |
 | `automations.create` | 创建自动化规则 |
 | `automations.read` | 查看自动化规则与执行日志 |
 | `automations.update` | 更新并执行自动化规则 |
@@ -109,6 +113,11 @@
 | `PUT /reports/:id` | `reports.update`；普通用户仅更新自己创建的保存报表 |
 | `DELETE /reports/:id` | `reports.delete`；普通用户仅删除自己创建的保存报表 |
 | 报表中心预览卡片 | 复用 `/stats/project-health`、`/stats/member-workload`、`/tasks/progress-list`，仍分别要求 `stats.read`、`tasks.read` |
+| `GET /sprints` `GET /sprints/:id` | `sprints.read`；普通用户仅查看自己创建或包含自己可见任务的迭代 |
+| `POST /sprints` | `sprints.create` |
+| `PUT /sprints/:id` | `sprints.update`；普通用户仅更新自己创建的迭代 |
+| `POST /sprints/:id/tasks` `DELETE /sprints/:id/tasks/:taskId` | `sprints.update` + `tasks.read`；普通用户仅更新自己创建的迭代，加入/移除任务仍校验任务可见范围 |
+| `DELETE /sprints/:id` | `sprints.delete`；普通用户仅删除自己创建的迭代 |
 | `GET /automation-rules` `GET /automation-rules/logs` | `automations.read` |
 | `POST /automation-rules` | `automations.create` |
 | `PUT /automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |

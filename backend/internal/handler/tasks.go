@@ -698,6 +698,14 @@ func (h *Handler) ListTasks(c *gin.Context) {
 	if projectID := c.Query("projectId"); projectID != "" {
 		query = query.Where("tasks.project_id = ?", projectID)
 	}
+	if sprintID := strings.TrimSpace(c.Query("sprintId")); sprintID != "" {
+		parsed, err := strconv.ParseUint(sprintID, 10, 64)
+		if err != nil || parsed == 0 {
+			respondError(c, http.StatusBadRequest, "INVALID_SPRINT_ID", "sprintId 必须是有效的迭代 ID")
+			return
+		}
+		query = query.Where("EXISTS (SELECT 1 FROM sprint_tasks task_filter_sprints WHERE task_filter_sprints.task_id = tasks.id AND task_filter_sprints.sprint_id = ?)", uint(parsed))
+	}
 	if statuses := parseTaskStatuses(c.Query("statuses")); len(statuses) > 0 {
 		query = query.Where("tasks.status IN ?", statuses)
 	} else if status := c.Query("status"); status != "" {

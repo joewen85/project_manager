@@ -62,6 +62,10 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/reports` | `reports.create` |
 | PUT | `/reports/:id` | `reports.update` |
 | DELETE | `/reports/:id` | `reports.delete` |
+| GET | `/sprints` `/sprints/:id` | `sprints.read` |
+| POST | `/sprints` | `sprints.create` |
+| PUT | `/sprints/:id` `POST /sprints/:id/tasks` `DELETE /sprints/:id/tasks/:taskId` | `sprints.update` |
+| DELETE | `/sprints/:id` | `sprints.delete` |
 | GET | `/automation-rules` `/automation-rules/logs` | `automations.read` |
 | POST | `/automation-rules` | `automations.create` |
 | PUT | `/automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
@@ -176,7 +180,8 @@ Base URL: `http://localhost:8080/api/v1`
 ## 任务管理
 
 ### GET `/tasks`
-- Query: `projectId` `status` `statuses` `priorities` `assigneeIds` `searchFields` `page` `pageSize` `keyword` `sortBy` `sortOrder`
+- Query: `projectId` `sprintId` `status` `statuses` `priorities` `assigneeIds` `searchFields` `page` `pageSize` `keyword` `sortBy` `sortOrder`
+  - `sprintId` 按迭代筛选，仍只返回当前用户可见任务
   - `statuses` 支持逗号分隔的多状态筛选
   - `priorities` 支持逗号分隔的多优先级筛选
   - `assigneeIds` 支持逗号分隔的多人筛选
@@ -354,6 +359,41 @@ Base URL: `http://localhost:8080/api/v1`
 ### DELETE `/reports/:id`
 - 权限: `reports.delete`
 - 范围: 同更新
+
+## 迭代管理
+
+### GET `/sprints`
+- 权限: `sprints.read`
+- Query: `page` `pageSize` `keyword` `status`
+- 范围: 管理员可查看全部；普通用户仅查看自己创建或包含自己可见任务的迭代
+- 响应: `{ list, total, page, pageSize }`，列表项包含 `taskCount`、`completedTaskCount`、`completionRate`
+
+### GET `/sprints/:id`
+- 权限: `sprints.read`
+- 响应: 迭代详情与当前用户可见任务列表
+
+### POST `/sprints`
+- 权限: `sprints.create`
+- 请求体: `{ name, goal?, status?, startAt?, endAt?, capacityHours? }`
+- `status`: `planned|active|closed`
+
+### PUT `/sprints/:id`
+- 权限: `sprints.update`
+- 范围: 管理员或迭代创建人
+- 请求体同创建
+
+### POST `/sprints/:id/tasks`
+- 权限: `sprints.update` + `tasks.read`
+- 范围: 管理员或迭代创建人；`taskIds` 必须全部为当前用户可见任务
+- 请求体: `{ taskIds: number[] }`
+
+### DELETE `/sprints/:id/tasks/:taskId`
+- 权限: `sprints.update` + `tasks.read`
+- 范围: 管理员或迭代创建人；任务也必须当前用户可见
+
+### DELETE `/sprints/:id`
+- 权限: `sprints.delete`
+- 范围: 管理员或迭代创建人
 
 ## 自动化规则
 

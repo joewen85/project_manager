@@ -64,6 +64,11 @@ var permissionCatalog = []permissionSeed{
 	{Code: "reports.update", Name: "报表-更新", Description: "更新保存报表"},
 	{Code: "reports.delete", Name: "报表-删除", Description: "删除保存报表"},
 
+	{Code: "sprints.create", Name: "迭代-创建", Description: "创建迭代周期"},
+	{Code: "sprints.read", Name: "迭代-查看", Description: "查看迭代周期与迭代任务"},
+	{Code: "sprints.update", Name: "迭代-更新", Description: "更新迭代周期与任务范围"},
+	{Code: "sprints.delete", Name: "迭代-删除", Description: "删除迭代周期"},
+
 	{Code: "automations.create", Name: "自动化-创建", Description: "创建自动化规则"},
 	{Code: "automations.read", Name: "自动化-查看", Description: "查看自动化规则与执行日志"},
 	{Code: "automations.update", Name: "自动化-更新", Description: "更新并执行自动化规则"},
