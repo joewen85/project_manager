@@ -1,11 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { api, fetchPage, hasPermission, readApiError } from '../services/api'
+import { api, fetchData, fetchPage, hasPermission, readApiError } from '../services/api'
 import { DataState } from '../components/DataState'
 import { FilterPanel } from '../components/FilterPanel'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { SearchField } from '../components/SearchField'
-import { AssigneeChangeType, AutomationExecutionLog, AutomationRule, AutomationTrigger, Project, Status, Tag } from '../types'
+import { AssigneeChangeType, AutomationExecutionLog, AutomationRule, AutomationTrigger, Project, Status, Tag, User } from '../types'
 import { formatDateTime } from '../utils/datetime'
 import { usePermissions } from '../hooks/usePermissions'
 
@@ -29,6 +29,8 @@ interface AutomationRuleForm {
   commentContent: string
   addTags: boolean
   tagIds: number[]
+  assignAssignees: boolean
+  assigneeIds: number[]
 }
 
 const initialForm: AutomationRuleForm = {
@@ -49,7 +51,9 @@ const initialForm: AutomationRuleForm = {
   addComment: false,
   commentContent: '',
   addTags: false,
-  tagIds: []
+  tagIds: [],
+  assignAssignees: false,
+  assigneeIds: []
 }
 
 const triggerLabel: Record<AutomationTrigger, string> = {
@@ -107,10 +111,12 @@ export function AutomationRulesPage() {
   const canDeleteRule = hasPermission('automations.delete', permissions)
   const canReadProjects = hasPermission('projects.read', permissions)
   const canReadTags = hasPermission('tags.read', permissions)
+  const canReadTasks = hasPermission('tasks.read', permissions)
   const [items, setItems] = useState<AutomationRule[]>([])
   const [logs, setLogs] = useState<AutomationExecutionLog[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [tags, setTags] = useState<Tag[]>([])
+  const [assigneeOptions, setAssigneeOptions] = useState<User[]>([])
   const [keywordInput, setKeywordInput] = useState('')
   const [keyword, setKeyword] = useState('')
   const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
@@ -131,6 +137,7 @@ export function AutomationRulesPage() {
 
   const projectNameById = useMemo(() => new Map(projects.map((project) => [project.id, `${project.code} - ${project.name}`])), [projects])
   const tagNameById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag.name])), [tags])
+  const assigneeNameById = useMemo(() => new Map(assigneeOptions.map((user) => [user.id, user.name || user.username])), [assigneeOptions])
 
   const load = async () => {
     try {
@@ -191,6 +198,16 @@ export function AutomationRulesPage() {
       .catch(() => setTags([]))
   }, [canReadTags])
 
+  useEffect(() => {
+    if (!canReadTasks) {
+      setAssigneeOptions([])
+      return
+    }
+    void fetchData<{ users?: User[] }>('/tasks/assignee-options', { pageSize: 100 }, { silent: true })
+      .then((data) => setAssigneeOptions(data.users || []))
+      .catch(() => setAssigneeOptions([]))
+  }, [canReadTasks])
+
   const openCreateModal = () => {
     if (!canCreateRule) return
     setForm(initialForm)
@@ -220,7 +237,9 @@ export function AutomationRulesPage() {
       addComment: item.actions?.addComment ?? false,
       commentContent: item.actions?.commentContent || '',
       addTags: item.actions?.addTags ?? false,
-      tagIds: item.actions?.tagIds || []
+      tagIds: item.actions?.tagIds || [],
+      assignAssignees: item.actions?.assignAssignees ?? false,
+      assigneeIds: item.actions?.assigneeIds || []
     })
     setFormError('')
     setFormSuccess('')
@@ -234,12 +253,17 @@ export function AutomationRulesPage() {
     const hasNotificationAction = form.notifyAssignees || form.notifyProjectOwners
     const hasCommentAction = isEventTrigger(form.trigger) && form.addComment
     const hasTagAction = form.addTags
-    if (!hasNotificationAction && !hasCommentAction && !hasTagAction) {
+    const hasAssignAction = form.assignAssignees
+    if (!hasNotificationAction && !hasCommentAction && !hasTagAction && !hasAssignAction) {
       setFormError('至少选择一个动作')
       return
     }
     if (form.addTags && form.tagIds.length === 0) {
       setFormError('至少选择一个要添加的标签')
+      return
+    }
+    if (form.assignAssignees && form.assigneeIds.length === 0) {
+      setFormError('至少选择一个要指派的执行人')
       return
     }
     if (form.trigger === 'task_status_changed' && form.fromStatuses.length === 0 && form.toStatuses.length === 0) {
@@ -296,7 +320,9 @@ export function AutomationRulesPage() {
           addComment: isEventTrigger(form.trigger) ? form.addComment : false,
           commentContent: isEventTrigger(form.trigger) ? form.commentContent.trim() : '',
           addTags: form.addTags,
-          tagIds: form.addTags ? form.tagIds : []
+          tagIds: form.addTags ? form.tagIds : [],
+          assignAssignees: form.assignAssignees,
+          assigneeIds: form.assignAssignees ? form.assigneeIds : []
         }
       }
       if (form.id) await api.put(`/automation-rules/${form.id}`, payload)
@@ -406,7 +432,8 @@ export function AutomationRulesPage() {
                     item.actions?.notifyAssignees ? '通知执行人' : '',
                     item.actions?.notifyProjectOwners ? '通知项目负责人' : '',
                     item.actions?.addComment ? '添加评论' : '',
-                    item.actions?.addTags ? `添加标签${item.actions.tagIds?.length ? `（${item.actions.tagIds.map((id) => tagNameById.get(id) || id).join('，')}）` : ''}` : ''
+                    item.actions?.addTags ? `添加标签${item.actions.tagIds?.length ? `（${item.actions.tagIds.map((id) => tagNameById.get(id) || id).join('，')}）` : ''}` : '',
+                    item.actions?.assignAssignees ? `指派执行人${item.actions.assigneeIds?.length ? `（${item.actions.assigneeIds.map((id) => assigneeNameById.get(id) || id).join('，')}）` : ''}` : ''
                   ].filter(Boolean).join('，') || '-'}
                 </td>
                 <td data-label="最近执行">{formatDateTime(item.lastRunAt)}</td>
@@ -583,6 +610,31 @@ export function AutomationRulesPage() {
                       </label>
                     ))}
                     {tags.length === 0 && <p className="inline-tip">暂无可选标签</p>}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+          {canReadTasks && (
+            <>
+              <label htmlFor="automation-assign-action">指派动作</label>
+              <div id="automation-assign-action" className="multi-checklist">
+                <label className="multi-check-item">
+                  <input type="checkbox" checked={form.assignAssignees} onChange={() => setForm((prev) => ({ ...prev, assignAssignees: !prev.assignAssignees, assigneeIds: prev.assignAssignees ? [] : prev.assigneeIds }))} />
+                  <span>指派执行人</span>
+                </label>
+              </div>
+              {form.assignAssignees && (
+                <>
+                  <label htmlFor="automation-assignees">选择执行人</label>
+                  <div id="automation-assignees" className="multi-checklist">
+                    {assigneeOptions.map((user) => (
+                      <label key={user.id} className="multi-check-item">
+                        <input type="checkbox" checked={form.assigneeIds.includes(user.id)} onChange={() => setForm((prev) => ({ ...prev, assigneeIds: toggleNumber(prev.assigneeIds, user.id) }))} />
+                        <span>{user.name}（{user.username}）</span>
+                      </label>
+                    ))}
+                    {assigneeOptions.length === 0 && <p className="inline-tip">暂无可选执行人</p>}
                   </div>
                 </>
               )}

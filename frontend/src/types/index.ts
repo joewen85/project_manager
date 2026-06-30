@@ -184,6 +184,8 @@ export interface AutomationActions {
   commentContent?: string
   addTags?: boolean
   tagIds?: number[]
+  assignAssignees?: boolean
+  assigneeIds?: number[]
 }
 
 export interface AutomationRule {

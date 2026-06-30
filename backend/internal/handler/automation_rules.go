@@ -40,6 +40,8 @@ type automationActionsRequest struct {
 	CommentContent      string `json:"commentContent"`
 	AddTags             *bool  `json:"addTags"`
 	TagIDs              []uint `json:"tagIds"`
+	AssignAssignees     *bool  `json:"assignAssignees"`
+	AssigneeIDs         []uint `json:"assigneeIds"`
 }
 
 func normalizeAutomationTrigger(value string) (model.AutomationTrigger, bool) {
@@ -187,17 +189,28 @@ func normalizeAutomationActions(req automationActionsRequest, trigger model.Auto
 		CommentContent:      strings.TrimSpace(req.CommentContent),
 		AddTags:             boolValue(req.AddTags, false),
 		TagIDs:              uniqueUint(req.TagIDs),
+		AssignAssignees:     boolValue(req.AssignAssignees, false),
+		AssigneeIDs:         uniqueUint(req.AssigneeIDs),
 	}
 	if !actions.AddTags {
 		actions.TagIDs = nil
 	}
+	if !actions.AssignAssignees {
+		actions.AssigneeIDs = nil
+	}
 	if actions.AddTags && len(actions.TagIDs) == 0 {
 		return model.AutomationActions{}, fmt.Errorf("添加标签动作至少需要选择一个标签")
+	}
+	if actions.AssignAssignees && len(actions.AssigneeIDs) == 0 {
+		return model.AutomationActions{}, fmt.Errorf("指派执行人动作至少需要选择一个执行人")
 	}
 	if automationEventTriggerAllowsComment(trigger) && actions.AddComment {
 		return actions, nil
 	}
 	if actions.AddTags {
+		return actions, nil
+	}
+	if actions.AssignAssignees {
 		return actions, nil
 	}
 	if !actions.NotifyAssignees && !actions.NotifyProjectOwners {
@@ -253,6 +266,27 @@ func (h *Handler) validateAutomationActionTags(actions model.AutomationActions) 
 	return nil
 }
 
+func (h *Handler) validateAutomationActionAssignees(actions model.AutomationActions) error {
+	if !actions.AssignAssignees || len(actions.AssigneeIDs) == 0 {
+		return nil
+	}
+	var count int64
+	if err := h.DB.Model(&model.User{}).Where("id IN ?", actions.AssigneeIDs).Count(&count).Error; err != nil {
+		return err
+	}
+	if count != int64(len(actions.AssigneeIDs)) {
+		return fmt.Errorf("指派执行人动作包含不存在的用户")
+	}
+	return nil
+}
+
+func (h *Handler) validateAutomationActionTargets(actions model.AutomationActions) error {
+	if err := h.validateAutomationActionTags(actions); err != nil {
+		return err
+	}
+	return h.validateAutomationActionAssignees(actions)
+}
+
 func (h *Handler) ListAutomationRules(c *gin.Context) {
 	page, pageSize := parsePage(c)
 	query := h.DB.Model(&model.AutomationRule{})
@@ -297,7 +331,7 @@ func (h *Handler) CreateAutomationRule(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "INVALID_AUTOMATION_RULE", err.Error())
 		return
 	}
-	if err := h.validateAutomationActionTags(item.Actions); err != nil {
+	if err := h.validateAutomationActionTargets(item.Actions); err != nil {
 		respondError(c, http.StatusBadRequest, "INVALID_AUTOMATION_RULE", err.Error())
 		return
 	}
@@ -327,7 +361,7 @@ func (h *Handler) UpdateAutomationRule(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "INVALID_AUTOMATION_RULE", err.Error())
 		return
 	}
-	if err := h.validateAutomationActionTags(next.Actions); err != nil {
+	if err := h.validateAutomationActionTargets(next.Actions); err != nil {
 		respondError(c, http.StatusBadRequest, "INVALID_AUTOMATION_RULE", err.Error())
 		return
 	}
@@ -528,12 +562,63 @@ func (h *Handler) appendAutomationTaskTagsWithDB(tx *gorm.DB, task model.Task, a
 	return len(tags), nil
 }
 
+func (h *Handler) appendAutomationTaskAssigneesWithDB(tx *gorm.DB, task model.Task, actions model.AutomationActions, actorID uint) (int, []uint, error) {
+	if !actions.AssignAssignees || len(actions.AssigneeIDs) == 0 {
+		return 0, nil, nil
+	}
+	assigneeIDs := uniqueUint(actions.AssigneeIDs)
+	if len(assigneeIDs) == 0 {
+		return 0, nil, nil
+	}
+
+	var existingAssigneeIDs []uint
+	if err := tx.Table("task_users").Where("task_id = ? AND user_id IN ?", task.ID, assigneeIDs).Pluck("user_id", &existingAssigneeIDs).Error; err != nil {
+		return 0, nil, err
+	}
+	missingAssigneeIDs := make([]uint, 0, len(assigneeIDs))
+	for _, assigneeID := range assigneeIDs {
+		if !containsUint(existingAssigneeIDs, assigneeID) {
+			missingAssigneeIDs = append(missingAssigneeIDs, assigneeID)
+		}
+	}
+	if len(missingAssigneeIDs) == 0 {
+		return 0, nil, nil
+	}
+
+	users, err := findUsersByIDs(tx, missingAssigneeIDs)
+	if err != nil {
+		return 0, nil, err
+	}
+	if len(users) == 0 {
+		return 0, nil, nil
+	}
+	taskRef := model.Task{BaseModel: model.BaseModel{ID: task.ID}}
+	if err := tx.Model(&taskRef).Association("Assignees").Append(&users); err != nil {
+		return 0, nil, err
+	}
+	addedAssigneeIDs := userIDsFromUsers(users)
+	content := "自动化已将你设为任务 " + task.TaskNo + " - " + task.Title + " 的执行人"
+	if err := h.createNotificationsWithDB(tx, addedAssigneeIDs, "你被加入任务执行人", content, "tasks", task.ID); err != nil {
+		return 0, nil, err
+	}
+	assigneeNames := automationAssigneeNames(users, addedAssigneeIDs)
+	detail := "自动化指派执行人"
+	if assigneeNames != "" {
+		detail += "：" + assigneeNames
+	}
+	if err := h.writeTaskActivityWithDB(tx, task.ID, actorID, "automation.assignees_added", taskActivitySummary("自动化指派执行人", task), detail, nil); err != nil {
+		return 0, nil, err
+	}
+	return len(users), addedAssigneeIDs, nil
+}
+
 func (h *Handler) executeTaskOverdueRule(tx *gorm.DB, c *gin.Context, rule model.AutomationRule, now time.Time, actorID uint) (matchedCount int, actionCount int, notifiedIDs []uint, message string, err error) {
 	tasks, err := h.automationOverdueTasks(tx, c, rule.Conditions, now)
 	if err != nil {
 		return 0, 0, nil, "", err
 	}
 	tagActionCount := 0
+	assigneeActionCount := 0
 	for _, task := range tasks {
 		recipients := automationTaskRecipients(task, rule.Actions)
 		if len(recipients) > 0 {
@@ -551,8 +636,15 @@ func (h *Handler) executeTaskOverdueRule(tx *gorm.DB, c *gin.Context, rule model
 		}
 		actionCount += addedTags
 		tagActionCount += addedTags
+		addedAssignees, assigneeNotifyIDs, err := h.appendAutomationTaskAssigneesWithDB(tx, task, rule.Actions, actorID)
+		if err != nil {
+			return len(tasks), actionCount, notifiedIDs, "", err
+		}
+		actionCount += addedAssignees
+		assigneeActionCount += addedAssignees
+		notifiedIDs = append(notifiedIDs, assigneeNotifyIDs...)
 	}
-	return len(tasks), actionCount, uniqueUint(notifiedIDs), fmt.Sprintf("匹配 %d 个逾期任务，发送 %d 条通知，添加 %d 个标签", len(tasks), len(notifiedIDs), tagActionCount), nil
+	return len(tasks), actionCount, uniqueUint(notifiedIDs), fmt.Sprintf("匹配 %d 个逾期任务，发送 %d 条通知，添加 %d 个标签，指派 %d 个执行人", len(tasks), len(notifiedIDs), tagActionCount, assigneeActionCount), nil
 }
 
 func containsTaskStatus(values []model.TaskStatus, target model.TaskStatus) bool {
@@ -765,6 +857,12 @@ func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Ta
 			return notifiedIDs, err
 		}
 		actionCount += addedTags
+		addedAssignees, assigneeNotifyIDs, err := h.appendAutomationTaskAssigneesWithDB(tx, task, rule.Actions, actorID)
+		if err != nil {
+			return notifiedIDs, err
+		}
+		actionCount += addedAssignees
+		notifiedIDs = append(notifiedIDs, assigneeNotifyIDs...)
 
 		logItem := model.AutomationExecutionLog{
 			RuleID:       rule.ID,
@@ -838,6 +936,12 @@ func (h *Handler) executeTaskProgressChangedRulesWithDB(tx *gorm.DB, task model.
 			return notifiedIDs, err
 		}
 		actionCount += addedTags
+		addedAssignees, assigneeNotifyIDs, err := h.appendAutomationTaskAssigneesWithDB(tx, task, rule.Actions, actorID)
+		if err != nil {
+			return notifiedIDs, err
+		}
+		actionCount += addedAssignees
+		notifiedIDs = append(notifiedIDs, assigneeNotifyIDs...)
 
 		logItem := model.AutomationExecutionLog{
 			RuleID:       rule.ID,
@@ -921,6 +1025,12 @@ func (h *Handler) executeTaskAssigneeChangedRulesWithDB(tx *gorm.DB, task model.
 			return notifiedIDs, err
 		}
 		actionCount += addedTags
+		addedAssignees, assigneeNotifyIDs, err := h.appendAutomationTaskAssigneesWithDB(tx, task, rule.Actions, actorID)
+		if err != nil {
+			return notifiedIDs, err
+		}
+		actionCount += addedAssignees
+		notifiedIDs = append(notifiedIDs, assigneeNotifyIDs...)
 
 		logItem := model.AutomationExecutionLog{
 			RuleID:       rule.ID,

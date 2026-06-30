@@ -2280,6 +2280,12 @@ components:
           type: array
           items:
             type: integer
+        assignAssignees:
+          type: boolean
+        assigneeIds:
+          type: array
+          items:
+            type: integer
     AutomationRule:
       type: object
       properties:

@@ -260,6 +260,8 @@ type AutomationActions struct {
 	CommentContent      string `json:"commentContent"`
 	AddTags             bool   `json:"addTags"`
 	TagIDs              []uint `json:"tagIds"`
+	AssignAssignees     bool   `json:"assignAssignees"`
+	AssigneeIDs         []uint `json:"assigneeIds"`
 }
 
 type AutomationRule struct {
