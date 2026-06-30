@@ -50,6 +50,11 @@
 - 完成：任务详情弹窗新增动态与评论区，沿用现有 UI 风格并支持本人/管理员删除评论
 - 完成：补充评论/提及/活动/可见范围后端集成测试
 - 完成：同步 README、API 文档、OpenAPI、RBAC 权限文档与阶段计划
+- 完成：按 `Improvement.md` 推进 P0-3 项目健康度 Dashboard MVP
+- 完成：新增 `GET /stats/project-health`，按当前用户任务可见范围聚合项目健康度
+- 完成：健康度评分采用计划进度与实际进度偏差，并结合逾期、里程碑逾期、未排期、待审核原因输出红黄绿
+- 完成：Dashboard 增加项目健康榜与风险项目计数，点击健康项可跳转到对应项目任务筛选
+- 完成：补充项目健康度 scope 集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

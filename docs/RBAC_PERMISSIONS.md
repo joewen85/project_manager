@@ -81,7 +81,7 @@
 | `GET /tasks/:id/comments` `GET /tasks/:id/activities` | `comments.read` + 任务可见范围 |
 | `POST /tasks/:id/comments` | `comments.create` + 任务可见范围 |
 | `DELETE /tasks/:id/comments/:commentId` | `comments.delete` + 评论作者/管理员 |
-| `GET /stats/dashboard` | `stats.read` |
+| `GET /stats/dashboard` `GET /stats/project-health` | `stats.read`；普通用户按任务可见范围聚合 |
 | `GET /notifications` `GET /notifications/unread-count` | `notifications.read` |
 | `PATCH /notifications/:id/read` `PATCH /notifications/read-all` | `notifications.update` |
 | `GET /audit/logs` | `audit.read` |

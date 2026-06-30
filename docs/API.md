@@ -50,7 +50,7 @@ Base URL: `http://localhost:8080/api/v1`
 | GET | `/tasks/:id/comments` `/tasks/:id/activities` | `comments.read` + 任务可见范围 |
 | POST | `/tasks/:id/comments` | `comments.create` + 任务可见范围 |
 | DELETE | `/tasks/:id/comments/:commentId` | `comments.delete` + 评论作者/管理员 |
-| GET | `/stats/dashboard` | `stats.read` |
+| GET | `/stats/dashboard` `/stats/project-health` | `stats.read` |
 | GET | `/notifications` `/notifications/unread-count` | `notifications.read` |
 | PATCH | `/notifications/:id/read` `/notifications/read-all` | `notifications.update` |
 | GET | `/audit/logs` | `audit.read` |
@@ -235,6 +235,16 @@ Base URL: `http://localhost:8080/api/v1`
 
 ### GET `/stats/dashboard`
 - 响应: 用户数、项目数、任务数、完成率
+- 普通用户按任务可见范围统计：创建人、执行人、审核人相关任务。
+
+### GET `/stats/project-health`
+- 权限: `stats.read`
+- 范围: 管理员查看全量任务聚合；普通用户仅按任务可见范围聚合项目。
+- 响应: `{ projects: ProjectHealth[] }`
+- `ProjectHealth`: `{ projectId, projectCode, projectName, health, score, completionRate, totalTasks, completedTasks, overdueTasks, milestoneOverdue, unscheduledTasks, reviewingTasks, reasons }`
+- `score` 口径: 按任务“计划进度 - 实际进度”的滞后程度计算；实际进度为 `completed=100`，否则取 `progress`；计划进度按 `startAt/endAt` 和当前时间线性计算。
+- 权重: `high=3`、`medium=2`、`low=1`，里程碑任务额外 `+1`。
+- `health`: `green` 健康、`yellow` 关注、`red` 高风险；逾期、里程碑逾期、未排期、待审核堆积会进入 `reasons`。
 
 ## 站内通知
 

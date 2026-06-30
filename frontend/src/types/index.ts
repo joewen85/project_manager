@@ -154,6 +154,24 @@ export interface MyWorkData {
   myParticipate: Task[]
 }
 
+export type ProjectHealthLevel = 'green' | 'yellow' | 'red'
+
+export interface ProjectHealth {
+  projectId: number
+  projectCode: string
+  projectName: string
+  health: ProjectHealthLevel
+  score: number
+  completionRate: number
+  totalTasks: number
+  completedTasks: number
+  overdueTasks: number
+  milestoneOverdue: number
+  unscheduledTasks: number
+  reviewingTasks: number
+  reasons: string[]
+}
+
 export interface UploadAttachment {
   fileName: string
   filePath: string

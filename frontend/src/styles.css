@@ -370,6 +370,67 @@ button, input, select, textarea { max-width: 100%; font: inherit; }
   max-width: none;
   flex: none;
 }
+.dashboard-health-panel {
+  display: grid;
+  gap: 10px;
+}
+.dashboard-health-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dashboard-health-header h3 {
+  margin: 0;
+}
+.dashboard-health-list {
+  display: grid;
+  gap: 8px;
+}
+.dashboard-health-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+  color: var(--color-text);
+  text-decoration: none;
+}
+.dashboard-health-item:hover {
+  border-color: color-mix(in oklab, var(--color-primary) 35%, var(--color-border));
+}
+.dashboard-health-item.health-green { border-left-color: #22c55e; }
+.dashboard-health-item.health-yellow { border-left-color: #f59e0b; }
+.dashboard-health-item.health-red { border-left-color: #ef4444; }
+.dashboard-health-main,
+.dashboard-health-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dashboard-health-main strong {
+  font-size: 14px;
+}
+.dashboard-health-main span,
+.dashboard-health-metrics span,
+.dashboard-health-item p {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+.dashboard-health-badge {
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+.dashboard-health-item p {
+  margin: 0;
+}
 
 table { width: 100%; max-width: 100%; border-collapse: collapse; }
 th, td { padding: 10px 8px; border-bottom: 1px solid var(--color-border); text-align: left; font-size: 14px; vertical-align: top; }

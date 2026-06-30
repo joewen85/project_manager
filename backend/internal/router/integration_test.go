@@ -985,6 +985,123 @@ func TestUserScopeAndExportFlow(t *testing.T) {
 	}
 }
 
+func TestProjectHealthUsesVisibleTaskScope(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "health-reader",
+		"description": "health reader",
+		"permissionIds": []uint{
+			codeToID["projects.read"],
+			codeToID["tasks.read"],
+			codeToID["stats.read"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create health role expected 201 got %d", roleResp.StatusCode)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "health_reader",
+		"name":          "Health Reader",
+		"email":         "health_reader@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if userResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create health user expected 201 got %d", userResp.StatusCode)
+	}
+	userID := uint(userBody["id"].(float64))
+
+	visibleProjectResp, visibleProjectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "HEALTH-P1",
+		"name":        "Health Visible",
+		"description": "visible",
+	})
+	if visibleProjectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible health project expected 201 got %d", visibleProjectResp.StatusCode)
+	}
+	visibleProjectID := int(visibleProjectBody["id"].(float64))
+
+	hiddenProjectResp, hiddenProjectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "HEALTH-P2",
+		"name":        "Health Hidden",
+		"description": "hidden",
+	})
+	if hiddenProjectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden health project expected 201 got %d", hiddenProjectResp.StatusCode)
+	}
+	hiddenProjectID := int(hiddenProjectBody["id"].(float64))
+
+	_, _ = requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Visible Overdue Milestone",
+		"projectId":   visibleProjectID,
+		"status":      "processing",
+		"progress":    20,
+		"isMilestone": true,
+		"startAt":     "2026-01-01T10:00:00Z",
+		"endAt":       "2026-01-02T10:00:00Z",
+		"assigneeIds": []uint{userID},
+	})
+	_, _ = requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Visible Unscheduled",
+		"projectId":   visibleProjectID,
+		"status":      "reviewing",
+		"progress":    100,
+		"assigneeIds": []uint{userID},
+	})
+	_, _ = requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":     "Hidden Overdue",
+		"projectId": hiddenProjectID,
+		"status":    "processing",
+		"progress":  10,
+		"startAt":   "2026-01-01T10:00:00Z",
+		"endAt":     "2026-01-02T10:00:00Z",
+	})
+
+	healthResp, healthBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/stats/project-health", adminToken, nil)
+	if healthResp.StatusCode != http.StatusOK {
+		t.Fatalf("admin health expected 200 got %d", healthResp.StatusCode)
+	}
+	adminProjects, _ := healthBody["projects"].([]any)
+	if len(adminProjects) < 2 {
+		t.Fatalf("admin should see both health projects got %v", healthBody)
+	}
+
+	loginStatus, loginBody := loginWithCredentials(t, ts.URL, "health_reader", "pass1234")
+	if loginStatus != http.StatusOK {
+		t.Fatalf("login health reader expected 200 got %d", loginStatus)
+	}
+	userToken := loginBody["token"].(string)
+	scopedResp, scopedBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/stats/project-health", userToken, nil)
+	if scopedResp.StatusCode != http.StatusOK {
+		t.Fatalf("scoped health expected 200 got %d", scopedResp.StatusCode)
+	}
+	scopedProjects, _ := scopedBody["projects"].([]any)
+	if len(scopedProjects) != 1 {
+		t.Fatalf("scoped user should see one health project got %v", scopedBody)
+	}
+	project, _ := scopedProjects[0].(map[string]any)
+	if int(project["projectId"].(float64)) != visibleProjectID {
+		t.Fatalf("scoped project id expected %d got %v", visibleProjectID, project["projectId"])
+	}
+	if project["health"] != "red" {
+		t.Fatalf("visible project should be red got %v", project["health"])
+	}
+	if int(project["overdueTasks"].(float64)) != 1 || int(project["milestoneOverdue"].(float64)) != 1 {
+		t.Fatalf("expected overdue and milestone counts got %v", project)
+	}
+	if int(project["unscheduledTasks"].(float64)) != 1 || int(project["reviewingTasks"].(float64)) != 1 {
+		t.Fatalf("expected unscheduled and reviewing counts got %v", project)
+	}
+}
+
 func TestNotificationFlowOnTaskAssign(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

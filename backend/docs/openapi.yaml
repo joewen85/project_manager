@@ -1092,6 +1092,22 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: getStatsDashboard
+  /stats/project-health:
+    get:
+      summary: 项目健康度
+      description: 基于当前用户可见任务，按计划进度与实际进度偏差、逾期、里程碑逾期、未排期和待审核任务聚合项目健康度。
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectHealthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getStatsProjectHealth
   /notifications:
     get:
       summary: 通知列表
@@ -1974,6 +1990,57 @@ components:
         completionRate:
           type: number
           format: double
+    ProjectHealthResponse:
+      type: object
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectHealth'
+    ProjectHealth:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        projectCode:
+          type: string
+        projectName:
+          type: string
+        health:
+          type: string
+          enum:
+          - green
+          - yellow
+          - red
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        completionRate:
+          type: number
+          format: double
+        totalTasks:
+          type: integer
+          format: int64
+        completedTasks:
+          type: integer
+          format: int64
+        overdueTasks:
+          type: integer
+          format: int64
+        milestoneOverdue:
+          type: integer
+          format: int64
+        unscheduledTasks:
+          type: integer
+          format: int64
+        reviewingTasks:
+          type: integer
+          format: int64
+        reasons:
+          type: array
+          items:
+            type: string
     Notification:
       type: object
       properties:

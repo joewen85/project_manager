@@ -385,16 +385,24 @@ export function TasksPage() {
   }, [fieldSettings])
 
   useEffect(() => {
+    const nextProjectId = searchParams.get('projectId')
+    if (nextProjectId) {
+      setProjectFilter(nextProjectId)
+      setPage(1)
+    }
     const taskId = Number(searchParams.get('taskId') || 0)
-    if (!Number.isFinite(taskId) || taskId <= 0) return
-    setFocusedTaskId(taskId)
-    if (searchParams.get('view') === '1') {
-      setPendingViewTaskId(taskId)
+    if (Number.isFinite(taskId) && taskId > 0) {
+      setFocusedTaskId(taskId)
+      if (searchParams.get('view') === '1') {
+        setPendingViewTaskId(taskId)
+      }
+      if (searchParams.get('open') === '1') {
+        setPendingOpenTaskId(taskId)
+      }
     }
-    if (searchParams.get('open') === '1') {
-      setPendingOpenTaskId(taskId)
+    if (nextProjectId || (Number.isFinite(taskId) && taskId > 0)) {
+      setSearchParams({}, { replace: true })
     }
-    setSearchParams({}, { replace: true })
   }, [searchParams, setSearchParams])
 
   useEffect(() => {
