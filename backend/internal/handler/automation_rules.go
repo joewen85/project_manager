@@ -22,25 +22,51 @@ type automationRuleRequest struct {
 }
 
 type automationConditionsRequest struct {
-	OverdueDays *int   `json:"overdueDays"`
-	ProjectIDs  []uint `json:"projectIds"`
+	OverdueDays  *int     `json:"overdueDays"`
+	ProjectIDs   []uint   `json:"projectIds"`
+	FromStatuses []string `json:"fromStatuses"`
+	ToStatuses   []string `json:"toStatuses"`
 }
 
 type automationActionsRequest struct {
-	NotifyAssignees     *bool `json:"notifyAssignees"`
-	NotifyProjectOwners *bool `json:"notifyProjectOwners"`
+	NotifyAssignees     *bool  `json:"notifyAssignees"`
+	NotifyProjectOwners *bool  `json:"notifyProjectOwners"`
+	AddComment          *bool  `json:"addComment"`
+	CommentContent      string `json:"commentContent"`
 }
 
 func normalizeAutomationTrigger(value string) (model.AutomationTrigger, bool) {
 	switch model.AutomationTrigger(strings.TrimSpace(value)) {
 	case "", model.AutomationTriggerTaskOverdue:
 		return model.AutomationTriggerTaskOverdue, true
+	case model.AutomationTriggerTaskStatusChanged:
+		return model.AutomationTriggerTaskStatusChanged, true
 	default:
 		return model.AutomationTriggerTaskOverdue, false
 	}
 }
 
-func normalizeAutomationConditions(req automationConditionsRequest) (model.AutomationConditions, error) {
+func normalizeAutomationStatusList(values []string, fieldName string) ([]model.TaskStatus, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	result := make([]model.TaskStatus, 0, len(values))
+	seen := map[model.TaskStatus]struct{}{}
+	for _, value := range values {
+		status, ok := parseExplicitTaskStatus(value)
+		if !ok {
+			return nil, fmt.Errorf("%s 只能包含 pending、queued、processing、reviewing 或 completed", fieldName)
+		}
+		if _, exists := seen[status]; exists {
+			continue
+		}
+		seen[status] = struct{}{}
+		result = append(result, status)
+	}
+	return result, nil
+}
+
+func normalizeAutomationConditions(req automationConditionsRequest, trigger model.AutomationTrigger) (model.AutomationConditions, error) {
 	overdueDays := 1
 	if req.OverdueDays != nil {
 		overdueDays = *req.OverdueDays
@@ -48,9 +74,22 @@ func normalizeAutomationConditions(req automationConditionsRequest) (model.Autom
 	if overdueDays < 0 {
 		return model.AutomationConditions{}, fmt.Errorf("逾期天数不能小于 0")
 	}
+	fromStatuses, err := normalizeAutomationStatusList(req.FromStatuses, "fromStatuses")
+	if err != nil {
+		return model.AutomationConditions{}, err
+	}
+	toStatuses, err := normalizeAutomationStatusList(req.ToStatuses, "toStatuses")
+	if err != nil {
+		return model.AutomationConditions{}, err
+	}
+	if trigger == model.AutomationTriggerTaskStatusChanged && len(req.FromStatuses) == 0 && len(req.ToStatuses) == 0 {
+		return model.AutomationConditions{}, fmt.Errorf("状态变更规则至少需要设置变更前或变更后状态")
+	}
 	return model.AutomationConditions{
-		OverdueDays: overdueDays,
-		ProjectIDs:  uniqueUint(req.ProjectIDs),
+		OverdueDays:  overdueDays,
+		ProjectIDs:   uniqueUint(req.ProjectIDs),
+		FromStatuses: fromStatuses,
+		ToStatuses:   toStatuses,
 	}, nil
 }
 
@@ -61,11 +100,16 @@ func boolValue(value *bool, fallback bool) bool {
 	return *value
 }
 
-func normalizeAutomationActions(req automationActionsRequest) (model.AutomationActions, error) {
+func normalizeAutomationActions(req automationActionsRequest, trigger model.AutomationTrigger) (model.AutomationActions, error) {
 	defaultActions := req.NotifyAssignees == nil && req.NotifyProjectOwners == nil
 	actions := model.AutomationActions{
 		NotifyAssignees:     boolValue(req.NotifyAssignees, defaultActions),
 		NotifyProjectOwners: boolValue(req.NotifyProjectOwners, defaultActions),
+		AddComment:          boolValue(req.AddComment, false),
+		CommentContent:      strings.TrimSpace(req.CommentContent),
+	}
+	if trigger == model.AutomationTriggerTaskStatusChanged && actions.AddComment {
+		return actions, nil
 	}
 	if !actions.NotifyAssignees && !actions.NotifyProjectOwners {
 		return model.AutomationActions{}, fmt.Errorf("至少需要启用一个通知对象")
@@ -80,13 +124,13 @@ func buildAutomationRuleFromRequest(req automationRuleRequest, actorID uint) (mo
 	}
 	trigger, ok := normalizeAutomationTrigger(req.Trigger)
 	if !ok {
-		return model.AutomationRule{}, fmt.Errorf("触发器必须是 task_overdue")
+		return model.AutomationRule{}, fmt.Errorf("触发器必须是 task_overdue 或 task_status_changed")
 	}
-	conditions, err := normalizeAutomationConditions(req.Conditions)
+	conditions, err := normalizeAutomationConditions(req.Conditions, trigger)
 	if err != nil {
 		return model.AutomationRule{}, err
 	}
-	actions, err := normalizeAutomationActions(req.Actions)
+	actions, err := normalizeAutomationActions(req.Actions, trigger)
 	if err != nil {
 		return model.AutomationRule{}, err
 	}
@@ -328,6 +372,117 @@ func (h *Handler) executeTaskOverdueRule(tx *gorm.DB, c *gin.Context, rule model
 	return len(tasks), actionCount, uniqueUint(notifiedIDs), fmt.Sprintf("匹配 %d 个逾期任务，发送 %d 条通知", len(tasks), actionCount), nil
 }
 
+func containsTaskStatus(values []model.TaskStatus, target model.TaskStatus) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func taskStatusChangeRuleMatches(conditions model.AutomationConditions, task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus) bool {
+	if oldStatus == newStatus {
+		return false
+	}
+	if len(conditions.ProjectIDs) > 0 && !containsUint(conditions.ProjectIDs, task.ProjectID) {
+		return false
+	}
+	if len(conditions.FromStatuses) > 0 && !containsTaskStatus(conditions.FromStatuses, oldStatus) {
+		return false
+	}
+	if len(conditions.ToStatuses) > 0 && !containsTaskStatus(conditions.ToStatuses, newStatus) {
+		return false
+	}
+	return true
+}
+
+func renderAutomationCommentContent(template string, task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus) string {
+	content := strings.TrimSpace(template)
+	if content == "" {
+		content = "自动化：任务状态已从 {fromStatus} 更新为 {toStatus}"
+	}
+	replacer := strings.NewReplacer(
+		"{taskNo}", task.TaskNo,
+		"{title}", task.Title,
+		"{fromStatus}", string(oldStatus),
+		"{toStatus}", string(newStatus),
+	)
+	return replacer.Replace(content)
+}
+
+func taskStatusChangedNotificationContent(task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus) string {
+	return fmt.Sprintf("任务 %s - %s 状态已从 %s 更新为 %s", task.TaskNo, task.Title, oldStatus, newStatus)
+}
+
+func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus, actorID uint) ([]uint, error) {
+	if oldStatus == newStatus {
+		return nil, nil
+	}
+
+	if err := tx.Preload("Assignees").Preload("Project.Users").First(&task, task.ID).Error; err != nil {
+		return nil, err
+	}
+
+	var rules []model.AutomationRule
+	if err := tx.Where("is_enabled = ? AND trigger = ?", true, model.AutomationTriggerTaskStatusChanged).Order("id asc").Find(&rules).Error; err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	notifiedIDs := make([]uint, 0)
+	for _, rule := range rules {
+		if !taskStatusChangeRuleMatches(rule.Conditions, task, oldStatus, newStatus) {
+			continue
+		}
+
+		actionCount := 0
+		recipients := automationTaskRecipients(task, rule.Actions)
+		if len(recipients) > 0 {
+			content := taskStatusChangedNotificationContent(task, oldStatus, newStatus)
+			if err := h.createNotificationsWithDB(tx, recipients, "任务状态已变更", content, "tasks", task.ID); err != nil {
+				return notifiedIDs, err
+			}
+			actionCount += len(recipients)
+			notifiedIDs = append(notifiedIDs, recipients...)
+		}
+
+		if rule.Actions.AddComment {
+			comment := model.TaskComment{
+				TaskID:   task.ID,
+				AuthorID: actorID,
+				Content:  renderAutomationCommentContent(rule.Actions.CommentContent, task, oldStatus, newStatus),
+			}
+			if err := tx.Create(&comment).Error; err != nil {
+				return notifiedIDs, err
+			}
+			commentID := comment.ID
+			if err := h.writeTaskActivityWithDB(tx, task.ID, actorID, "automation.comment_created", "自动化评论", comment.Content, &commentID); err != nil {
+				return notifiedIDs, err
+			}
+			actionCount += 1
+		}
+
+		logItem := model.AutomationExecutionLog{
+			RuleID:       rule.ID,
+			Trigger:      rule.Trigger,
+			Status:       model.AutomationExecutionSuccess,
+			MatchedCount: 1,
+			ActionCount:  actionCount,
+			Message:      fmt.Sprintf("任务 %s 状态从 %s 更新为 %s，执行 %d 个动作", task.TaskNo, oldStatus, newStatus, actionCount),
+			ActorID:      actorID,
+			RunSource:    "event",
+		}
+		if err := tx.Create(&logItem).Error; err != nil {
+			return notifiedIDs, err
+		}
+		if err := tx.Model(&model.AutomationRule{}).Where("id = ?", rule.ID).Update("last_run_at", now).Error; err != nil {
+			return notifiedIDs, err
+		}
+	}
+	return uniqueUint(notifiedIDs), nil
+}
+
 func (h *Handler) recordAutomationFailure(rule model.AutomationRule, actorID uint, source string, execErr error) model.AutomationExecutionLog {
 	logItem := model.AutomationExecutionLog{
 		RuleID:    rule.ID,
@@ -368,13 +523,18 @@ func (h *Handler) executeAutomationRule(c *gin.Context, rule model.AutomationRul
 		switch rule.Trigger {
 		case model.AutomationTriggerTaskOverdue:
 			logItem.MatchedCount, logItem.ActionCount, notifiedIDs, logItem.Message, err = h.executeTaskOverdueRule(tx, c, rule, now)
+		case model.AutomationTriggerTaskStatusChanged:
+			logItem.Status = model.AutomationExecutionSkipped
+			logItem.Message = "状态变更规则仅在任务状态变更事件中执行"
 		default:
 			err = fmt.Errorf("不支持的自动化触发器：%s", rule.Trigger)
 		}
 		if err != nil {
 			return err
 		}
-		logItem.Status = model.AutomationExecutionSuccess
+		if logItem.Status == "" {
+			logItem.Status = model.AutomationExecutionSuccess
+		}
 		if err := tx.Create(&logItem).Error; err != nil {
 			return err
 		}
@@ -406,7 +566,7 @@ func (h *Handler) RunAutomationRule(c *gin.Context) {
 
 func (h *Handler) RunEnabledAutomationRules(now time.Time, source string) (int, error) {
 	var rules []model.AutomationRule
-	if err := h.DB.Where("is_enabled = ?", true).Find(&rules).Error; err != nil {
+	if err := h.DB.Where("is_enabled = ? AND trigger = ?", true, model.AutomationTriggerTaskOverdue).Find(&rules).Error; err != nil {
 		return 0, err
 	}
 	var firstErr error

@@ -104,6 +104,7 @@
 | `POST /automation-rules` | `automations.create` |
 | `PUT /automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
 | `DELETE /automation-rules/:id` | `automations.delete` |
+| 自动化状态变更触发的通知/评论 | 由已启用规则在任务状态写事务内执行；触发人仍需通过任务接口原有权限与可见范围校验，不额外要求 `comments.create` 或 `notifications.update` |
 | `GET /stats/dashboard` `GET /stats/project-health` | `stats.read`；普通用户按任务可见范围聚合 |
 | `GET /notifications` `GET /notifications/unread-count` | `notifications.read` |
 | `PATCH /notifications/:id/read` `PATCH /notifications/read-all` | `notifications.update` |

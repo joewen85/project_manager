@@ -2,7 +2,7 @@ export type Status = 'pending' | 'queued' | 'processing' | 'reviewing' | 'comple
 export type TaskPriority = 'high' | 'medium' | 'low'
 export type WorkRequestType = 'project' | 'task' | 'bug' | 'change'
 export type WorkRequestStatus = 'submitted' | 'approved' | 'rejected' | 'converted'
-export type AutomationTrigger = 'task_overdue'
+export type AutomationTrigger = 'task_overdue' | 'task_status_changed'
 export type AutomationExecutionStatus = 'success' | 'skipped' | 'failed'
 
 export interface PageResult<T> {
@@ -167,11 +167,15 @@ export interface ProjectTemplate {
 export interface AutomationConditions {
   overdueDays: number
   projectIds?: number[]
+  fromStatuses?: Status[]
+  toStatuses?: Status[]
 }
 
 export interface AutomationActions {
   notifyAssignees: boolean
   notifyProjectOwners: boolean
+  addComment?: boolean
+  commentContent?: string
 }
 
 export interface AutomationRule {
@@ -198,7 +202,7 @@ export interface AutomationExecutionLog {
   actionCount: number
   message: string
   actorId?: number
-  runSource: 'manual' | 'scheduled'
+  runSource: 'manual' | 'scheduled' | 'event'
   createdAt: string
   updatedAt?: string
 }

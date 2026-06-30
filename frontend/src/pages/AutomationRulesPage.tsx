@@ -5,31 +5,50 @@ import { FilterPanel } from '../components/FilterPanel'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { SearchField } from '../components/SearchField'
-import { AutomationExecutionLog, AutomationRule, Project } from '../types'
+import { AutomationExecutionLog, AutomationRule, AutomationTrigger, Project, Status } from '../types'
 import { formatDateTime } from '../utils/datetime'
 import { usePermissions } from '../hooks/usePermissions'
 
 interface AutomationRuleForm {
   id?: number
+  trigger: AutomationTrigger
   name: string
   isEnabled: boolean
   overdueDays: number
   projectIds: number[]
+  fromStatuses: Status[]
+  toStatuses: Status[]
   notifyAssignees: boolean
   notifyProjectOwners: boolean
+  addComment: boolean
+  commentContent: string
 }
 
 const initialForm: AutomationRuleForm = {
+  trigger: 'task_overdue',
   name: '',
   isEnabled: true,
   overdueDays: 1,
   projectIds: [],
+  fromStatuses: [],
+  toStatuses: [],
   notifyAssignees: true,
-  notifyProjectOwners: true
+  notifyProjectOwners: true,
+  addComment: false,
+  commentContent: ''
 }
 
-const triggerLabel = {
-  task_overdue: '任务逾期'
+const triggerLabel: Record<AutomationTrigger, string> = {
+  task_overdue: '任务逾期',
+  task_status_changed: '任务状态变更'
+}
+
+const taskStatusLabel: Record<Status, string> = {
+  pending: '待处理',
+  queued: '排队中',
+  processing: '进行中',
+  reviewing: '审核中',
+  completed: '已完成'
 }
 
 const statusLabel = {
@@ -40,10 +59,14 @@ const statusLabel = {
 
 const sourceLabel = {
   manual: '手动',
-  scheduled: '定时'
+  scheduled: '定时',
+  event: '事件'
 }
 
+const statusOptions: Status[] = ['pending', 'queued', 'processing', 'reviewing', 'completed']
 const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
+const toggleStatus = (list: Status[], status: Status) => list.includes(status) ? list.filter((item) => item !== status) : [...list, status]
+const formatStatuses = (statuses?: Status[]) => statuses?.length ? statuses.map((status) => taskStatusLabel[status]).join('，') : '任意'
 
 export function AutomationRulesPage() {
   const permissions = usePermissions()
@@ -57,6 +80,7 @@ export function AutomationRulesPage() {
   const [keywordInput, setKeywordInput] = useState('')
   const [keyword, setKeyword] = useState('')
   const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
+  const [triggerFilter, setTriggerFilter] = useState<'all' | AutomationTrigger>('all')
   const [form, setForm] = useState<AutomationRuleForm>(initialForm)
   const [loading, setLoading] = useState(false)
   const [logLoading, setLogLoading] = useState(false)
@@ -69,7 +93,7 @@ export function AutomationRulesPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
-  const activeFilterCount = Number(Boolean(keyword.trim())) + Number(enabledFilter !== 'all')
+  const activeFilterCount = Number(Boolean(keyword.trim())) + Number(enabledFilter !== 'all') + Number(triggerFilter !== 'all')
 
   const projectNameById = useMemo(() => new Map(projects.map((project) => [project.id, `${project.code} - ${project.name}`])), [projects])
 
@@ -78,9 +102,10 @@ export function AutomationRulesPage() {
       setLoading(true)
       setError('')
       const isEnabled = enabledFilter === 'all' ? '' : enabledFilter === 'enabled'
+      const trigger = triggerFilter === 'all' ? '' : triggerFilter
       const pageData = await fetchPage<AutomationRule>(
         '/automation-rules',
-        { page, pageSize, keyword, trigger: 'task_overdue', isEnabled },
+        { page, pageSize, keyword, trigger, isEnabled },
         { page, pageSize }
       )
       setItems(pageData.list)
@@ -108,7 +133,7 @@ export function AutomationRulesPage() {
     }
   }
 
-  useEffect(() => { void load() }, [page, pageSize, keyword, enabledFilter])
+  useEffect(() => { void load() }, [page, pageSize, keyword, enabledFilter, triggerFilter])
   useEffect(() => { void loadLogs() }, [])
 
   useEffect(() => {
@@ -133,12 +158,17 @@ export function AutomationRulesPage() {
     if (!canUpdateRule) return
     setForm({
       id: item.id,
+      trigger: item.trigger,
       name: item.name,
       isEnabled: item.isEnabled,
       overdueDays: item.conditions?.overdueDays ?? 1,
       projectIds: item.conditions?.projectIds || [],
+      fromStatuses: item.conditions?.fromStatuses || [],
+      toStatuses: item.conditions?.toStatuses || [],
       notifyAssignees: item.actions?.notifyAssignees ?? true,
-      notifyProjectOwners: item.actions?.notifyProjectOwners ?? true
+      notifyProjectOwners: item.actions?.notifyProjectOwners ?? true,
+      addComment: item.actions?.addComment ?? false,
+      commentContent: item.actions?.commentContent || ''
     })
     setFormError('')
     setFormSuccess('')
@@ -149,8 +179,14 @@ export function AutomationRulesPage() {
     event.preventDefault()
     if (form.id && !canUpdateRule) return
     if (!form.id && !canCreateRule) return
-    if (!form.notifyAssignees && !form.notifyProjectOwners) {
-      setFormError('至少选择一个通知对象')
+    const hasNotificationAction = form.notifyAssignees || form.notifyProjectOwners
+    const hasCommentAction = form.trigger === 'task_status_changed' && form.addComment
+    if (!hasNotificationAction && !hasCommentAction) {
+      setFormError('至少选择一个动作')
+      return
+    }
+    if (form.trigger === 'task_status_changed' && form.fromStatuses.length === 0 && form.toStatuses.length === 0) {
+      setFormError('至少选择一个状态条件')
       return
     }
     try {
@@ -158,15 +194,19 @@ export function AutomationRulesPage() {
       setFormError('')
       const payload = {
         name: form.name,
-        trigger: 'task_overdue',
+        trigger: form.trigger,
         isEnabled: form.isEnabled,
         conditions: {
           overdueDays: Number(form.overdueDays || 0),
-          projectIds: form.projectIds
+          projectIds: form.projectIds,
+          fromStatuses: form.trigger === 'task_status_changed' ? form.fromStatuses : [],
+          toStatuses: form.trigger === 'task_status_changed' ? form.toStatuses : []
         },
         actions: {
           notifyAssignees: form.notifyAssignees,
-          notifyProjectOwners: form.notifyProjectOwners
+          notifyProjectOwners: form.notifyProjectOwners,
+          addComment: form.trigger === 'task_status_changed' ? form.addComment : false,
+          commentContent: form.trigger === 'task_status_changed' ? form.commentContent.trim() : ''
         }
       }
       if (form.id) await api.put(`/automation-rules/${form.id}`, payload)
@@ -237,6 +277,11 @@ export function AutomationRulesPage() {
           <option value="enabled">已启用</option>
           <option value="disabled">已停用</option>
         </select>
+        <select value={triggerFilter} aria-label="触发器筛选" onChange={(event) => { setTriggerFilter(event.target.value as typeof triggerFilter); setPage(1) }}>
+          <option value="all">全部触发器</option>
+          <option value="task_overdue">任务逾期</option>
+          <option value="task_status_changed">任务状态变更</option>
+        </select>
         <div className="row-actions">
           <button className="btn" onClick={() => { setPage(1); setKeyword(keywordInput.trim()) }}>查询</button>
         </div>
@@ -255,13 +300,16 @@ export function AutomationRulesPage() {
                 <td data-label="触发器">{triggerLabel[item.trigger]}</td>
                 <td data-label="状态">{item.isEnabled ? '已启用' : '已停用'}</td>
                 <td data-label="条件">
-                  逾期 {item.conditions?.overdueDays ?? 1} 天
+                  {item.trigger === 'task_overdue'
+                    ? `逾期 ${item.conditions?.overdueDays ?? 1} 天`
+                    : `从 ${formatStatuses(item.conditions?.fromStatuses)} 到 ${formatStatuses(item.conditions?.toStatuses)}`}
                   {item.conditions?.projectIds?.length ? `；项目 ${item.conditions.projectIds.map((id) => projectNameById.get(id) || id).join('，')}` : ''}
                 </td>
                 <td data-label="动作">
                   {[
                     item.actions?.notifyAssignees ? '通知执行人' : '',
-                    item.actions?.notifyProjectOwners ? '通知项目负责人' : ''
+                    item.actions?.notifyProjectOwners ? '通知项目负责人' : '',
+                    item.actions?.addComment ? '添加评论' : ''
                   ].filter(Boolean).join('，') || '-'}
                 </td>
                 <td data-label="最近执行">{formatDateTime(item.lastRunAt)}</td>
@@ -310,16 +358,54 @@ export function AutomationRulesPage() {
           <label className="required-label" htmlFor="automation-name">规则名称</label>
           <input id="automation-name" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required />
           <label htmlFor="automation-trigger">触发器</label>
-          <select id="automation-trigger" value="task_overdue" disabled>
+          <select
+            id="automation-trigger"
+            value={form.trigger}
+            onChange={(event) => setForm((prev) => ({
+              ...prev,
+              trigger: event.target.value as AutomationTrigger,
+              fromStatuses: [],
+              toStatuses: [],
+              addComment: false,
+              commentContent: ''
+            }))}
+          >
             <option value="task_overdue">任务逾期</option>
+            <option value="task_status_changed">任务状态变更</option>
           </select>
           <label htmlFor="automation-enabled">启用状态</label>
           <select id="automation-enabled" value={form.isEnabled ? 'enabled' : 'disabled'} onChange={(event) => setForm((prev) => ({ ...prev, isEnabled: event.target.value === 'enabled' }))}>
             <option value="enabled">已启用</option>
             <option value="disabled">已停用</option>
           </select>
-          <label className="required-label" htmlFor="automation-overdue-days">逾期天数</label>
-          <input id="automation-overdue-days" type="number" min={0} value={form.overdueDays} onChange={(event) => setForm((prev) => ({ ...prev, overdueDays: Number(event.target.value) }))} required />
+          {form.trigger === 'task_overdue' && (
+            <>
+              <label className="required-label" htmlFor="automation-overdue-days">逾期天数</label>
+              <input id="automation-overdue-days" type="number" min={0} value={form.overdueDays} onChange={(event) => setForm((prev) => ({ ...prev, overdueDays: Number(event.target.value) }))} required />
+            </>
+          )}
+          {form.trigger === 'task_status_changed' && (
+            <>
+              <label htmlFor="automation-from-statuses">变更前状态</label>
+              <div id="automation-from-statuses" className="multi-checklist">
+                {statusOptions.map((status) => (
+                  <label key={status} className="multi-check-item">
+                    <input type="checkbox" checked={form.fromStatuses.includes(status)} onChange={() => setForm((prev) => ({ ...prev, fromStatuses: toggleStatus(prev.fromStatuses, status) }))} />
+                    <span>{taskStatusLabel[status]}</span>
+                  </label>
+                ))}
+              </div>
+              <label htmlFor="automation-to-statuses">变更后状态</label>
+              <div id="automation-to-statuses" className="multi-checklist">
+                {statusOptions.map((status) => (
+                  <label key={status} className="multi-check-item">
+                    <input type="checkbox" checked={form.toStatuses.includes(status)} onChange={() => setForm((prev) => ({ ...prev, toStatuses: toggleStatus(prev.toStatuses, status) }))} />
+                    <span>{taskStatusLabel[status]}</span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
           {canReadProjects && (
             <>
               <label htmlFor="automation-projects">项目范围</label>
@@ -345,6 +431,23 @@ export function AutomationRulesPage() {
               <span>项目负责人</span>
             </label>
           </div>
+          {form.trigger === 'task_status_changed' && (
+            <>
+              <label htmlFor="automation-comment-action">自动评论</label>
+              <div id="automation-comment-action" className="multi-checklist">
+                <label className="multi-check-item">
+                  <input type="checkbox" checked={form.addComment} onChange={() => setForm((prev) => ({ ...prev, addComment: !prev.addComment }))} />
+                  <span>添加评论</span>
+                </label>
+              </div>
+              {form.addComment && (
+                <>
+                  <label htmlFor="automation-comment-content">评论内容</label>
+                  <textarea id="automation-comment-content" value={form.commentContent} onChange={(event) => setForm((prev) => ({ ...prev, commentContent: event.target.value }))} rows={3} />
+                </>
+              )}
+            </>
+          )}
           <div className="row-actions">
             <button type="submit" className="btn" disabled={submitting || (form.id ? !canUpdateRule : !canCreateRule)}>{submitting ? '保存中...' : '保存规则'}</button>
             <button type="button" className="btn secondary" onClick={() => setForm(initialForm)}>重置</button>

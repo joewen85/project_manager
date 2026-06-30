@@ -41,7 +41,8 @@ const (
 type AutomationTrigger string
 
 const (
-	AutomationTriggerTaskOverdue AutomationTrigger = "task_overdue"
+	AutomationTriggerTaskOverdue       AutomationTrigger = "task_overdue"
+	AutomationTriggerTaskStatusChanged AutomationTrigger = "task_status_changed"
 )
 
 type AutomationExecutionStatus string
@@ -232,13 +233,17 @@ type WorkRequest struct {
 }
 
 type AutomationConditions struct {
-	OverdueDays int    `json:"overdueDays"`
-	ProjectIDs  []uint `json:"projectIds"`
+	OverdueDays  int          `json:"overdueDays"`
+	ProjectIDs   []uint       `json:"projectIds"`
+	FromStatuses []TaskStatus `json:"fromStatuses"`
+	ToStatuses   []TaskStatus `json:"toStatuses"`
 }
 
 type AutomationActions struct {
-	NotifyAssignees     bool `json:"notifyAssignees"`
-	NotifyProjectOwners bool `json:"notifyProjectOwners"`
+	NotifyAssignees     bool   `json:"notifyAssignees"`
+	NotifyProjectOwners bool   `json:"notifyProjectOwners"`
+	AddComment          bool   `json:"addComment"`
+	CommentContent      string `json:"commentContent"`
 }
 
 type AutomationRule struct {
