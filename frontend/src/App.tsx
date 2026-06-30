@@ -9,6 +9,7 @@ const DepartmentsPage = lazy(async () => import('./pages/DepartmentsPage').then(
 const LoginPage = lazy(async () => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })))
 const MyWorkPage = lazy(async () => import('./pages/MyWorkPage').then((module) => ({ default: module.MyWorkPage })))
 const NotificationsPage = lazy(async () => import('./pages/NotificationsPage').then((module) => ({ default: module.NotificationsPage })))
+const ProjectTemplatesPage = lazy(async () => import('./pages/ProjectTemplatesPage').then((module) => ({ default: module.ProjectTemplatesPage })))
 const RequestsPage = lazy(async () => import('./pages/RequestsPage').then((module) => ({ default: module.RequestsPage })))
 const TagsPage = lazy(async () => import('./pages/TagsPage').then((module) => ({ default: module.TagsPage })))
 const ProjectsPage = lazy(async () => import('./pages/ProjectsPage').then((module) => ({ default: module.ProjectsPage })))
@@ -42,6 +43,7 @@ const protectedRoutes = [
   { path: '/departments', permission: 'departments.read' },
   { path: '/tags', permission: 'tags.read' },
   { path: '/projects', permission: 'projects.read' },
+  { path: '/project-templates', permission: 'templates.read' },
   { path: '/gantt', permission: 'projects.read' },
   { path: '/tasks', permission: 'tasks.read' },
   { path: '/requests', permission: 'requests.read' },
@@ -135,6 +137,7 @@ export default function App() {
           <Route path="departments" element={<PermissionGuard permission="departments.read"><DepartmentsPage /></PermissionGuard>} />
           <Route path="tags" element={<PermissionGuard permission="tags.read"><TagsPage /></PermissionGuard>} />
           <Route path="projects" element={<PermissionGuard permission="projects.read"><ProjectsPage /></PermissionGuard>} />
+          <Route path="project-templates" element={<PermissionGuard permission="templates.read"><ProjectTemplatesPage /></PermissionGuard>} />
           <Route path="gantt" element={<PermissionGuard permission="projects.read"><GanttPage /></PermissionGuard>} />
           <Route path="tasks" element={<PermissionGuard permission="tasks.read"><TasksPage /></PermissionGuard>} />
           <Route path="requests" element={<PermissionGuard permission="requests.read"><RequestsPage /></PermissionGuard>} />

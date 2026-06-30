@@ -108,6 +108,31 @@ type Project struct {
 	Tasks       []Task       `json:"tasks,omitempty"`
 }
 
+type TemplateTaskDependency struct {
+	DependsOnKey string `json:"dependsOnKey"`
+	LagDays      int    `json:"lagDays"`
+	Type         string `json:"type"`
+}
+
+type TemplateTask struct {
+	Key              string                   `json:"key"`
+	Title            string                   `json:"title"`
+	Description      string                   `json:"description"`
+	Priority         TaskPriority             `json:"priority"`
+	IsMilestone      bool                     `json:"isMilestone"`
+	RelativeStartDay int                      `json:"relativeStartDay"`
+	DurationDays     int                      `json:"durationDays"`
+	Dependencies     []TemplateTaskDependency `json:"dependencies"`
+	Children         []TemplateTask           `json:"children"`
+}
+
+type ProjectTemplate struct {
+	BaseModel
+	Name        string         `gorm:"size:150;uniqueIndex;not null" json:"name"`
+	Description string         `gorm:"type:text" json:"description"`
+	TaskTree    []TemplateTask `gorm:"serializer:json" json:"taskTree"`
+}
+
 type Task struct {
 	BaseModel
 	TaskNo       string           `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`

@@ -1671,6 +1671,219 @@ func TestWorkRequestSubmitReviewAndConvertToTask(t *testing.T) {
 	}
 }
 
+func TestProjectTemplateCreateAndGenerateProjectTree(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	creatorOnlyRoleResp, creatorOnlyRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "template-project-creator-only",
+		"description": "can create projects but cannot read templates",
+		"permissionIds": []uint{
+			codeToID["projects.create"],
+		},
+	})
+	if creatorOnlyRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create creator-only role expected 201 got %d", creatorOnlyRoleResp.StatusCode)
+	}
+	creatorOnlyRoleID := uint(creatorOnlyRoleBody["id"].(float64))
+
+	creatorResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "template_creator_only",
+		"name":          "Template Creator Only",
+		"email":         "template_creator_only@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{creatorOnlyRoleID},
+		"departmentIds": []uint{},
+	})
+	if creatorResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create creator-only user expected 201 got %d", creatorResp.StatusCode)
+	}
+	creatorLoginStatus, creatorLoginBody := loginWithCredentials(t, ts.URL, "template_creator_only", "pass1234")
+	if creatorLoginStatus != http.StatusOK {
+		t.Fatalf("login creator-only expected 200 got %d", creatorLoginStatus)
+	}
+	creatorOnlyToken := creatorLoginBody["token"].(string)
+
+	templatePayload := map[string]any{
+		"name":        "上线项目模板",
+		"description": "标准上线项目任务树",
+		"taskTree": []map[string]any{
+			{
+				"key":              "plan",
+				"title":            "制定上线计划",
+				"description":      "确认范围和节奏",
+				"priority":         "high",
+				"isMilestone":      true,
+				"relativeStartDay": 0,
+				"durationDays":     1,
+				"children": []map[string]any{
+					{
+						"key":              "design",
+						"title":            "设计发布方案",
+						"description":      "设计灰度和回滚方案",
+						"priority":         "medium",
+						"relativeStartDay": 1,
+						"durationDays":     3,
+						"dependencies": []map[string]any{
+							{"dependsOnKey": "plan", "lagDays": 1, "type": "FS"},
+						},
+					},
+				},
+			},
+			{
+				"key":              "release",
+				"title":            "执行发布",
+				"priority":         "high",
+				"isMilestone":      true,
+				"relativeStartDay": 5,
+				"durationDays":     1,
+				"dependencies": []map[string]any{
+					{"dependsOnKey": "design", "type": "FS"},
+				},
+			},
+		},
+	}
+
+	createResp, createBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-templates", adminToken, templatePayload)
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create project template expected 201 got %d %#v", createResp.StatusCode, createBody)
+	}
+	templateID := int(createBody["id"].(float64))
+	if createBody["name"] != "上线项目模板" {
+		t.Fatalf("unexpected template body %#v", createBody)
+	}
+
+	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/project-templates?keyword=上线", adminToken, nil)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list templates expected 200 got %d", listResp.StatusCode)
+	}
+	if list, ok := listBody["list"].([]any); !ok || len(list) != 1 {
+		t.Fatalf("template list should include created item got %#v", listBody)
+	}
+
+	updatedPayload := map[string]any{
+		"name":        "上线项目模板 v2",
+		"description": "更新后的标准上线项目任务树",
+		"taskTree":    templatePayload["taskTree"],
+	}
+	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/project-templates/"+strconv.Itoa(templateID), adminToken, updatedPayload)
+	if updateResp.StatusCode != http.StatusOK {
+		t.Fatalf("update project template expected 200 got %d %#v", updateResp.StatusCode, updateBody)
+	}
+	if updateBody["name"] != "上线项目模板 v2" {
+		t.Fatalf("template name should update got %#v", updateBody)
+	}
+
+	forbiddenGenerateResp, forbiddenGenerateBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-templates/"+strconv.Itoa(templateID)+"/create-project", creatorOnlyToken, map[string]any{
+		"code":    "TPL-FORBID",
+		"name":    "Forbidden Template Project",
+		"startAt": "2026-07-01T00:00:00Z",
+	})
+	if forbiddenGenerateResp.StatusCode != http.StatusForbidden || forbiddenGenerateBody["code"] != "PROJECT_TEMPLATE_READ_REQUIRED" {
+		t.Fatalf("create project without template read expected 403 PROJECT_TEMPLATE_READ_REQUIRED got %d %#v", forbiddenGenerateResp.StatusCode, forbiddenGenerateBody)
+	}
+
+	generateResp, generateBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-templates/"+strconv.Itoa(templateID)+"/create-project", adminToken, map[string]any{
+		"code":    "TPL-PROJ-1",
+		"name":    "模板生成项目",
+		"startAt": "2026-07-01T00:00:00Z",
+	})
+	if generateResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create project from template expected 201 got %d %#v", generateResp.StatusCode, generateBody)
+	}
+	project, ok := generateBody["project"].(map[string]any)
+	if !ok {
+		t.Fatalf("generate response should include project got %#v", generateBody)
+	}
+	projectID := int(project["id"].(float64))
+	if project["code"] != "TPL-PROJ-1" || project["name"] != "模板生成项目" {
+		t.Fatalf("generated project should keep requested code/name got %#v", project)
+	}
+	tasks, ok := generateBody["tasks"].([]any)
+	if !ok || len(tasks) != 3 {
+		t.Fatalf("generated response should include 3 tasks got %#v", generateBody["tasks"])
+	}
+
+	taskByTitle := map[string]map[string]any{}
+	for _, rawTask := range tasks {
+		task, castOK := rawTask.(map[string]any)
+		if !castOK {
+			t.Fatalf("unexpected task item %#v", rawTask)
+		}
+		taskByTitle[task["title"].(string)] = task
+		if int(task["projectId"].(float64)) != projectID {
+			t.Fatalf("generated task should belong to project %d got %#v", projectID, task)
+		}
+	}
+	plan := taskByTitle["制定上线计划"]
+	design := taskByTitle["设计发布方案"]
+	release := taskByTitle["执行发布"]
+	if plan == nil || design == nil || release == nil {
+		t.Fatalf("generated tasks missing expected titles: %#v", taskByTitle)
+	}
+	if design["parentId"] == nil || int(design["parentId"].(float64)) != int(plan["id"].(float64)) {
+		t.Fatalf("child task should point to plan parent got plan=%#v design=%#v", plan, design)
+	}
+	if plan["startAt"] != "2026-07-01T00:00:00Z" || design["startAt"] != "2026-07-02T00:00:00Z" || release["startAt"] != "2026-07-06T00:00:00Z" {
+		t.Fatalf("relative dates unexpected plan=%v design=%v release=%v", plan["startAt"], design["startAt"], release["startAt"])
+	}
+	if design["endAt"] != "2026-07-04T00:00:00Z" {
+		t.Fatalf("duration should set design endAt to 2026-07-04 got %v", design["endAt"])
+	}
+
+	rawTreeReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/projects/"+strconv.Itoa(projectID)+"/task-tree", nil)
+	rawTreeReq.Header.Set("Authorization", "Bearer "+adminToken)
+	rawTreeResp, err := http.DefaultClient.Do(rawTreeReq)
+	if err != nil {
+		t.Fatalf("request task tree failed: %v", err)
+	}
+	defer rawTreeResp.Body.Close()
+	var rawTree []map[string]any
+	if err := json.NewDecoder(rawTreeResp.Body).Decode(&rawTree); err != nil {
+		t.Fatalf("decode task tree failed: %v", err)
+	}
+	if len(rawTree) != 2 {
+		t.Fatalf("task tree should have 2 roots got %#v", rawTree)
+	}
+	var planRoot map[string]any
+	for _, root := range rawTree {
+		if root["title"] == "制定上线计划" {
+			planRoot = root
+		}
+	}
+	children, _ := planRoot["children"].([]any)
+	if len(children) != 1 {
+		t.Fatalf("plan root should include one child got %#v", planRoot)
+	}
+
+	ganttReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/projects/"+strconv.Itoa(projectID)+"/gantt", nil)
+	ganttReq.Header.Set("Authorization", "Bearer "+adminToken)
+	ganttResp, err := http.DefaultClient.Do(ganttReq)
+	if err != nil {
+		t.Fatalf("request gantt failed: %v", err)
+	}
+	defer ganttResp.Body.Close()
+	if ganttResp.StatusCode != http.StatusOK {
+		t.Fatalf("gantt expected 200 got %d", ganttResp.StatusCode)
+	}
+	var ganttItems []map[string]any
+	if err := json.NewDecoder(ganttResp.Body).Decode(&ganttItems); err != nil {
+		t.Fatalf("decode gantt failed: %v", err)
+	}
+	dependencyCount := 0
+	for _, item := range ganttItems {
+		if dependencies, ok := item["dependencies"].([]any); ok {
+			dependencyCount += len(dependencies)
+		}
+	}
+	if dependencyCount != 2 {
+		t.Fatalf("generated template dependencies expected 2 got %d items=%#v", dependencyCount, ganttItems)
+	}
+}
+
 func TestMyTasksReturnsEmptyArrays(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

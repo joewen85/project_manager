@@ -45,6 +45,10 @@
 | `requests.create` | 提交项目、任务、缺陷或变更请求 |
 | `requests.read` | 查看请求入口与审批记录 |
 | `requests.update` | 审批请求并转为任务 |
+| `templates.create` | 创建项目模板 |
+| `templates.read` | 查看项目模板 |
+| `templates.update` | 更新项目模板 |
+| `templates.delete` | 删除项目模板 |
 | `notifications.read` | 查看通知 |
 | `notifications.update` | 标记通知已读 |
 | `stats.read` | 查看统计分析 |
@@ -87,6 +91,11 @@
 | `GET /requests` | `requests.read`；普通用户仅查看自己提交的请求 |
 | `POST /requests` | `requests.create` |
 | `PATCH /requests/:id/review` `POST /requests/:id/convert-task` | `requests.update` |
+| `GET /project-templates` | `templates.read` |
+| `POST /project-templates` | `templates.create` |
+| `PUT /project-templates/:id` | `templates.update` |
+| `DELETE /project-templates/:id` | `templates.delete` |
+| `POST /project-templates/:id/create-project` | `projects.create` + `templates.read` |
 | `GET /stats/dashboard` `GET /stats/project-health` | `stats.read`；普通用户按任务可见范围聚合 |
 | `GET /notifications` `GET /notifications/unread-count` | `notifications.read` |
 | `PATCH /notifications/:id/read` `PATCH /notifications/read-all` | `notifications.update` |

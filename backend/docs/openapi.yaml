@@ -1214,6 +1214,108 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postRequestsByIdConvertTask
+  /project-templates:
+    get:
+      summary: 项目模板列表
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectTemplatePageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectTemplates
+    post:
+      summary: 创建项目模板
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectTemplateUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectTemplate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postProjectTemplates
+  /project-templates/{id}:
+    put:
+      summary: 更新项目模板
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectTemplateUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectTemplate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putProjectTemplatesById
+    delete:
+      summary: 删除项目模板
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteProjectTemplatesById
+  /project-templates/{id}/create-project:
+    post:
+      summary: 从模板生成项目
+      description: 需要 projects.create，且当前用户需具备 templates.read 或管理员角色。生成项目时会映射模板任务树、里程碑、相对排期和模板内依赖。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectFromTemplateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateProjectFromTemplateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postProjectTemplatesByIdCreateProject
   /stats/dashboard:
     get:
       summary: 仪表盘统计
@@ -1839,6 +1941,126 @@ components:
           type: array
           items:
             type: integer
+    TemplateTaskDependency:
+      type: object
+      required:
+      - dependsOnKey
+      properties:
+        dependsOnKey:
+          type: string
+          description: 模板内被依赖任务的 key
+        lagDays:
+          type: integer
+        type:
+          type: string
+          enum:
+          - FS
+          - SS
+          - FF
+          - SF
+    TemplateTask:
+      type: object
+      required:
+      - title
+      properties:
+        key:
+          type: string
+          description: 模板内唯一 key；为空时后端自动生成
+        title:
+          type: string
+        description:
+          type: string
+        priority:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+        isMilestone:
+          type: boolean
+        relativeStartDay:
+          type: integer
+          minimum: 0
+        durationDays:
+          type: integer
+          minimum: 1
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateTaskDependency'
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateTask'
+    ProjectTemplate:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        taskTree:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateTask'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProjectTemplateUpsertRequest:
+      type: object
+      required:
+      - name
+      - taskTree
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        taskTree:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateTask'
+    CreateProjectFromTemplateRequest:
+      type: object
+      required:
+      - name
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        userIds:
+          type: array
+          items:
+            type: integer
+        departmentIds:
+          type: array
+          items:
+            type: integer
+    CreateProjectFromTemplateResponse:
+      type: object
+      properties:
+        templateId:
+          type: integer
+        project:
+          $ref: '#/components/schemas/Project'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
     TaskDependencyRequest:
       type: object
       properties:
@@ -2456,6 +2678,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Project'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    ProjectTemplatePageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectTemplate'
         total:
           type: integer
           format: int64

@@ -135,6 +135,33 @@ export interface WorkRequest {
   updatedAt?: string
 }
 
+export interface TemplateTaskDependency {
+  dependsOnKey: string
+  lagDays?: number
+  type?: 'FS' | 'SS' | 'FF' | 'SF'
+}
+
+export interface TemplateTask {
+  key: string
+  title: string
+  description?: string
+  priority?: TaskPriority
+  isMilestone?: boolean
+  relativeStartDay?: number
+  durationDays?: number
+  dependencies?: TemplateTaskDependency[]
+  children?: TemplateTask[]
+}
+
+export interface ProjectTemplate {
+  id: number
+  name: string
+  description: string
+  taskTree: TemplateTask[]
+  createdAt?: string
+  updatedAt?: string
+}
+
 export interface Role {
   id: number
   name: string

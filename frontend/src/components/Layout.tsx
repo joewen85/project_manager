@@ -13,6 +13,7 @@ const menus = [
   { to: '/departments', label: '部门管理', icon: Building2, permission: 'departments.read' },
   { to: '/tags', label: '标签管理', icon: Tag, permission: 'tags.read' },
   { to: '/projects', label: '项目列表', icon: FolderKanban, permission: 'projects.read' },
+  { to: '/project-templates', label: '模板管理', icon: FolderKanban, permission: 'templates.read' },
   { to: '/gantt', label: '甘特模块', icon: CalendarRange, permission: 'projects.read' },
   { to: '/tasks', label: '任务列表', icon: ListChecks, permission: 'tasks.read' },
   { to: '/requests', label: '请求入口', icon: ClipboardList, permission: 'requests.read' },

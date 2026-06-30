@@ -54,6 +54,11 @@ var permissionCatalog = []permissionSeed{
 	{Code: "requests.read", Name: "请求-查看", Description: "查看请求入口与审批记录"},
 	{Code: "requests.update", Name: "请求-审批", Description: "审批请求并转为任务"},
 
+	{Code: "templates.create", Name: "模板-创建", Description: "创建项目模板"},
+	{Code: "templates.read", Name: "模板-查看", Description: "查看项目模板"},
+	{Code: "templates.update", Name: "模板-更新", Description: "更新项目模板"},
+	{Code: "templates.delete", Name: "模板-删除", Description: "删除项目模板"},
+
 	{Code: "tags.create", Name: "标签-创建", Description: "创建标签"},
 	{Code: "tags.read", Name: "标签-查看", Description: "查看标签"},
 	{Code: "tags.update", Name: "标签-更新", Description: "更新标签"},

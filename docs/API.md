@@ -53,6 +53,11 @@ Base URL: `http://localhost:8080/api/v1`
 | GET | `/requests` | `requests.read` |
 | POST | `/requests` | `requests.create` |
 | PATCH | `/requests/:id/review` `POST /requests/:id/convert-task` | `requests.update` |
+| GET | `/project-templates` | `templates.read` |
+| POST | `/project-templates` | `templates.create` |
+| PUT | `/project-templates/:id` | `templates.update` |
+| DELETE | `/project-templates/:id` | `templates.delete` |
+| POST | `/project-templates/:id/create-project` | `projects.create` + `templates.read` |
 | GET | `/stats/dashboard` `/stats/project-health` | `stats.read` |
 | GET | `/notifications` `/notifications/unread-count` | `notifications.read` |
 | PATCH | `/notifications/:id/read` `/notifications/read-all` | `notifications.update` |
@@ -265,6 +270,33 @@ Base URL: `http://localhost:8080/api/v1`
 - 请求体: `{ projectId, assigneeIds?, reviewerIds?, tagIds?, startAt?, endAt? }`
 - 规则: 已拒绝或已转换的请求不能再次转任务
 - 效果: 创建任务，复制请求标题/描述/优先级，回填 `convertedTaskId` 并将请求状态置为 `converted`
+
+## 项目模板
+
+### GET `/project-templates`
+- 权限: `templates.read`
+- Query: `page` `pageSize` `keyword`
+- 响应: `{ list, total, page, pageSize }`
+
+### POST `/project-templates`
+- 权限: `templates.create`
+- 请求体: `{ name, description?, taskTree }`
+- `taskTree` 节点: `{ key?, title, description?, priority?, isMilestone?, relativeStartDay?, durationDays?, dependencies?, children? }`
+- `dependencies` 节点: `{ dependsOnKey, lagDays?, type? }`，`type` 支持 `FS|SS|FF|SF`
+- 规则: 模板任务标题必填；`key` 全模板唯一；依赖只能引用同模板内任务 key；`durationDays <= 0` 时按 1 天处理
+
+### PUT `/project-templates/:id`
+- 权限: `templates.update`
+- 请求体同创建模板
+
+### DELETE `/project-templates/:id`
+- 权限: `templates.delete`
+
+### POST `/project-templates/:id/create-project`
+- 权限: `projects.create`，并要求当前用户具备 `templates.read` 或管理员角色
+- 请求体: `{ code?, name, description?, startAt?, endAt?, userIds?, departmentIds? }`
+- 效果: 创建项目并按模板任务树生成真实任务；任务编号自动生成；父子关系、里程碑、相对排期和模板内依赖会映射为真实任务关系
+- 响应: `{ templateId, project, tasks }`
 
 ## 统计分析
 
