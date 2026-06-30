@@ -316,7 +316,7 @@ Base URL: `http://localhost:8080/api/v1`
 - `task_status_changed` 条件: `{ projectIds?, fromStatuses?, toStatuses? }`；状态取值为 `pending`、`queued`、`processing`、`reviewing`、`completed`；至少配置一个变更前或变更后状态
 - `task_progress_changed` 条件: `{ projectIds?, fromProgressMin?, fromProgressMax?, toProgressMin?, toProgressMax? }`；进度边界取值 0-100；至少配置一个变更前或变更后进度边界
 - `task_assignee_changed` 条件: `{ projectIds?, assigneeChangeTypes }`；`assigneeChangeTypes` 取值为 `added`、`removed`，至少选择一种执行人变更类型
-- `actions`: `{ notifyAssignees?, notifyProjectOwners?, addComment?, commentContent? }`；逾期规则至少启用一个通知对象；状态/进度/执行人变更规则至少启用通知或添加评论；未传通知对象时默认同时通知执行人和项目负责人
+- `actions`: `{ notifyAssignees?, notifyProjectOwners?, addComment?, commentContent?, addTags?, tagIds? }`；逾期规则至少启用通知或添加标签；状态/进度/执行人变更规则至少启用通知、添加评论或添加标签；`addTags=true` 时必须配置 `tagIds`，执行时只追加任务缺失标签；未传通知对象时默认同时通知执行人和项目负责人
 - 状态/进度变更规则会在 `PUT /tasks/:id`、`PATCH /tasks/:id/status`、`PATCH /tasks/:id/progress`、`PATCH /tasks/:id/complete` 改变状态或进度时执行；执行人变更规则会在 `PUT /tasks/:id` 改变执行人集合时执行；事件规则写入 `runSource=event` 的执行日志
 
 ### PUT `/automation-rules/:id`

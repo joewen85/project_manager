@@ -182,6 +182,8 @@ export interface AutomationActions {
   notifyProjectOwners: boolean
   addComment?: boolean
   commentContent?: string
+  addTags?: boolean
+  tagIds?: number[]
 }
 
 export interface AutomationRule {

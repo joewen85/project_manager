@@ -2274,6 +2274,12 @@ components:
           type: boolean
         commentContent:
           type: string
+        addTags:
+          type: boolean
+        tagIds:
+          type: array
+          items:
+            type: integer
     AutomationRule:
       type: object
       properties:

@@ -258,6 +258,8 @@ type AutomationActions struct {
 	NotifyProjectOwners bool   `json:"notifyProjectOwners"`
 	AddComment          bool   `json:"addComment"`
 	CommentContent      string `json:"commentContent"`
+	AddTags             bool   `json:"addTags"`
+	TagIDs              []uint `json:"tagIds"`
 }
 
 type AutomationRule struct {

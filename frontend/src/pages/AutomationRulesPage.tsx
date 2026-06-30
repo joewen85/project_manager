@@ -5,7 +5,7 @@ import { FilterPanel } from '../components/FilterPanel'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { SearchField } from '../components/SearchField'
-import { AssigneeChangeType, AutomationExecutionLog, AutomationRule, AutomationTrigger, Project, Status } from '../types'
+import { AssigneeChangeType, AutomationExecutionLog, AutomationRule, AutomationTrigger, Project, Status, Tag } from '../types'
 import { formatDateTime } from '../utils/datetime'
 import { usePermissions } from '../hooks/usePermissions'
 
@@ -27,6 +27,8 @@ interface AutomationRuleForm {
   notifyProjectOwners: boolean
   addComment: boolean
   commentContent: string
+  addTags: boolean
+  tagIds: number[]
 }
 
 const initialForm: AutomationRuleForm = {
@@ -45,7 +47,9 @@ const initialForm: AutomationRuleForm = {
   notifyAssignees: true,
   notifyProjectOwners: true,
   addComment: false,
-  commentContent: ''
+  commentContent: '',
+  addTags: false,
+  tagIds: []
 }
 
 const triggerLabel: Record<AutomationTrigger, string> = {
@@ -102,9 +106,11 @@ export function AutomationRulesPage() {
   const canUpdateRule = hasPermission('automations.update', permissions)
   const canDeleteRule = hasPermission('automations.delete', permissions)
   const canReadProjects = hasPermission('projects.read', permissions)
+  const canReadTags = hasPermission('tags.read', permissions)
   const [items, setItems] = useState<AutomationRule[]>([])
   const [logs, setLogs] = useState<AutomationExecutionLog[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
   const [keywordInput, setKeywordInput] = useState('')
   const [keyword, setKeyword] = useState('')
   const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
@@ -124,6 +130,7 @@ export function AutomationRulesPage() {
   const activeFilterCount = Number(Boolean(keyword.trim())) + Number(enabledFilter !== 'all') + Number(triggerFilter !== 'all')
 
   const projectNameById = useMemo(() => new Map(projects.map((project) => [project.id, `${project.code} - ${project.name}`])), [projects])
+  const tagNameById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag.name])), [tags])
 
   const load = async () => {
     try {
@@ -174,6 +181,16 @@ export function AutomationRulesPage() {
       .catch(() => setProjects([]))
   }, [canReadProjects])
 
+  useEffect(() => {
+    if (!canReadTags) {
+      setTags([])
+      return
+    }
+    void fetchPage<Tag>('/tags', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true })
+      .then((data) => setTags(data.list))
+      .catch(() => setTags([]))
+  }, [canReadTags])
+
   const openCreateModal = () => {
     if (!canCreateRule) return
     setForm(initialForm)
@@ -201,7 +218,9 @@ export function AutomationRulesPage() {
       notifyAssignees: item.actions?.notifyAssignees ?? true,
       notifyProjectOwners: item.actions?.notifyProjectOwners ?? true,
       addComment: item.actions?.addComment ?? false,
-      commentContent: item.actions?.commentContent || ''
+      commentContent: item.actions?.commentContent || '',
+      addTags: item.actions?.addTags ?? false,
+      tagIds: item.actions?.tagIds || []
     })
     setFormError('')
     setFormSuccess('')
@@ -214,8 +233,13 @@ export function AutomationRulesPage() {
     if (!form.id && !canCreateRule) return
     const hasNotificationAction = form.notifyAssignees || form.notifyProjectOwners
     const hasCommentAction = isEventTrigger(form.trigger) && form.addComment
-    if (!hasNotificationAction && !hasCommentAction) {
+    const hasTagAction = form.addTags
+    if (!hasNotificationAction && !hasCommentAction && !hasTagAction) {
       setFormError('至少选择一个动作')
+      return
+    }
+    if (form.addTags && form.tagIds.length === 0) {
+      setFormError('至少选择一个要添加的标签')
       return
     }
     if (form.trigger === 'task_status_changed' && form.fromStatuses.length === 0 && form.toStatuses.length === 0) {
@@ -270,7 +294,9 @@ export function AutomationRulesPage() {
           notifyAssignees: form.notifyAssignees,
           notifyProjectOwners: form.notifyProjectOwners,
           addComment: isEventTrigger(form.trigger) ? form.addComment : false,
-          commentContent: isEventTrigger(form.trigger) ? form.commentContent.trim() : ''
+          commentContent: isEventTrigger(form.trigger) ? form.commentContent.trim() : '',
+          addTags: form.addTags,
+          tagIds: form.addTags ? form.tagIds : []
         }
       }
       if (form.id) await api.put(`/automation-rules/${form.id}`, payload)
@@ -379,7 +405,8 @@ export function AutomationRulesPage() {
                   {[
                     item.actions?.notifyAssignees ? '通知执行人' : '',
                     item.actions?.notifyProjectOwners ? '通知项目负责人' : '',
-                    item.actions?.addComment ? '添加评论' : ''
+                    item.actions?.addComment ? '添加评论' : '',
+                    item.actions?.addTags ? `添加标签${item.actions.tagIds?.length ? `（${item.actions.tagIds.map((id) => tagNameById.get(id) || id).join('，')}）` : ''}` : ''
                   ].filter(Boolean).join('，') || '-'}
                 </td>
                 <td data-label="最近执行">{formatDateTime(item.lastRunAt)}</td>
@@ -536,6 +563,31 @@ export function AutomationRulesPage() {
               <span>项目负责人</span>
             </label>
           </div>
+          {canReadTags && (
+            <>
+              <label htmlFor="automation-tag-action">标签动作</label>
+              <div id="automation-tag-action" className="multi-checklist">
+                <label className="multi-check-item">
+                  <input type="checkbox" checked={form.addTags} onChange={() => setForm((prev) => ({ ...prev, addTags: !prev.addTags, tagIds: prev.addTags ? [] : prev.tagIds }))} />
+                  <span>添加标签</span>
+                </label>
+              </div>
+              {form.addTags && (
+                <>
+                  <label htmlFor="automation-tags">选择标签</label>
+                  <div id="automation-tags" className="multi-checklist">
+                    {tags.map((tag) => (
+                      <label key={tag.id} className="multi-check-item">
+                        <input type="checkbox" checked={form.tagIds.includes(tag.id)} onChange={() => setForm((prev) => ({ ...prev, tagIds: toggleNumber(prev.tagIds, tag.id) }))} />
+                        <span>{tag.name}</span>
+                      </label>
+                    ))}
+                    {tags.length === 0 && <p className="inline-tip">暂无可选标签</p>}
+                  </div>
+                </>
+              )}
+            </>
+          )}
           {isEventTrigger(form.trigger) && (
             <>
               <label htmlFor="automation-comment-action">自动评论</label>

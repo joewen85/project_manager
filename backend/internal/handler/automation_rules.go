@@ -38,6 +38,8 @@ type automationActionsRequest struct {
 	NotifyProjectOwners *bool  `json:"notifyProjectOwners"`
 	AddComment          *bool  `json:"addComment"`
 	CommentContent      string `json:"commentContent"`
+	AddTags             *bool  `json:"addTags"`
+	TagIDs              []uint `json:"tagIds"`
 }
 
 func normalizeAutomationTrigger(value string) (model.AutomationTrigger, bool) {
@@ -183,8 +185,19 @@ func normalizeAutomationActions(req automationActionsRequest, trigger model.Auto
 		NotifyProjectOwners: boolValue(req.NotifyProjectOwners, defaultActions),
 		AddComment:          boolValue(req.AddComment, false),
 		CommentContent:      strings.TrimSpace(req.CommentContent),
+		AddTags:             boolValue(req.AddTags, false),
+		TagIDs:              uniqueUint(req.TagIDs),
+	}
+	if !actions.AddTags {
+		actions.TagIDs = nil
+	}
+	if actions.AddTags && len(actions.TagIDs) == 0 {
+		return model.AutomationActions{}, fmt.Errorf("添加标签动作至少需要选择一个标签")
 	}
 	if automationEventTriggerAllowsComment(trigger) && actions.AddComment {
+		return actions, nil
+	}
+	if actions.AddTags {
 		return actions, nil
 	}
 	if !actions.NotifyAssignees && !actions.NotifyProjectOwners {
@@ -224,6 +237,20 @@ func buildAutomationRuleFromRequest(req automationRuleRequest, actorID uint) (mo
 		Actions:     actions,
 		CreatedByID: actorID,
 	}, nil
+}
+
+func (h *Handler) validateAutomationActionTags(actions model.AutomationActions) error {
+	if !actions.AddTags || len(actions.TagIDs) == 0 {
+		return nil
+	}
+	var count int64
+	if err := h.DB.Model(&model.Tag{}).Where("id IN ?", actions.TagIDs).Count(&count).Error; err != nil {
+		return err
+	}
+	if count != int64(len(actions.TagIDs)) {
+		return fmt.Errorf("添加标签动作包含不存在的标签")
+	}
+	return nil
 }
 
 func (h *Handler) ListAutomationRules(c *gin.Context) {
@@ -270,6 +297,10 @@ func (h *Handler) CreateAutomationRule(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "INVALID_AUTOMATION_RULE", err.Error())
 		return
 	}
+	if err := h.validateAutomationActionTags(item.Actions); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_AUTOMATION_RULE", err.Error())
+		return
+	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&item).Error; err != nil {
 			return err
@@ -293,6 +324,10 @@ func (h *Handler) UpdateAutomationRule(c *gin.Context) {
 	}
 	next, err := buildAutomationRuleFromRequest(req, c.GetUint("userId"))
 	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_AUTOMATION_RULE", err.Error())
+		return
+	}
+	if err := h.validateAutomationActionTags(next.Actions); err != nil {
 		respondError(c, http.StatusBadRequest, "INVALID_AUTOMATION_RULE", err.Error())
 		return
 	}
@@ -433,25 +468,91 @@ func overdueDays(now time.Time, endAt *time.Time) int {
 	return int(now.Sub(*endAt).Hours() / 24)
 }
 
-func (h *Handler) executeTaskOverdueRule(tx *gorm.DB, c *gin.Context, rule model.AutomationRule, now time.Time) (matchedCount int, actionCount int, notifiedIDs []uint, message string, err error) {
+func automationTagNames(tags []model.Tag) string {
+	if len(tags) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if name := strings.TrimSpace(tag.Name); name != "" {
+			parts = append(parts, name)
+			continue
+		}
+		parts = append(parts, strconv.FormatUint(uint64(tag.ID), 10))
+	}
+	return strings.Join(parts, "、")
+}
+
+func (h *Handler) appendAutomationTaskTagsWithDB(tx *gorm.DB, task model.Task, actions model.AutomationActions, actorID uint) (int, error) {
+	if !actions.AddTags || len(actions.TagIDs) == 0 {
+		return 0, nil
+	}
+	tagIDs := uniqueUint(actions.TagIDs)
+	if len(tagIDs) == 0 {
+		return 0, nil
+	}
+
+	var existingTagIDs []uint
+	if err := tx.Table("task_tags").Where("task_id = ? AND tag_id IN ?", task.ID, tagIDs).Pluck("tag_id", &existingTagIDs).Error; err != nil {
+		return 0, err
+	}
+	missingTagIDs := make([]uint, 0, len(tagIDs))
+	for _, tagID := range tagIDs {
+		if !containsUint(existingTagIDs, tagID) {
+			missingTagIDs = append(missingTagIDs, tagID)
+		}
+	}
+	if len(missingTagIDs) == 0 {
+		return 0, nil
+	}
+
+	tags, err := findTagsByIDs(tx, missingTagIDs)
+	if err != nil {
+		return 0, err
+	}
+	if len(tags) == 0 {
+		return 0, nil
+	}
+	taskRef := model.Task{BaseModel: model.BaseModel{ID: task.ID}}
+	if err := tx.Model(&taskRef).Association("Tags").Append(&tags); err != nil {
+		return 0, err
+	}
+	tagNames := automationTagNames(tags)
+	detail := "自动化添加标签"
+	if tagNames != "" {
+		detail += "：" + tagNames
+	}
+	if err := h.writeTaskActivityWithDB(tx, task.ID, actorID, "automation.tags_added", taskActivitySummary("自动化添加标签", task), detail, nil); err != nil {
+		return 0, err
+	}
+	return len(tags), nil
+}
+
+func (h *Handler) executeTaskOverdueRule(tx *gorm.DB, c *gin.Context, rule model.AutomationRule, now time.Time, actorID uint) (matchedCount int, actionCount int, notifiedIDs []uint, message string, err error) {
 	tasks, err := h.automationOverdueTasks(tx, c, rule.Conditions, now)
 	if err != nil {
 		return 0, 0, nil, "", err
 	}
+	tagActionCount := 0
 	for _, task := range tasks {
 		recipients := automationTaskRecipients(task, rule.Actions)
-		if len(recipients) == 0 {
-			continue
+		if len(recipients) > 0 {
+			days := overdueDays(now, task.EndAt)
+			content := fmt.Sprintf("任务 %s - %s 已逾期 %d 天，请尽快处理", task.TaskNo, task.Title, days)
+			if err := h.createNotificationsWithDB(tx, recipients, "任务已逾期", content, "tasks", task.ID); err != nil {
+				return len(tasks), actionCount, notifiedIDs, "", err
+			}
+			actionCount += len(recipients)
+			notifiedIDs = append(notifiedIDs, recipients...)
 		}
-		days := overdueDays(now, task.EndAt)
-		content := fmt.Sprintf("任务 %s - %s 已逾期 %d 天，请尽快处理", task.TaskNo, task.Title, days)
-		if err := h.createNotificationsWithDB(tx, recipients, "任务已逾期", content, "tasks", task.ID); err != nil {
+		addedTags, err := h.appendAutomationTaskTagsWithDB(tx, task, rule.Actions, actorID)
+		if err != nil {
 			return len(tasks), actionCount, notifiedIDs, "", err
 		}
-		actionCount += len(recipients)
-		notifiedIDs = append(notifiedIDs, recipients...)
+		actionCount += addedTags
+		tagActionCount += addedTags
 	}
-	return len(tasks), actionCount, uniqueUint(notifiedIDs), fmt.Sprintf("匹配 %d 个逾期任务，发送 %d 条通知", len(tasks), actionCount), nil
+	return len(tasks), actionCount, uniqueUint(notifiedIDs), fmt.Sprintf("匹配 %d 个逾期任务，发送 %d 条通知，添加 %d 个标签", len(tasks), len(notifiedIDs), tagActionCount), nil
 }
 
 func containsTaskStatus(values []model.TaskStatus, target model.TaskStatus) bool {
@@ -659,6 +760,11 @@ func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Ta
 			}
 			actionCount += 1
 		}
+		addedTags, err := h.appendAutomationTaskTagsWithDB(tx, task, rule.Actions, actorID)
+		if err != nil {
+			return notifiedIDs, err
+		}
+		actionCount += addedTags
 
 		logItem := model.AutomationExecutionLog{
 			RuleID:       rule.ID,
@@ -727,6 +833,11 @@ func (h *Handler) executeTaskProgressChangedRulesWithDB(tx *gorm.DB, task model.
 			}
 			actionCount += 1
 		}
+		addedTags, err := h.appendAutomationTaskTagsWithDB(tx, task, rule.Actions, actorID)
+		if err != nil {
+			return notifiedIDs, err
+		}
+		actionCount += addedTags
 
 		logItem := model.AutomationExecutionLog{
 			RuleID:       rule.ID,
@@ -805,6 +916,11 @@ func (h *Handler) executeTaskAssigneeChangedRulesWithDB(tx *gorm.DB, task model.
 			}
 			actionCount += 1
 		}
+		addedTags, err := h.appendAutomationTaskTagsWithDB(tx, task, rule.Actions, actorID)
+		if err != nil {
+			return notifiedIDs, err
+		}
+		actionCount += addedTags
 
 		logItem := model.AutomationExecutionLog{
 			RuleID:       rule.ID,
@@ -865,7 +981,7 @@ func (h *Handler) executeAutomationRule(c *gin.Context, rule model.AutomationRul
 		var err error
 		switch rule.Trigger {
 		case model.AutomationTriggerTaskOverdue:
-			logItem.MatchedCount, logItem.ActionCount, notifiedIDs, logItem.Message, err = h.executeTaskOverdueRule(tx, c, rule, now)
+			logItem.MatchedCount, logItem.ActionCount, notifiedIDs, logItem.Message, err = h.executeTaskOverdueRule(tx, c, rule, now, actorID)
 		case model.AutomationTriggerTaskStatusChanged:
 			logItem.Status = model.AutomationExecutionSkipped
 			logItem.Message = "状态变更规则仅在任务状态变更事件中执行"

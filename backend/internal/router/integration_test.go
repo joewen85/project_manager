@@ -2703,6 +2703,185 @@ func TestAutomationRuleTaskAssigneeChangedCommentAndNotification(t *testing.T) {
 	}
 }
 
+func TestAutomationRuleAddTagsAction(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+
+	overdueTagResp, overdueTagBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tags", adminToken, map[string]any{
+		"name": "自动化逾期标签",
+	})
+	if overdueTagResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create overdue automation tag expected 201 got %d %#v", overdueTagResp.StatusCode, overdueTagBody)
+	}
+	overdueTagID := uint(overdueTagBody["id"].(float64))
+
+	statusTagResp, statusTagBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tags", adminToken, map[string]any{
+		"name": "自动化状态标签",
+	})
+	if statusTagResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status automation tag expected 201 got %d %#v", statusTagResp.StatusCode, statusTagBody)
+	}
+	statusTagID := uint(statusTagBody["id"].(float64))
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code": "AUTO-TAG-P1",
+		"name": "Automation Tag Project",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation tag project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	overdueTaskResp, overdueTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":     "Automation overdue tag task",
+		"projectId": projectID,
+		"status":    "processing",
+		"progress":  25,
+		"startAt":   "2000-01-01T00:00:00Z",
+		"endAt":     "2000-01-02T00:00:00Z",
+	})
+	if overdueTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create overdue tag task expected 201 got %d %#v", overdueTaskResp.StatusCode, overdueTaskBody)
+	}
+	overdueTaskID := int(overdueTaskBody["id"].(float64))
+
+	invalidRuleResp, invalidRuleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":    "缺少标签动作目标",
+		"trigger": "task_overdue",
+		"actions": map[string]any{
+			"notifyAssignees":     false,
+			"notifyProjectOwners": false,
+			"addTags":             true,
+			"tagIds":              []uint{},
+		},
+	})
+	if invalidRuleResp.StatusCode != http.StatusBadRequest || invalidRuleBody["code"] != "INVALID_AUTOMATION_RULE" {
+		t.Fatalf("missing tag action target expected 400 INVALID_AUTOMATION_RULE got %d %#v", invalidRuleResp.StatusCode, invalidRuleBody)
+	}
+
+	missingTagRuleResp, missingTagRuleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":    "不存在标签动作目标",
+		"trigger": "task_overdue",
+		"actions": map[string]any{
+			"notifyAssignees":     false,
+			"notifyProjectOwners": false,
+			"addTags":             true,
+			"tagIds":              []uint{999999},
+		},
+	})
+	if missingTagRuleResp.StatusCode != http.StatusBadRequest || missingTagRuleBody["code"] != "INVALID_AUTOMATION_RULE" {
+		t.Fatalf("missing tag id expected 400 INVALID_AUTOMATION_RULE got %d %#v", missingTagRuleResp.StatusCode, missingTagRuleBody)
+	}
+
+	overdueRuleResp, overdueRuleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":      "逾期自动添加标签",
+		"trigger":   "task_overdue",
+		"isEnabled": true,
+		"conditions": map[string]any{
+			"overdueDays": 1,
+			"projectIds":  []uint{uint(projectID)},
+		},
+		"actions": map[string]any{
+			"notifyAssignees":     false,
+			"notifyProjectOwners": false,
+			"addTags":             true,
+			"tagIds":              []uint{overdueTagID},
+		},
+	})
+	if overdueRuleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create overdue tag automation rule expected 201 got %d %#v", overdueRuleResp.StatusCode, overdueRuleBody)
+	}
+	overdueRuleID := int(overdueRuleBody["id"].(float64))
+
+	runResp, runBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules/"+strconv.Itoa(overdueRuleID)+"/run", adminToken, nil)
+	if runResp.StatusCode != http.StatusOK {
+		t.Fatalf("run overdue tag automation expected 200 got %d %#v", runResp.StatusCode, runBody)
+	}
+	if runBody["status"] != "success" || int(runBody["matchedCount"].(float64)) != 1 || int(runBody["actionCount"].(float64)) != 1 {
+		t.Fatalf("overdue tag automation should add one tag got %#v", runBody)
+	}
+
+	taggedTaskResp, taggedTaskBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks?page=1&pageSize=20&tagIds="+strconv.Itoa(int(overdueTagID)), adminToken, nil)
+	if taggedTaskResp.StatusCode != http.StatusOK {
+		t.Fatalf("list overdue tagged tasks expected 200 got %d", taggedTaskResp.StatusCode)
+	}
+	taggedTasks, _ := taggedTaskBody["list"].([]any)
+	if len(taggedTasks) != 1 || int(taggedTasks[0].(map[string]any)["id"].(float64)) != overdueTaskID {
+		t.Fatalf("overdue tag automation should attach tag to task got %#v", taggedTaskBody)
+	}
+
+	duplicateRunResp, duplicateRunBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules/"+strconv.Itoa(overdueRuleID)+"/run", adminToken, nil)
+	if duplicateRunResp.StatusCode != http.StatusOK {
+		t.Fatalf("rerun overdue tag automation expected 200 got %d %#v", duplicateRunResp.StatusCode, duplicateRunBody)
+	}
+	if int(duplicateRunBody["actionCount"].(float64)) != 0 {
+		t.Fatalf("rerun overdue tag automation should not add duplicate tag got %#v", duplicateRunBody)
+	}
+
+	statusTaskResp, statusTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":     "Automation status tag task",
+		"projectId": projectID,
+		"status":    "pending",
+		"progress":  10,
+	})
+	if statusTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status tag task expected 201 got %d %#v", statusTaskResp.StatusCode, statusTaskBody)
+	}
+	statusTaskID := int(statusTaskBody["id"].(float64))
+
+	statusRuleResp, statusRuleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":      "状态变更自动添加标签",
+		"trigger":   "task_status_changed",
+		"isEnabled": true,
+		"conditions": map[string]any{
+			"projectIds":   []uint{uint(projectID)},
+			"fromStatuses": []string{"pending"},
+			"toStatuses":   []string{"processing"},
+		},
+		"actions": map[string]any{
+			"notifyAssignees":     false,
+			"notifyProjectOwners": false,
+			"addTags":             true,
+			"tagIds":              []uint{statusTagID},
+		},
+	})
+	if statusRuleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status tag automation rule expected 201 got %d %#v", statusRuleResp.StatusCode, statusRuleBody)
+	}
+	statusRuleID := int(statusRuleBody["id"].(float64))
+
+	statusResp, statusBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/tasks/"+strconv.Itoa(statusTaskID)+"/status", adminToken, map[string]any{
+		"status": "processing",
+	})
+	if statusResp.StatusCode != http.StatusOK {
+		t.Fatalf("patch status for tag automation expected 200 got %d %#v", statusResp.StatusCode, statusBody)
+	}
+
+	statusLogResp, statusLogBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/automation-rules/logs?ruleId="+strconv.Itoa(statusRuleID)+"&trigger=task_status_changed", adminToken, nil)
+	if statusLogResp.StatusCode != http.StatusOK {
+		t.Fatalf("list status tag automation logs expected 200 got %d", statusLogResp.StatusCode)
+	}
+	statusLogItems, _ := statusLogBody["list"].([]any)
+	if len(statusLogItems) != 1 {
+		t.Fatalf("status tag automation should create one event log got %#v", statusLogBody)
+	}
+	statusLogItem := statusLogItems[0].(map[string]any)
+	if statusLogItem["status"] != "success" || statusLogItem["runSource"] != "event" || int(statusLogItem["matchedCount"].(float64)) != 1 || int(statusLogItem["actionCount"].(float64)) != 1 {
+		t.Fatalf("status tag automation log should record one tag action got %#v", statusLogItem)
+	}
+
+	statusTaggedTaskResp, statusTaggedTaskBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks?page=1&pageSize=20&tagIds="+strconv.Itoa(int(statusTagID)), adminToken, nil)
+	if statusTaggedTaskResp.StatusCode != http.StatusOK {
+		t.Fatalf("list status tagged tasks expected 200 got %d", statusTaggedTaskResp.StatusCode)
+	}
+	statusTaggedTasks, _ := statusTaggedTaskBody["list"].([]any)
+	if len(statusTaggedTasks) != 1 || int(statusTaggedTasks[0].(map[string]any)["id"].(float64)) != statusTaskID {
+		t.Fatalf("status tag automation should attach tag to task got %#v", statusTaggedTaskBody)
+	}
+}
+
 func TestMyTasksReturnsEmptyArrays(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()
