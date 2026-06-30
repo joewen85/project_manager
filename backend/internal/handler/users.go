@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -12,21 +13,33 @@ import (
 )
 
 type createUserRequest struct {
-	Username      string `json:"username" binding:"required"`
-	Name          string `json:"name" binding:"required"`
-	Email         string `json:"email" binding:"required,email"`
-	Password      string `json:"password" binding:"required,min=6"`
-	RoleIDs       []uint `json:"roleIds"`
-	DepartmentIDs []uint `json:"departmentIds"`
+	Username            string   `json:"username" binding:"required"`
+	Name                string   `json:"name" binding:"required"`
+	Email               string   `json:"email" binding:"required,email"`
+	Password            string   `json:"password" binding:"required,min=6"`
+	WeeklyCapacityHours *float64 `json:"weeklyCapacityHours"`
+	RoleIDs             []uint   `json:"roleIds"`
+	DepartmentIDs       []uint   `json:"departmentIds"`
 }
 
 type updateUserRequest struct {
-	Name          string `json:"name" binding:"required"`
-	Email         string `json:"email" binding:"required,email"`
-	Password      string `json:"password"`
-	IsActive      *bool  `json:"isActive"`
-	RoleIDs       []uint `json:"roleIds"`
-	DepartmentIDs []uint `json:"departmentIds"`
+	Name                string   `json:"name" binding:"required"`
+	Email               string   `json:"email" binding:"required,email"`
+	Password            string   `json:"password"`
+	IsActive            *bool    `json:"isActive"`
+	WeeklyCapacityHours *float64 `json:"weeklyCapacityHours"`
+	RoleIDs             []uint   `json:"roleIds"`
+	DepartmentIDs       []uint   `json:"departmentIds"`
+}
+
+func normalizeWeeklyCapacityHours(value *float64) (float64, error) {
+	if value == nil {
+		return 40, nil
+	}
+	if *value < 0 || *value > 168 {
+		return 0, fmt.Errorf("weeklyCapacityHours 必须在 0 到 168 之间")
+	}
+	return *value, nil
 }
 
 func (h *Handler) ListUsers(c *gin.Context) {
@@ -61,13 +74,19 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		respondError(c, http.StatusInternalServerError, "PASSWORD_HASH_FAILED", "密码加密失败")
 		return
 	}
+	weeklyCapacityHours, err := normalizeWeeklyCapacityHours(req.WeeklyCapacityHours)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_WEEKLY_CAPACITY", err.Error())
+		return
+	}
 
 	user := model.User{
-		Username: req.Username,
-		Name:     req.Name,
-		Email:    req.Email,
-		Password: hash,
-		IsActive: true,
+		Username:            req.Username,
+		Name:                req.Name,
+		Email:               req.Email,
+		Password:            hash,
+		IsActive:            true,
+		WeeklyCapacityHours: weeklyCapacityHours,
 	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&user).Error; err != nil {
@@ -120,6 +139,14 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	user.Email = req.Email
 	if req.IsActive != nil {
 		user.IsActive = *req.IsActive
+	}
+	if req.WeeklyCapacityHours != nil {
+		weeklyCapacityHours, err := normalizeWeeklyCapacityHours(req.WeeklyCapacityHours)
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_WEEKLY_CAPACITY", err.Error())
+			return
+		}
+		user.WeeklyCapacityHours = weeklyCapacityHours
 	}
 	if req.Password != "" {
 		hash, err := util.HashPassword(req.Password)

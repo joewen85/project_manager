@@ -431,6 +431,59 @@ button, input, select, textarea { max-width: 100%; font: inherit; }
 .dashboard-health-item p {
   margin: 0;
 }
+.dashboard-workload-panel {
+  display: grid;
+  gap: 10px;
+}
+.dashboard-workload-list {
+  display: grid;
+  gap: 8px;
+}
+.dashboard-workload-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-left: 4px solid #22c55e;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+}
+.dashboard-workload-item.overloaded {
+  border-left-color: #ef4444;
+}
+.dashboard-workload-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dashboard-workload-main strong {
+  font-size: 14px;
+}
+.dashboard-workload-main span,
+.dashboard-workload-main b {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+.dashboard-workload-main b {
+  color: var(--color-danger);
+}
+.dashboard-workload-bar {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+.dashboard-workload-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+}
+.dashboard-workload-item.overloaded .dashboard-workload-bar span {
+  background: var(--color-danger);
+}
 
 table { width: 100%; max-width: 100%; border-collapse: collapse; }
 th, td { padding: 10px 8px; border-bottom: 1px solid var(--color-border); text-align: left; font-size: 14px; vertical-align: top; }
@@ -595,6 +648,12 @@ tbody tr { transition: background-color var(--duration-fast) var(--ease-standard
 .kanban-task-no,
 .kanban-task-meta,
 .kanban-task-people {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.task-hours-summary {
+  display: grid;
+  gap: 2px;
   color: var(--color-text-muted);
   font-size: 12px;
 }

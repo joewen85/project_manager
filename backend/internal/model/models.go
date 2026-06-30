@@ -78,15 +78,16 @@ type Attachment struct {
 
 type User struct {
 	BaseModel
-	Username    string       `gorm:"size:64;uniqueIndex;not null" json:"username"`
-	Name        string       `gorm:"size:100;not null" json:"name"`
-	Email       string       `gorm:"size:120;uniqueIndex;not null" json:"email"`
-	Password    string       `gorm:"size:255;not null" json:"-"`
-	IsActive    bool         `gorm:"default:true" json:"isActive"`
-	Roles       []Role       `gorm:"many2many:user_roles;" json:"roles,omitempty"`
-	Departments []Department `gorm:"many2many:user_departments;" json:"departments,omitempty"`
-	Projects    []Project    `gorm:"many2many:project_users;" json:"projects,omitempty"`
-	Tasks       []Task       `gorm:"many2many:task_users;" json:"tasks,omitempty"`
+	Username            string       `gorm:"size:64;uniqueIndex;not null" json:"username"`
+	Name                string       `gorm:"size:100;not null" json:"name"`
+	Email               string       `gorm:"size:120;uniqueIndex;not null" json:"email"`
+	Password            string       `gorm:"size:255;not null" json:"-"`
+	IsActive            bool         `gorm:"default:true" json:"isActive"`
+	WeeklyCapacityHours float64      `gorm:"type:decimal(10,2)" json:"weeklyCapacityHours"`
+	Roles               []Role       `gorm:"many2many:user_roles;" json:"roles,omitempty"`
+	Departments         []Department `gorm:"many2many:user_departments;" json:"departments,omitempty"`
+	Projects            []Project    `gorm:"many2many:project_users;" json:"projects,omitempty"`
+	Tasks               []Task       `gorm:"many2many:task_users;" json:"tasks,omitempty"`
 }
 
 type Role struct {
@@ -159,33 +160,36 @@ type ProjectTemplate struct {
 
 type Task struct {
 	BaseModel
-	TaskNo       string           `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`
-	Title        string           `gorm:"size:150;not null" json:"title"`
-	Description  string           `gorm:"type:text" json:"description"`
-	CustomField1 string           `gorm:"type:text" json:"customField1"`
-	CustomField2 string           `gorm:"type:text" json:"customField2"`
-	CustomField3 string           `gorm:"type:text" json:"customField3"`
-	Status       TaskStatus       `gorm:"size:20;default:'pending';index" json:"status"`
-	Priority     TaskPriority     `gorm:"size:20;default:'high';index" json:"priority"`
-	IsMilestone  bool             `gorm:"default:false;index" json:"isMilestone"`
-	Progress     int              `gorm:"default:0" json:"progress"`
-	StartAt      *time.Time       `json:"startAt"`
-	EndAt        *time.Time       `json:"endAt"`
-	Attachment   Attachment       `gorm:"embedded;embeddedPrefix:attachment_" json:"attachment,omitempty"`
-	Attachments  []Attachment     `gorm:"serializer:json" json:"attachments"`
-	CreatorID    uint             `gorm:"not null;index" json:"creatorId"`
-	Creator      User             `json:"creator,omitempty"`
-	ProjectID    uint             `gorm:"not null;index" json:"projectId"`
-	ProjectName  string           `gorm:"->;column:project_name;-:migration" json:"projectName,omitempty"`
-	Project      Project          `json:"project,omitempty"`
-	ParentID     *uint            `gorm:"index" json:"parentId"`
-	Children     []Task           `gorm:"foreignKey:ParentID" json:"children,omitempty"`
-	Assignees    []User           `gorm:"many2many:task_users;" json:"assignees,omitempty"`
-	Reviewers    []User           `gorm:"many2many:task_reviewers;" json:"reviewers,omitempty"`
-	Tags         []Tag            `gorm:"many2many:task_tags;" json:"tags,omitempty"`
-	Dependencies []TaskDependency `gorm:"foreignKey:TaskID" json:"dependencies,omitempty"`
-	Comments     []TaskComment    `gorm:"foreignKey:TaskID" json:"comments,omitempty"`
-	Activities   []TaskActivity   `gorm:"foreignKey:TaskID" json:"activities,omitempty"`
+	TaskNo         string           `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`
+	Title          string           `gorm:"size:150;not null" json:"title"`
+	Description    string           `gorm:"type:text" json:"description"`
+	CustomField1   string           `gorm:"type:text" json:"customField1"`
+	CustomField2   string           `gorm:"type:text" json:"customField2"`
+	CustomField3   string           `gorm:"type:text" json:"customField3"`
+	Status         TaskStatus       `gorm:"size:20;default:'pending';index" json:"status"`
+	Priority       TaskPriority     `gorm:"size:20;default:'high';index" json:"priority"`
+	IsMilestone    bool             `gorm:"default:false;index" json:"isMilestone"`
+	Progress       int              `gorm:"default:0" json:"progress"`
+	EstimatedHours float64          `gorm:"type:decimal(10,2);default:0" json:"estimatedHours"`
+	ActualHours    float64          `gorm:"type:decimal(10,2);default:0" json:"actualHours"`
+	RemainingHours float64          `gorm:"type:decimal(10,2);default:0" json:"remainingHours"`
+	StartAt        *time.Time       `json:"startAt"`
+	EndAt          *time.Time       `json:"endAt"`
+	Attachment     Attachment       `gorm:"embedded;embeddedPrefix:attachment_" json:"attachment,omitempty"`
+	Attachments    []Attachment     `gorm:"serializer:json" json:"attachments"`
+	CreatorID      uint             `gorm:"not null;index" json:"creatorId"`
+	Creator        User             `json:"creator,omitempty"`
+	ProjectID      uint             `gorm:"not null;index" json:"projectId"`
+	ProjectName    string           `gorm:"->;column:project_name;-:migration" json:"projectName,omitempty"`
+	Project        Project          `json:"project,omitempty"`
+	ParentID       *uint            `gorm:"index" json:"parentId"`
+	Children       []Task           `gorm:"foreignKey:ParentID" json:"children,omitempty"`
+	Assignees      []User           `gorm:"many2many:task_users;" json:"assignees,omitempty"`
+	Reviewers      []User           `gorm:"many2many:task_reviewers;" json:"reviewers,omitempty"`
+	Tags           []Tag            `gorm:"many2many:task_tags;" json:"tags,omitempty"`
+	Dependencies   []TaskDependency `gorm:"foreignKey:TaskID" json:"dependencies,omitempty"`
+	Comments       []TaskComment    `gorm:"foreignKey:TaskID" json:"comments,omitempty"`
+	Activities     []TaskActivity   `gorm:"foreignKey:TaskID" json:"activities,omitempty"`
 }
 
 type TaskDependency struct {

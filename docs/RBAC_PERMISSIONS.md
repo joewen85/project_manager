@@ -37,7 +37,7 @@
 | `projects.delete` | 删除项目 |
 | `tasks.create` | 创建任务 |
 | `tasks.read` | 查看任务 |
-| `tasks.update` | 更新任务（含依赖/排期） |
+| `tasks.update` | 更新任务（含依赖/排期/工时） |
 | `tasks.delete` | 删除任务 |
 | `comments.create` | 创建任务评论与提及 |
 | `comments.read` | 查看任务评论与活动流 |
@@ -55,7 +55,7 @@
 | `automations.delete` | 删除自动化规则 |
 | `notifications.read` | 查看通知 |
 | `notifications.update` | 标记通知已读 |
-| `stats.read` | 查看统计分析 |
+| `stats.read` | 查看统计分析、项目健康度与成员负载 |
 | `audit.read` | 查看审计日志 |
 | `uploads.create` | 上传附件 |
 
@@ -69,8 +69,8 @@
 | `PUT /rbac/permissions/:id` `PUT /rbac/roles/:id` | `rbac.update` |
 | `DELETE /rbac/permissions/:id` `DELETE /rbac/roles/:id` | `rbac.delete` |
 | `GET /users` | `users.read` |
-| `POST /users` | `users.create` |
-| `PUT /users/:id` | `users.update` |
+| `POST /users` | `users.create`；可设置默认周容量 |
+| `PUT /users/:id` | `users.update`；可更新默认周容量 |
 | `DELETE /users/:id` | `users.delete` |
 | `GET /departments` | `departments.read` |
 | `POST /departments` | `departments.create` |
@@ -85,9 +85,9 @@
 | `PUT /projects/:id` `POST /projects/:id/gantt/auto-resolve` | `projects.update` |
 | `DELETE /projects/:id` | `projects.delete` |
 | `GET /tasks*` | `tasks.read` |
-| `POST /tasks` | `tasks.create` |
+| `POST /tasks` | `tasks.create`；可写入估算/实际/剩余工时 |
 | `PATCH /tasks/:id/progress` `PATCH /tasks/:id/status` `PATCH /tasks/:id/complete` | `tasks.read` + 任务执行人/审核人关系校验 |
-| `PUT /tasks/:id` `PUT /tasks/:id/dependencies` `PATCH /tasks/:id/schedule` | `tasks.update` |
+| `PUT /tasks/:id` `PUT /tasks/:id/dependencies` `PATCH /tasks/:id/schedule` | `tasks.update`；`PUT /tasks/:id` 可更新估算/实际/剩余工时 |
 | `DELETE /tasks/:id` | `tasks.delete` |
 | `GET /tasks/:id/comments` `GET /tasks/:id/activities` | `comments.read` + 任务可见范围 |
 | `POST /tasks/:id/comments` | `comments.create` + 任务可见范围 |
@@ -105,7 +105,7 @@
 | `PUT /automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
 | `DELETE /automation-rules/:id` | `automations.delete` |
 | 自动化状态/进度/执行人变更触发的通知/评论/添加标签/指派执行人/Webhook | 通知、评论、添加标签和指派执行人由已启用规则在任务写事务内执行，Webhook 在事务提交后投递；触发人仍需通过任务接口原有权限与可见范围校验，不额外要求 `comments.create`、`notifications.update`、`tags.update` 或 `tasks.update`；指派动作会让新增执行人获得该任务可见性，Webhook 会调用外部地址，配置与手动运行受 `automations.create/update` 控制 |
-| `GET /stats/dashboard` `GET /stats/project-health` | `stats.read`；普通用户按任务可见范围聚合 |
+| `GET /stats/dashboard` `GET /stats/project-health` `GET /stats/member-workload` | `stats.read`；普通用户按任务可见范围聚合，成员负载按执行人周容量标记过载 |
 | `GET /notifications` `GET /notifications/unread-count` | `notifications.read` |
 | `PATCH /notifications/:id/read` `PATCH /notifications/read-all` | `notifications.update` |
 | `GET /audit/logs` | `audit.read` |

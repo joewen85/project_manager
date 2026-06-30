@@ -15,6 +15,7 @@ interface UserForm {
   email: string
   password: string
   isActive: boolean
+  weeklyCapacityHours: number
   roleIds: number[]
   departmentIds: number[]
 }
@@ -25,6 +26,7 @@ const initialForm: UserForm = {
   email: '',
   password: '',
   isActive: true,
+  weeklyCapacityHours: 40,
   roleIds: [],
   departmentIds: []
 }
@@ -86,6 +88,7 @@ export function UsersPage() {
           name: form.name,
           email: form.email,
           password: form.password,
+          weeklyCapacityHours: Number(form.weeklyCapacityHours || 0),
           isActive: form.isActive,
           roleIds: form.roleIds,
           departmentIds: form.departmentIds
@@ -96,6 +99,7 @@ export function UsersPage() {
           name: form.name,
           email: form.email,
           password: form.password,
+          weeklyCapacityHours: Number(form.weeklyCapacityHours || 0),
           roleIds: form.roleIds,
           departmentIds: form.departmentIds
         })
@@ -120,6 +124,7 @@ export function UsersPage() {
       email: item.email,
       password: '',
       isActive: Boolean(item.isActive),
+      weeklyCapacityHours: item.weeklyCapacityHours ?? 40,
       roleIds: (item.roles || []).map((role) => role.id),
       departmentIds: (item.departments || []).map((department) => department.id)
     })
@@ -179,10 +184,10 @@ export function UsersPage() {
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && users.length === 0} emptyText="暂无用户数据" onRetry={() => { void load() }} />
         {!loading && !error && users.length > 0 && (
-          <table className="responsive-table"><thead><tr><th>ID</th><th>用户名</th><th>姓名</th><th>邮箱</th><th>状态</th><th>操作</th></tr></thead><tbody>
+          <table className="responsive-table"><thead><tr><th>ID</th><th>用户名</th><th>姓名</th><th>邮箱</th><th>周容量</th><th>状态</th><th>操作</th></tr></thead><tbody>
             {users.map((u) => (
               <tr key={u.id}>
-                <td data-label="ID">{u.id}</td><td data-label="用户名">{u.username}</td><td data-label="姓名">{u.name}</td><td data-label="邮箱">{u.email}</td><td data-label="状态">{u.isActive ? '启用' : '禁用'}</td>
+                <td data-label="ID">{u.id}</td><td data-label="用户名">{u.username}</td><td data-label="姓名">{u.name}</td><td data-label="邮箱">{u.email}</td><td data-label="周容量">{u.weeklyCapacityHours ?? 40}h</td><td data-label="状态">{u.isActive ? '启用' : '禁用'}</td>
                 <td data-label="操作">
                   <div className="table-actions">
                     {canUpdateUser && <button className="btn secondary" onClick={() => edit(u)}>编辑</button>}
@@ -206,6 +211,8 @@ export function UsersPage() {
           <input id="email" type="email" inputMode="email" autoComplete="email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} required />
           <label className={!form.id ? 'required-label' : ''} htmlFor="password">密码{form.id ? '（留空不修改）' : ''}</label>
           <input id="password" type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))} required={!form.id} />
+          <label htmlFor="weeklyCapacityHours">默认周容量（小时）</label>
+          <input id="weeklyCapacityHours" type="number" min={0} max={168} step={0.5} value={form.weeklyCapacityHours} onChange={(e) => setForm((prev) => ({ ...prev, weeklyCapacityHours: Number(e.target.value) }))} />
 
           <label htmlFor="roleIds">角色</label>
           <select id="roleIds" multiple value={form.roleIds.map(String)} onChange={(event) => {

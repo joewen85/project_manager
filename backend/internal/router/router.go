@@ -154,6 +154,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		{
 			stats.GET("/dashboard", middleware.RequirePermission(h.DB, "stats.read"), h.DashboardStats)
 			stats.GET("/project-health", middleware.RequirePermission(h.DB, "stats.read"), h.ProjectHealth)
+			stats.GET("/member-workload", middleware.RequirePermission(h.DB, "stats.read"), h.MemberWorkload)
 		}
 
 		notifications := authGroup.Group("/notifications")

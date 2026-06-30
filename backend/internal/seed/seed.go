@@ -200,7 +200,7 @@ func Run(db *gorm.DB) error {
 			return err
 		}
 
-		admin := model.User{Username: "admin", Name: "管理员", Email: "admin@example.com", Password: password, IsActive: true}
+		admin := model.User{Username: "admin", Name: "管理员", Email: "admin@example.com", Password: password, IsActive: true, WeeklyCapacityHours: 40}
 		if err := tx.Where("username = ?", "admin").FirstOrCreate(&admin).Error; err != nil {
 			return err
 		}

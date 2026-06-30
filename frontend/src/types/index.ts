@@ -19,6 +19,7 @@ export interface User {
   name: string
   email: string
   isActive?: boolean
+  weeklyCapacityHours?: number
   roles?: Role[]
   departments?: Department[]
 }
@@ -64,6 +65,9 @@ export interface Task {
   priority?: TaskPriority
   isMilestone?: boolean
   progress: number
+  estimatedHours?: number
+  actualHours?: number
+  remainingHours?: number
   startAt?: string
   endAt?: string
   attachment?: UploadAttachment

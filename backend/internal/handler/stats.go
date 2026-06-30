@@ -60,6 +60,76 @@ func (h *Handler) DashboardStats(c *gin.Context) {
 	})
 }
 
+type memberWorkloadItem struct {
+	UserID          uint    `json:"userId"`
+	Name            string  `json:"name"`
+	Username        string  `json:"username"`
+	Email           string  `json:"email"`
+	TaskCount       int64   `json:"taskCount"`
+	EstimatedHours  float64 `json:"estimatedHours"`
+	ActualHours     float64 `json:"actualHours"`
+	RemainingHours  float64 `json:"remainingHours"`
+	CapacityHours   float64 `json:"capacityHours"`
+	UtilizationRate float64 `json:"utilizationRate"`
+	Overloaded      bool    `json:"overloaded"`
+}
+
+func currentWeekRange(now time.Time) (time.Time, time.Time) {
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	weekdayOffset := int(dayStart.Weekday()) - 1
+	if weekdayOffset < 0 {
+		weekdayOffset = 6
+	}
+	weekStart := dayStart.AddDate(0, 0, -weekdayOffset)
+	return weekStart, weekStart.AddDate(0, 0, 7).Add(-time.Nanosecond)
+}
+
+func (h *Handler) MemberWorkload(c *gin.Context) {
+	weekStart, weekEnd := currentWeekRange(time.Now())
+	query := h.scopeTasksQuery(c, h.DB.Model(&model.Task{})).
+		Select(`
+			users.id AS user_id,
+			users.name,
+			users.username,
+			users.email,
+			COUNT(DISTINCT tasks.id) AS task_count,
+			COALESCE(SUM(tasks.estimated_hours), 0) AS estimated_hours,
+			COALESCE(SUM(tasks.actual_hours), 0) AS actual_hours,
+			COALESCE(SUM(tasks.remaining_hours), 0) AS remaining_hours,
+			COALESCE(users.weekly_capacity_hours, 40) AS capacity_hours
+		`).
+		Joins("JOIN task_users workload_task_users ON workload_task_users.task_id = tasks.id").
+		Joins("JOIN users ON users.id = workload_task_users.user_id").
+		Where("tasks.status <> ?", model.TaskCompleted).
+		Where(`(
+			(tasks.start_at IS NULL AND tasks.end_at IS NULL)
+			OR (tasks.start_at IS NULL AND tasks.end_at >= ?)
+			OR (tasks.end_at IS NULL AND tasks.start_at <= ?)
+			OR (tasks.start_at <= ? AND tasks.end_at >= ?)
+		)`, weekStart, weekEnd, weekEnd, weekStart).
+		Group("users.id, users.name, users.username, users.email, users.weekly_capacity_hours").
+		Order("estimated_hours desc, users.name asc")
+
+	var items []memberWorkloadItem
+	if err := query.Scan(&items).Error; err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_MEMBER_WORKLOAD_FAILED", err)
+		return
+	}
+	for index := range items {
+		if items[index].CapacityHours > 0 {
+			items[index].UtilizationRate = items[index].EstimatedHours / items[index].CapacityHours
+			items[index].Overloaded = items[index].EstimatedHours > items[index].CapacityHours
+			continue
+		}
+		items[index].Overloaded = items[index].EstimatedHours > 0
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"weekStart": weekStart,
+		"weekEnd":   weekEnd,
+		"members":   items,
+	})
+}
+
 type projectHealthItem struct {
 	ProjectID        uint     `json:"projectId"`
 	ProjectCode      string   `json:"projectCode"`

@@ -1495,6 +1495,22 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: getStatsProjectHealth
+  /stats/member-workload:
+    get:
+      summary: 本周成员负载
+      description: 基于当前用户可见任务，按执行人聚合当前自然周未完成任务的估算/实际/剩余工时，并与用户默认周容量比较。
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberWorkloadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getStatsMemberWorkload
   /notifications:
     get:
       summary: 通知列表
@@ -1815,6 +1831,9 @@ components:
           type: string
         isActive:
           type: boolean
+        weeklyCapacityHours:
+          type: number
+          format: double
         roles:
           type: array
           items:
@@ -1836,6 +1855,11 @@ components:
           type: string
         isActive:
           type: boolean
+        weeklyCapacityHours:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 168
         roleIds:
           type: array
           items:
@@ -1897,6 +1921,18 @@ components:
           type: boolean
         progress:
           type: integer
+        estimatedHours:
+          type: number
+          format: double
+          minimum: 0
+        actualHours:
+          type: number
+          format: double
+          minimum: 0
+        remainingHours:
+          type: number
+          format: double
+          minimum: 0
         startAt:
           type: string
           format: date-time
@@ -2437,6 +2473,18 @@ components:
           type: boolean
         progress:
           type: integer
+        estimatedHours:
+          type: number
+          format: double
+          minimum: 0
+        actualHours:
+          type: number
+          format: double
+          minimum: 0
+        remainingHours:
+          type: number
+          format: double
+          minimum: 0
         startAt:
           type: string
           format: date-time
@@ -2865,6 +2913,50 @@ components:
           type: array
           items:
             type: string
+    MemberWorkloadResponse:
+      type: object
+      properties:
+        weekStart:
+          type: string
+          format: date-time
+        weekEnd:
+          type: string
+          format: date-time
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberWorkloadItem'
+    MemberWorkloadItem:
+      type: object
+      properties:
+        userId:
+          type: integer
+        name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        taskCount:
+          type: integer
+          format: int64
+        estimatedHours:
+          type: number
+          format: double
+        actualHours:
+          type: number
+          format: double
+        remainingHours:
+          type: number
+          format: double
+        capacityHours:
+          type: number
+          format: double
+        utilizationRate:
+          type: number
+          format: double
+        overloaded:
+          type: boolean
     Notification:
       type: object
       properties:

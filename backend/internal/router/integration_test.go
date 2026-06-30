@@ -986,6 +986,83 @@ func TestUserScopeAndExportFlow(t *testing.T) {
 	}
 }
 
+func TestTaskWorkHoursCreateUpdateValidationAndExport(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", token, map[string]any{
+		"code":        "HOURS-P1",
+		"name":        "工时项目",
+		"description": "work hours",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create work hours project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	createResp, createBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", token, map[string]any{
+		"title":          "工时任务",
+		"projectId":      projectID,
+		"status":         "processing",
+		"progress":       25,
+		"estimatedHours": 12.5,
+		"actualHours":    2.0,
+		"remainingHours": 10.5,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create work hours task expected 201 got %d, body=%v", createResp.StatusCode, createBody)
+	}
+	taskID := int(createBody["id"].(float64))
+	if createBody["estimatedHours"].(float64) != 12.5 || createBody["actualHours"].(float64) != 2 || createBody["remainingHours"].(float64) != 10.5 {
+		t.Fatalf("work hours not saved on create: %v", createBody)
+	}
+
+	invalidResp, invalidBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", token, map[string]any{
+		"title":          "非法工时任务",
+		"projectId":      projectID,
+		"status":         "pending",
+		"progress":       0,
+		"estimatedHours": -1,
+	})
+	if invalidResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("negative task hours expected 400 got %d", invalidResp.StatusCode)
+	}
+	if invalidBody["code"] != "INVALID_TASK_HOURS" {
+		t.Fatalf("negative task hours expected INVALID_TASK_HOURS got %v", invalidBody["code"])
+	}
+
+	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID), token, map[string]any{
+		"title":          "工时任务更新",
+		"projectId":      projectID,
+		"status":         "processing",
+		"progress":       60,
+		"estimatedHours": 6.5,
+		"actualHours":    3.0,
+		"remainingHours": 3.5,
+	})
+	if updateResp.StatusCode != http.StatusOK {
+		t.Fatalf("update work hours task expected 200 got %d, body=%v", updateResp.StatusCode, updateBody)
+	}
+	if updateBody["estimatedHours"].(float64) != 6.5 || updateBody["actualHours"].(float64) != 3 || updateBody["remainingHours"].(float64) != 3.5 {
+		t.Fatalf("work hours not saved on update: %v", updateBody)
+	}
+
+	exportReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tasks/export", nil)
+	exportReq.Header.Set("Authorization", "Bearer "+token)
+	exportResp, err := http.DefaultClient.Do(exportReq)
+	if err != nil {
+		t.Fatalf("export work hours tasks failed: %v", err)
+	}
+	exportRaw, _ := io.ReadAll(exportResp.Body)
+	exportResp.Body.Close()
+	exportText := string(exportRaw)
+	if !strings.Contains(exportText, "估算工时") || !strings.Contains(exportText, "工时任务更新") || !strings.Contains(exportText, "6.50") {
+		t.Fatalf("task export should contain work hour columns and values, got: %s", exportText)
+	}
+}
+
 func TestProjectHealthUsesVisibleTaskScope(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()
@@ -1100,6 +1177,138 @@ func TestProjectHealthUsesVisibleTaskScope(t *testing.T) {
 	}
 	if int(project["unscheduledTasks"].(float64)) != 1 || int(project["reviewingTasks"].(float64)) != 1 {
 		t.Fatalf("expected unscheduled and reviewing counts got %v", project)
+	}
+}
+
+func TestMemberWorkloadUsesCapacityAndTaskScope(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "workload-reader",
+		"description": "workload reader",
+		"permissionIds": []uint{
+			codeToID["projects.read"],
+			codeToID["tasks.read"],
+			codeToID["stats.read"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create workload role expected 201 got %d", roleResp.StatusCode)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	visibleUserResp, visibleUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":            "workload_reader",
+		"name":                "Workload Reader",
+		"email":               "workload_reader@example.com",
+		"password":            "pass1234",
+		"weeklyCapacityHours": 10,
+		"roleIds":             []uint{roleID},
+		"departmentIds":       []uint{},
+	})
+	if visibleUserResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create workload reader expected 201 got %d", visibleUserResp.StatusCode)
+	}
+	visibleUserID := uint(visibleUserBody["id"].(float64))
+
+	hiddenUserResp, hiddenUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":            "workload_hidden",
+		"name":                "Workload Hidden",
+		"email":               "workload_hidden@example.com",
+		"password":            "pass1234",
+		"weeklyCapacityHours": 40,
+		"roleIds":             []uint{},
+		"departmentIds":       []uint{},
+	})
+	if hiddenUserResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden workload user expected 201 got %d", hiddenUserResp.StatusCode)
+	}
+	hiddenUserID := uint(hiddenUserBody["id"].(float64))
+
+	visibleProjectResp, visibleProjectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "WORKLOAD-P1",
+		"name":        "Workload Visible",
+		"description": "visible workload",
+	})
+	if visibleProjectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible workload project expected 201 got %d", visibleProjectResp.StatusCode)
+	}
+	visibleProjectID := int(visibleProjectBody["id"].(float64))
+
+	hiddenProjectResp, hiddenProjectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "WORKLOAD-P2",
+		"name":        "Workload Hidden",
+		"description": "hidden workload",
+	})
+	if hiddenProjectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden workload project expected 201 got %d", hiddenProjectResp.StatusCode)
+	}
+	hiddenProjectID := int(hiddenProjectBody["id"].(float64))
+
+	visibleTaskResp, visibleTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":          "Visible Workload Task",
+		"projectId":      visibleProjectID,
+		"status":         "processing",
+		"progress":       30,
+		"estimatedHours": 12,
+		"actualHours":    3,
+		"remainingHours": 9,
+		"assigneeIds":    []uint{visibleUserID},
+	})
+	if visibleTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible workload task expected 201 got %d, body=%v", visibleTaskResp.StatusCode, visibleTaskBody)
+	}
+
+	_, _ = requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":          "Completed Workload Task",
+		"projectId":      visibleProjectID,
+		"status":         "completed",
+		"progress":       100,
+		"estimatedHours": 90,
+		"actualHours":    90,
+		"remainingHours": 0,
+		"assigneeIds":    []uint{visibleUserID},
+	})
+	_, _ = requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":          "Hidden Workload Task",
+		"projectId":      hiddenProjectID,
+		"status":         "processing",
+		"progress":       20,
+		"estimatedHours": 50,
+		"actualHours":    5,
+		"remainingHours": 45,
+		"assigneeIds":    []uint{hiddenUserID},
+	})
+
+	loginStatus, loginBody := loginWithCredentials(t, ts.URL, "workload_reader", "pass1234")
+	if loginStatus != http.StatusOK {
+		t.Fatalf("login workload reader expected 200 got %d", loginStatus)
+	}
+	userToken := loginBody["token"].(string)
+	workloadResp, workloadBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/stats/member-workload", userToken, nil)
+	if workloadResp.StatusCode != http.StatusOK {
+		t.Fatalf("member workload expected 200 got %d, body=%v", workloadResp.StatusCode, workloadBody)
+	}
+	members, _ := workloadBody["members"].([]any)
+	if len(members) != 1 {
+		t.Fatalf("scoped workload should contain one member got %v", workloadBody)
+	}
+	member, _ := members[0].(map[string]any)
+	if uint(member["userId"].(float64)) != visibleUserID {
+		t.Fatalf("workload member should be visible user got %v", member["userId"])
+	}
+	if member["overloaded"] != true {
+		t.Fatalf("workload member should be overloaded got %v", member)
+	}
+	if member["estimatedHours"].(float64) != 12 || member["capacityHours"].(float64) != 10 || member["taskCount"].(float64) != 1 {
+		t.Fatalf("workload aggregation unexpected: %v", member)
+	}
+	if member["utilizationRate"].(float64) < 1.19 || member["utilizationRate"].(float64) > 1.21 {
+		t.Fatalf("workload utilization expected about 1.2 got %v", member["utilizationRate"])
 	}
 }
 
@@ -3732,6 +3941,91 @@ func TestScopedUserCannotMutateInvisibleProjectAndTask(t *testing.T) {
 	})
 	if createHiddenTaskResp.StatusCode != http.StatusNotFound {
 		t.Fatalf("create task on hidden project expected 404 got %d", createHiddenTaskResp.StatusCode)
+	}
+}
+
+func TestUserWeeklyCapacityCreateUpdateValidation(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":            "capacity_u1",
+		"name":                "Capacity User",
+		"email":               "capacity_u1@example.com",
+		"password":            "pass1234",
+		"weeklyCapacityHours": 32.5,
+		"roleIds":             []uint{},
+		"departmentIds":       []uint{},
+	})
+	if userResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create capacity user expected 201 got %d, body=%v", userResp.StatusCode, userBody)
+	}
+	userID := int(userBody["id"].(float64))
+	if userBody["weeklyCapacityHours"].(float64) != 32.5 {
+		t.Fatalf("weekly capacity not saved on create: %v", userBody["weeklyCapacityHours"])
+	}
+
+	zeroCapacityResp, zeroCapacityBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":            "capacity_zero",
+		"name":                "Capacity Zero",
+		"email":               "capacity_zero@example.com",
+		"password":            "pass1234",
+		"weeklyCapacityHours": 0,
+		"roleIds":             []uint{},
+		"departmentIds":       []uint{},
+	})
+	if zeroCapacityResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create zero capacity user expected 201 got %d, body=%v", zeroCapacityResp.StatusCode, zeroCapacityBody)
+	}
+	if zeroCapacityBody["weeklyCapacityHours"].(float64) != 0 {
+		t.Fatalf("zero weekly capacity should be saved as 0 got %v", zeroCapacityBody["weeklyCapacityHours"])
+	}
+
+	invalidCreateResp, invalidCreateBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":            "capacity_invalid",
+		"name":                "Capacity Invalid",
+		"email":               "capacity_invalid@example.com",
+		"password":            "pass1234",
+		"weeklyCapacityHours": 169,
+		"roleIds":             []uint{},
+		"departmentIds":       []uint{},
+	})
+	if invalidCreateResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid create capacity expected 400 got %d", invalidCreateResp.StatusCode)
+	}
+	if invalidCreateBody["code"] != "INVALID_WEEKLY_CAPACITY" {
+		t.Fatalf("invalid create capacity expected INVALID_WEEKLY_CAPACITY got %v", invalidCreateBody["code"])
+	}
+
+	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/users/"+strconv.Itoa(userID), adminToken, map[string]any{
+		"name":                "Capacity User Updated",
+		"email":               "capacity_u1@example.com",
+		"weeklyCapacityHours": 28.5,
+		"isActive":            true,
+		"roleIds":             []uint{},
+		"departmentIds":       []uint{},
+	})
+	if updateResp.StatusCode != http.StatusOK {
+		t.Fatalf("update capacity user expected 200 got %d, body=%v", updateResp.StatusCode, updateBody)
+	}
+	if updateBody["weeklyCapacityHours"].(float64) != 28.5 {
+		t.Fatalf("weekly capacity not saved on update: %v", updateBody["weeklyCapacityHours"])
+	}
+
+	invalidUpdateResp, invalidUpdateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/users/"+strconv.Itoa(userID), adminToken, map[string]any{
+		"name":                "Capacity User Updated",
+		"email":               "capacity_u1@example.com",
+		"weeklyCapacityHours": -0.5,
+		"isActive":            true,
+		"roleIds":             []uint{},
+		"departmentIds":       []uint{},
+	})
+	if invalidUpdateResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid update capacity expected 400 got %d", invalidUpdateResp.StatusCode)
+	}
+	if invalidUpdateBody["code"] != "INVALID_WEEKLY_CAPACITY" {
+		t.Fatalf("invalid update capacity expected INVALID_WEEKLY_CAPACITY got %v", invalidUpdateBody["code"])
 	}
 }
 

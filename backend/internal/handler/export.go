@@ -124,6 +124,9 @@ func (h *Handler) ExportTasksCSV(c *gin.Context) {
 			string(task.Status),
 			string(task.Priority),
 			strconv.Itoa(task.Progress),
+			strconv.FormatFloat(task.EstimatedHours, 'f', 2, 64),
+			strconv.FormatFloat(task.ActualHours, 'f', 2, 64),
+			strconv.FormatFloat(task.RemainingHours, 'f', 2, 64),
 			formatTime(task.StartAt),
 			formatTime(task.EndAt),
 			strconv.FormatUint(uint64(task.ProjectID), 10),
@@ -134,7 +137,7 @@ func (h *Handler) ExportTasksCSV(c *gin.Context) {
 		})
 	}
 	writeCSV(c, "tasks.csv",
-		[]string{"ID", "任务编号", "标题", "描述", "状态", "优先级", "进度", "开始时间", "结束时间", "项目ID", "父任务ID", "创建人ID", "执行人", "创建时间"},
+		[]string{"ID", "任务编号", "标题", "描述", "状态", "优先级", "进度", "估算工时", "实际工时", "剩余工时", "开始时间", "结束时间", "项目ID", "父任务ID", "创建人ID", "执行人", "创建时间"},
 		rows,
 	)
 }

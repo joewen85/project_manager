@@ -62,7 +62,7 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/automation-rules` | `automations.create` |
 | PUT | `/automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
 | DELETE | `/automation-rules/:id` | `automations.delete` |
-| GET | `/stats/dashboard` `/stats/project-health` | `stats.read` |
+| GET | `/stats/dashboard` `/stats/project-health` `/stats/member-workload` | `stats.read` |
 | GET | `/notifications` `/notifications/unread-count` | `notifications.read` |
 | PATCH | `/notifications/:id/read` `/notifications/read-all` | `notifications.update` |
 | GET | `/audit/logs` | `audit.read` |
@@ -96,9 +96,11 @@ Base URL: `http://localhost:8080/api/v1`
 - Query: `page` `pageSize` `keyword`
 
 ### POST `/users`
-- 请求体: `{ username, name, email, password, roleIds, departmentIds }`
+- 请求体: `{ username, name, email, password, weeklyCapacityHours?, roleIds, departmentIds }`
+- `weeklyCapacityHours` 为默认周容量，范围 `0-168`，未传默认 `40`
 
 ### PUT `/users/:id`
+- 请求体可更新 `weeklyCapacityHours`，范围 `0-168`
 ### DELETE `/users/:id`
 
 ## 部门管理
@@ -181,6 +183,7 @@ Base URL: `http://localhost:8080/api/v1`
 ### GET `/tasks/export`
 - 用途: 导出当前可见任务为 CSV
 - Query: `projectId` `status` `keyword`
+- CSV 包含估算工时、实际工时、剩余工时列
 
 ### GET `/tasks/assignee-options`
 - 用途: 任务编辑弹窗执行人选项
@@ -188,12 +191,13 @@ Base URL: `http://localhost:8080/api/v1`
 - 响应: `{ users: [{ id, name, username, email }] }`
 
 ### POST `/tasks`
-- 请求体: `{ taskNo?, title, description, customField1?, customField2?, customField3?, status, priority, isMilestone, progress, startAt, endAt, attachments?, projectId, parentId, assigneeIds, tagIds, dependencies? }`
+- 请求体: `{ taskNo?, title, description, customField1?, customField2?, customField3?, status, priority, isMilestone, progress, estimatedHours?, actualHours?, remainingHours?, startAt, endAt, attachments?, projectId, parentId, assigneeIds, tagIds, dependencies? }`
 - `dependencies` 格式: `[{ dependsOnTaskId, lagDays, type }]`
 - `creatorId` 默认使用当前登录用户
 - `taskNo` 唯一（为空自动生成）
 - `status` 支持 `pending|queued|processing|reviewing|completed`
 - `priority` 支持 `high|medium|low`（默认 `high`）
+- `estimatedHours`、`actualHours`、`remainingHours` 为非负数，未传默认 `0`
 - `tagIds` 为标签 ID 数组；返回任务详情/列表时会包含 `tags`
 - `customField1~3` 为三个可选自定义长文本字段
 
@@ -207,6 +211,7 @@ Base URL: `http://localhost:8080/api/v1`
   - `myParticipate`
 
 ### PUT `/tasks/:id`
+- 请求体同创建任务；工时字段为非负数
 ### PUT `/tasks/:id/dependencies`
 - 请求体: `{ dependencies: [{ dependsOnTaskId, lagDays, type }] }`
 
@@ -353,6 +358,14 @@ Base URL: `http://localhost:8080/api/v1`
 - `score` 口径: 按任务“计划进度 - 实际进度”的滞后程度计算；实际进度为 `completed=100`，否则取 `progress`；计划进度按 `startAt/endAt` 和当前时间线性计算。
 - 权重: `high=3`、`medium=2`、`low=1`，里程碑任务额外 `+1`。
 - `health`: `green` 健康、`yellow` 关注、`red` 高风险；逾期、里程碑逾期、未排期、待审核堆积会进入 `reasons`。
+
+### GET `/stats/member-workload`
+- 权限: `stats.read`
+- 范围: 管理员查看全量任务聚合；普通用户仅按任务可见范围聚合。
+- 口径: 当前自然周内未完成任务，包含未排期任务和与本周有交集的排期任务；按执行人汇总估算/实际/剩余工时。
+- 响应: `{ weekStart, weekEnd, members }`
+- `members`: `[{ userId, name, username, email, taskCount, estimatedHours, actualHours, remainingHours, capacityHours, utilizationRate, overloaded }]`
+- `overloaded`: `estimatedHours > capacityHours`；容量为 `0` 且估算工时大于 `0` 时也视为过载。
 
 ## 站内通知
 

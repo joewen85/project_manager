@@ -51,6 +51,9 @@ interface TaskForm {
   priority: TaskPriority
   isMilestone: boolean
   progress: number
+  estimatedHours: number
+  actualHours: number
+  remainingHours: number
   startAt: string
   endAt: string
   attachments: UploadAttachment[]
@@ -78,6 +81,9 @@ const initialForm: TaskForm = {
   priority: 'high',
   isMilestone: false,
   progress: 0,
+  estimatedHours: 0,
+  actualHours: 0,
+  remainingHours: 0,
   startAt: '',
   endAt: '',
   attachments: emptyUploadAttachments(),
@@ -90,7 +96,7 @@ const initialForm: TaskForm = {
 type TaskSortKey = 'taskNo' | 'title' | 'priority' | 'status' | 'progress' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt'
 type TaskSortOrder = 'asc' | 'desc'
 type TaskViewMode = 'list' | 'kanban'
-type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'tags' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt' | 'assignees' | 'reviewers' | 'description' | 'customField1' | 'customField2' | 'customField3'
+type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'hours' | 'tags' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt' | 'assignees' | 'reviewers' | 'description' | 'customField1' | 'customField2' | 'customField3'
 interface TaskFieldSetting extends FieldSettingItem {
   key: TaskColumnKey
 }
@@ -104,6 +110,7 @@ const taskDefaultFieldSettings: TaskFieldSetting[] = [
   { key: 'priority', label: '优先级', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'status', label: '状态', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'progress', label: '进度', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
+  { key: 'hours', label: '工时', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
   { key: 'tags', label: '标签', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'startAt', label: '开始', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'endAt', label: '结束', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
@@ -137,6 +144,22 @@ const getTaskProjectName = (task: Task, projects: Project[]) => {
 
 const getTaskAssigneeNames = (task: Task) => (task.assignees || []).map((user) => user.username || user.name).filter(Boolean)
 const getTaskReviewerNames = (task: Task) => (task.reviewers || []).map((user) => user.username || user.name).filter(Boolean)
+const formatHours = (value?: number) => {
+  const hours = Number(value ?? 0)
+  if (!Number.isFinite(hours)) return '0h'
+  return `${hours.toFixed(2).replace(/\.?0+$/, '')}h`
+}
+const parseHoursInput = (value: string) => {
+  const hours = Number(value)
+  return Number.isFinite(hours) ? hours : 0
+}
+const renderHoursSummary = (task: Pick<Task, 'estimatedHours' | 'actualHours' | 'remainingHours'>) => (
+  <div className="task-hours-summary">
+    <span>估 {formatHours(task.estimatedHours)}</span>
+    <span>实 {formatHours(task.actualHours)}</span>
+    <span>余 {formatHours(task.remainingHours)}</span>
+  </div>
+)
 const formatUserName = (user?: User) => {
   if (!user) return '系统'
   if (user.name && user.username) return `${user.name}（${user.username}）`
@@ -466,8 +489,15 @@ export function TasksPage() {
       setFormError('结束时间必须晚于开始时间')
       return
     }
+    if (form.estimatedHours < 0 || form.actualHours < 0 || form.remainingHours < 0) {
+      setFormError('工时不能小于 0')
+      return
+    }
     const payload = {
       ...form,
+      estimatedHours: Number(form.estimatedHours || 0),
+      actualHours: Number(form.actualHours || 0),
+      remainingHours: Number(form.remainingHours || 0),
       startAt: form.startAt ? new Date(form.startAt).toISOString() : '',
       endAt: form.endAt ? new Date(form.endAt).toISOString() : '',
       parentId: form.parentId || undefined
@@ -509,6 +539,9 @@ export function TasksPage() {
       status: item.status,
       priority: item.priority || 'high',
       progress: item.progress,
+      estimatedHours: item.estimatedHours ?? 0,
+      actualHours: item.actualHours ?? 0,
+      remainingHours: item.remainingHours ?? 0,
       isMilestone: Boolean(item.isMilestone),
       startAt: item.startAt ? item.startAt.slice(0, 16) : '',
       endAt: item.endAt ? item.endAt.slice(0, 16) : '',
@@ -929,6 +962,8 @@ export function TasksPage() {
         return <td key={key} data-label="状态">{statusLabel[task.status]}</td>
       case 'progress':
         return <td key={key} data-label="进度">{task.progress}%</td>
+      case 'hours':
+        return <td key={key} data-label="工时">{renderHoursSummary(task)}</td>
       case 'tags':
         return (
           <td key={key} data-label="标签">
@@ -1018,6 +1053,10 @@ export function TasksPage() {
         <div className="kanban-task-meta">
           <span>{getTaskProjectName(task, projects)}</span>
           <span>{task.progress}%</span>
+        </div>
+        <div className="kanban-task-meta">
+          <span>估 {formatHours(task.estimatedHours)}</span>
+          <span>余 {formatHours(task.remainingHours)}</span>
         </div>
         <div className="kanban-progress" aria-label={`任务进度 ${task.progress}%`}>
           <span style={{ width: `${Math.max(0, Math.min(100, Number(task.progress || 0)))}%` }} />
@@ -1311,6 +1350,9 @@ export function TasksPage() {
                 <div><strong>里程碑：</strong>{detailTask.isMilestone ? '是' : '否'}</div>
                 <div><strong>状态：</strong>{statusLabel[detailTask.status] || detailTask.status || '-'}</div>
                 <div><strong>进度：</strong>{Number(detailTask.progress || 0)}%</div>
+                <div><strong>估算工时：</strong>{formatHours(detailTask.estimatedHours)}</div>
+                <div><strong>实际工时：</strong>{formatHours(detailTask.actualHours)}</div>
+                <div><strong>剩余工时：</strong>{formatHours(detailTask.remainingHours)}</div>
                 <div><strong>项目ID：</strong>{detailTask.projectId || '-'}</div>
                 <div><strong>父任务ID：</strong>{detailTask.parentId || '-'}</div>
                 <div className="detail-time-line"><strong>标签：</strong>{(detailTask.tags || []).map((tag) => tag.name).join('，') || '-'}</div>
@@ -1522,6 +1564,12 @@ export function TasksPage() {
           </select>
           <label htmlFor="task-progress">进度</label>
           <input id="task-progress" type="number" inputMode="numeric" min={0} max={100} value={form.progress} onChange={(e) => handleProgressChange(Number(e.target.value))} disabled={!canEditTaskField('progress')} />
+          <label htmlFor="task-estimated-hours">估算工时</label>
+          <input id="task-estimated-hours" type="number" inputMode="decimal" min={0} step={0.5} value={form.estimatedHours} onChange={(e) => setForm((prev) => ({ ...prev, estimatedHours: parseHoursInput(e.target.value) }))} disabled={!canEditTaskField('hours')} />
+          <label htmlFor="task-actual-hours">实际工时</label>
+          <input id="task-actual-hours" type="number" inputMode="decimal" min={0} step={0.5} value={form.actualHours} onChange={(e) => setForm((prev) => ({ ...prev, actualHours: parseHoursInput(e.target.value) }))} disabled={!canEditTaskField('hours')} />
+          <label htmlFor="task-remaining-hours">剩余工时</label>
+          <input id="task-remaining-hours" type="number" inputMode="decimal" min={0} step={0.5} value={form.remainingHours} onChange={(e) => setForm((prev) => ({ ...prev, remainingHours: parseHoursInput(e.target.value) }))} disabled={!canEditTaskField('hours')} />
           <label htmlFor="task-assignees">执行人（多人）</label>
           <SearchField aria-label="搜索执行人" placeholder="搜索执行人：姓名/用户名/邮箱" value={assigneeKeyword} onChange={setAssigneeKeyword} disabled={!canEditTaskField('assignees')} />
           <div id="task-assignees" className="multi-checklist">

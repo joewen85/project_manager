@@ -26,10 +26,41 @@ interface ProjectHealthResponse {
   projects?: ProjectHealth[]
 }
 
+interface MemberWorkloadItem {
+  userId: number
+  name: string
+  username: string
+  email: string
+  taskCount: number
+  estimatedHours: number
+  actualHours: number
+  remainingHours: number
+  capacityHours: number
+  utilizationRate: number
+  overloaded: boolean
+}
+
+interface MemberWorkloadResponse {
+  weekStart?: string
+  weekEnd?: string
+  members?: MemberWorkloadItem[]
+}
+
 const healthLabel: Record<ProjectHealth['health'], string> = {
   green: '健康',
   yellow: '关注',
   red: '高风险'
+}
+
+const formatDate = (value?: string) => {
+  if (!value) return '-'
+  return new Date(value).toLocaleDateString('zh-CN')
+}
+
+const formatHours = (value?: number) => {
+  const hours = Number(value ?? 0)
+  if (!Number.isFinite(hours)) return '0h'
+  return `${hours.toFixed(2).replace(/\.?0+$/, '')}h`
 }
 
 export function DashboardPage() {
@@ -40,6 +71,8 @@ export function DashboardPage() {
   const [progressError, setProgressError] = useState('')
   const [projectHealth, setProjectHealth] = useState<ProjectHealth[]>([])
   const [projectHealthError, setProjectHealthError] = useState('')
+  const [memberWorkload, setMemberWorkload] = useState<MemberWorkloadResponse>({ members: [] })
+  const [memberWorkloadError, setMemberWorkloadError] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const canViewUsers = hasAnyPermission(['users.read', 'users.create', 'users.update', 'users.delete', 'users.write', 'rbac.manage'], permissions)
@@ -50,7 +83,8 @@ export function DashboardPage() {
       setError('')
       setProgressError('')
       setProjectHealthError('')
-      const [statsData, raw, healthData] = await Promise.all([
+      setMemberWorkloadError('')
+      const [statsData, raw, healthData, workloadData] = await Promise.all([
         fetchData<DashboardStats>('/stats/dashboard'),
         fetchArray<DashboardProgressRaw>('/tasks/progress-list', undefined, { silent: true }).catch((progressLoadError) => {
           setProgressError(readApiError(progressLoadError, '任务状态分布加载失败'))
@@ -59,10 +93,19 @@ export function DashboardPage() {
         fetchData<ProjectHealthResponse>('/stats/project-health', undefined, { silent: true }).catch((healthError) => {
           setProjectHealthError(readApiError(healthError, '项目健康度加载失败'))
           return { projects: [] }
+        }),
+        fetchData<MemberWorkloadResponse>('/stats/member-workload', undefined, { silent: true }).catch((workloadError) => {
+          setMemberWorkloadError(readApiError(workloadError, '成员负载加载失败'))
+          return { members: [] } as MemberWorkloadResponse
         })
       ])
       setStats(statsData)
       setProjectHealth(Array.isArray(healthData.projects) ? healthData.projects : [])
+      setMemberWorkload({
+        weekStart: workloadData.weekStart,
+        weekEnd: workloadData.weekEnd,
+        members: Array.isArray(workloadData.members) ? workloadData.members : []
+      })
 
       const source = raw
         .filter((item) => item && typeof item === 'object')
@@ -85,6 +128,7 @@ export function DashboardPage() {
       setStats(undefined)
       setProgress([])
       setProjectHealth([])
+      setMemberWorkload({ members: [] })
     } finally {
       setLoading(false)
     }
@@ -103,6 +147,7 @@ export function DashboardPage() {
         <article className="card metric-card"><p>任务</p><strong>{stats?.tasks ?? 0}</strong></article>
         <article className="card metric-card"><p>完成率</p><strong>{((stats?.completionRate ?? 0) * 100).toFixed(1)}%</strong></article>
         <article className="card metric-card"><p>风险项目</p><strong>{projectHealth.filter((item) => item.health === 'red').length}</strong></article>
+        <article className="card metric-card"><p>过载成员</p><strong>{(memberWorkload.members || []).filter((item) => item.overloaded).length}</strong></article>
       </div>
       {!loading && !error && (
         <section className="card dashboard-health-panel">
@@ -129,6 +174,42 @@ export function DashboardPage() {
                   <p>{item.reasons.join('；')}</p>
                 </Link>
               ))}
+            </div>
+          )}
+        </section>
+      )}
+      {!loading && !error && (
+        <section className="card dashboard-workload-panel">
+          <div className="dashboard-health-header">
+            <h3>本周成员负载</h3>
+            <span>{formatDate(memberWorkload.weekStart)} - {formatDate(memberWorkload.weekEnd)}</span>
+            {memberWorkloadError && <span className="error">{memberWorkloadError}</span>}
+          </div>
+          {(memberWorkload.members || []).length === 0 && !memberWorkloadError && <p className="inline-tip">暂无可见成员负载数据</p>}
+          {(memberWorkload.members || []).length > 0 && (
+            <div className="dashboard-workload-list">
+              {(memberWorkload.members || []).map((item) => {
+                const utilizationPercent = Math.round((item.utilizationRate || 0) * 100)
+                const cappedWidth = Math.max(0, Math.min(100, utilizationPercent))
+                return (
+                  <article key={item.userId} className={`dashboard-workload-item${item.overloaded ? ' overloaded' : ''}`}>
+                    <div className="dashboard-workload-main">
+                      <strong>{item.name || item.username}</strong>
+                      <span>{item.taskCount} 项任务</span>
+                      <span>{formatHours(item.estimatedHours)} / {formatHours(item.capacityHours)}</span>
+                      {item.overloaded && <b>过载</b>}
+                    </div>
+                    <div className="dashboard-workload-bar" aria-label={`容量使用率 ${utilizationPercent}%`}>
+                      <span style={{ width: `${cappedWidth}%` }} />
+                    </div>
+                    <div className="dashboard-health-metrics">
+                      <span>实际 {formatHours(item.actualHours)}</span>
+                      <span>剩余 {formatHours(item.remainingHours)}</span>
+                      <span>使用率 {utilizationPercent}%</span>
+                    </div>
+                  </article>
+                )
+              })}
             </div>
           )}
         </section>

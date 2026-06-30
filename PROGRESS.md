@@ -111,6 +111,11 @@
 - 完成：Webhook 在规则事务提交后投递，失败会把执行日志标记为失败并记录原因，不回滚任务更新、标签追加或执行人追加
 - 完成：自动化规则前端页面支持配置 Webhook 动作，并在规则列表展示调用 Webhook
 - 完成：补充 Webhook URL 校验/逾期手动投递/事件投递失败不回滚集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
+- 完成：按 `Improvement.md` 推进 P1-1 资源容量与工时管理 MVP
+- 完成：任务新增估算/实际/剩余工时字段，用户新增默认周容量字段，并提供显式 SQL 迁移
+- 完成：新增 `GET /stats/member-workload`，按当前用户可见任务聚合本周成员估算/实际/剩余工时与容量使用率，超过容量标记过载
+- 完成：Tasks 页面支持工时录入、列表/Kanban/详情展示，Users 页面支持周容量维护，Dashboard 增加本周成员负载与过载人数
+- 完成：补充任务工时创建/更新/导出、用户容量校验、成员负载可见范围集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

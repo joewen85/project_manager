@@ -15,26 +15,29 @@ import (
 )
 
 type taskRequest struct {
-	TaskNo       string                   `json:"taskNo"`
-	Title        string                   `json:"title" binding:"required"`
-	Description  string                   `json:"description"`
-	CustomField1 string                   `json:"customField1"`
-	CustomField2 string                   `json:"customField2"`
-	CustomField3 string                   `json:"customField3"`
-	Status       string                   `json:"status"`
-	Priority     string                   `json:"priority"`
-	IsMilestone  bool                     `json:"isMilestone"`
-	Progress     int                      `json:"progress"`
-	StartAt      string                   `json:"startAt"`
-	EndAt        string                   `json:"endAt"`
-	Attachment   *attachmentRequest       `json:"attachment"`
-	Attachments  *[]attachmentRequest     `json:"attachments"`
-	ProjectID    uint                     `json:"projectId" binding:"required"`
-	ParentID     *uint                    `json:"parentId"`
-	AssigneeIDs  []uint                   `json:"assigneeIds"`
-	ReviewerIDs  []uint                   `json:"reviewerIds"`
-	TagIDs       []uint                   `json:"tagIds"`
-	Dependencies *[]taskDependencyRequest `json:"dependencies"`
+	TaskNo         string                   `json:"taskNo"`
+	Title          string                   `json:"title" binding:"required"`
+	Description    string                   `json:"description"`
+	CustomField1   string                   `json:"customField1"`
+	CustomField2   string                   `json:"customField2"`
+	CustomField3   string                   `json:"customField3"`
+	Status         string                   `json:"status"`
+	Priority       string                   `json:"priority"`
+	IsMilestone    bool                     `json:"isMilestone"`
+	Progress       int                      `json:"progress"`
+	EstimatedHours float64                  `json:"estimatedHours"`
+	ActualHours    float64                  `json:"actualHours"`
+	RemainingHours float64                  `json:"remainingHours"`
+	StartAt        string                   `json:"startAt"`
+	EndAt          string                   `json:"endAt"`
+	Attachment     *attachmentRequest       `json:"attachment"`
+	Attachments    *[]attachmentRequest     `json:"attachments"`
+	ProjectID      uint                     `json:"projectId" binding:"required"`
+	ParentID       *uint                    `json:"parentId"`
+	AssigneeIDs    []uint                   `json:"assigneeIds"`
+	ReviewerIDs    []uint                   `json:"reviewerIds"`
+	TagIDs         []uint                   `json:"tagIds"`
+	Dependencies   *[]taskDependencyRequest `json:"dependencies"`
 }
 
 type taskProgressRequest struct {
@@ -557,6 +560,10 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "INVALID_PROGRESS", "进度必须在 0 到 100 之间")
 		return
 	}
+	if err := validateTaskHours(req); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_TASK_HOURS", err.Error())
+		return
+	}
 	startAt, err := parseRFC3339(req.StartAt)
 	if err != nil {
 		respondError(c, http.StatusBadRequest, "INVALID_START_AT", "startAt 必须是 RFC3339 时间格式")
@@ -584,23 +591,26 @@ func (h *Handler) CreateTask(c *gin.Context) {
 	modelAttachments := toModelAttachments(attachments)
 
 	item := model.Task{
-		TaskNo:       taskNo,
-		Title:        req.Title,
-		Description:  req.Description,
-		CustomField1: req.CustomField1,
-		CustomField2: req.CustomField2,
-		CustomField3: req.CustomField3,
-		Status:       normalizeStatus(req.Status),
-		Priority:     normalizePriority(req.Priority),
-		IsMilestone:  req.IsMilestone,
-		Progress:     req.Progress,
-		StartAt:      startAt,
-		EndAt:        endAt,
-		Attachment:   firstModelAttachment(modelAttachments),
-		Attachments:  modelAttachments,
-		CreatorID:    creatorID,
-		ProjectID:    req.ProjectID,
-		ParentID:     req.ParentID,
+		TaskNo:         taskNo,
+		Title:          req.Title,
+		Description:    req.Description,
+		CustomField1:   req.CustomField1,
+		CustomField2:   req.CustomField2,
+		CustomField3:   req.CustomField3,
+		Status:         normalizeStatus(req.Status),
+		Priority:       normalizePriority(req.Priority),
+		IsMilestone:    req.IsMilestone,
+		Progress:       req.Progress,
+		EstimatedHours: req.EstimatedHours,
+		ActualHours:    req.ActualHours,
+		RemainingHours: req.RemainingHours,
+		StartAt:        startAt,
+		EndAt:          endAt,
+		Attachment:     firstModelAttachment(modelAttachments),
+		Attachments:    modelAttachments,
+		CreatorID:      creatorID,
+		ProjectID:      req.ProjectID,
+		ParentID:       req.ParentID,
 	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&item).Error; err != nil {
@@ -682,6 +692,19 @@ func validTaskProgress(progress int) bool {
 	return progress >= 0 && progress <= 100
 }
 
+func validateTaskHours(req taskRequest) error {
+	if req.EstimatedHours < 0 {
+		return fmt.Errorf("estimatedHours 不能小于 0")
+	}
+	if req.ActualHours < 0 {
+		return fmt.Errorf("actualHours 不能小于 0")
+	}
+	if req.RemainingHours < 0 {
+		return fmt.Errorf("remainingHours 不能小于 0")
+	}
+	return nil
+}
+
 func (h *Handler) preloadTaskResponse(tx *gorm.DB, item *model.Task) error {
 	return tx.Preload("Assignees").
 		Preload("Reviewers").
@@ -726,6 +749,10 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	}
 	if !validTaskProgress(req.Progress) {
 		respondError(c, http.StatusBadRequest, "INVALID_PROGRESS", "进度必须在 0 到 100 之间")
+		return
+	}
+	if err := validateTaskHours(req); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_TASK_HOURS", err.Error())
 		return
 	}
 
@@ -794,6 +821,9 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	item.Priority = normalizePriority(req.Priority)
 	item.IsMilestone = req.IsMilestone
 	item.Progress = req.Progress
+	item.EstimatedHours = req.EstimatedHours
+	item.ActualHours = req.ActualHours
+	item.RemainingHours = req.RemainingHours
 	item.StartAt = startAt
 	item.EndAt = endAt
 	if provided {
