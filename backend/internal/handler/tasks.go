@@ -41,6 +41,10 @@ type taskProgressRequest struct {
 	Progress int `json:"progress"`
 }
 
+type taskStatusRequest struct {
+	Status string `json:"status" binding:"required"`
+}
+
 type taskDependencyRequest struct {
 	DependsOnTaskID uint   `json:"dependsOnTaskId"`
 	LagDays         int    `json:"lagDays"`
@@ -58,6 +62,15 @@ func normalizeStatus(status string) model.TaskStatus {
 		return model.TaskStatus(status)
 	default:
 		return model.TaskPending
+	}
+}
+
+func parseExplicitTaskStatus(status string) (model.TaskStatus, bool) {
+	switch model.TaskStatus(strings.TrimSpace(status)) {
+	case model.TaskPending, model.TaskQueued, model.TaskProcessing, model.TaskReviewing, model.TaskCompleted:
+		return model.TaskStatus(strings.TrimSpace(status)), true
+	default:
+		return model.TaskPending, false
 	}
 }
 
@@ -689,6 +702,22 @@ func (h *Handler) createReviewRequestNotificationsWithDB(tx *gorm.DB, reviewerID
 	)
 }
 
+func (h *Handler) currentUserHasPermission(c *gin.Context, permission string) bool {
+	currentUserID := c.GetUint("userId")
+	if currentUserID == 0 || strings.TrimSpace(permission) == "" {
+		return false
+	}
+	var exists int
+	err := h.DB.Table("role_permissions").
+		Select("1").
+		Joins("JOIN user_roles ON user_roles.role_id = role_permissions.role_id").
+		Joins("JOIN permissions ON permissions.id = role_permissions.permission_id").
+		Where("user_roles.user_id = ? AND permissions.code = ?", currentUserID, permission).
+		Limit(1).
+		Scan(&exists).Error
+	return err == nil && exists == 1
+}
+
 func (h *Handler) UpdateTask(c *gin.Context) {
 	var req taskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -946,6 +975,85 @@ func (h *Handler) UpdateTaskProgress(c *gin.Context) {
 	}
 	if shouldNotifyReviewers {
 		h.pushNotificationUpdates(reviewerIDs)
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *Handler) UpdateTaskStatus(c *gin.Context) {
+	var req taskStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondValidationError(c, err)
+		return
+	}
+	nextStatus, ok := parseExplicitTaskStatus(req.Status)
+	if !ok {
+		respondError(c, http.StatusBadRequest, "INVALID_TASK_STATUS", "状态必须是 pending、queued、processing、reviewing 或 completed")
+		return
+	}
+
+	var item model.Task
+	query := h.scopeTasksQuery(c, h.DB.Model(&model.Task{})).
+		Preload("Assignees").
+		Preload("Reviewers").
+		Where("tasks.id = ?", c.Param("id"))
+	if err := query.First(&item).Error; err != nil {
+		respondError(c, http.StatusNotFound, "TASK_NOT_FOUND", "任务不存在")
+		return
+	}
+
+	currentUserID := c.GetUint("userId")
+	assigneeIDs := userIDsFromUsers(item.Assignees)
+	reviewerIDs := userIDsFromUsers(item.Reviewers)
+	isCurrentAssignee := containsUint(assigneeIDs, currentUserID)
+	isCurrentReviewer := containsUint(reviewerIDs, currentUserID)
+	canUpdateTask := h.currentUserHasPermission(c, "tasks.update")
+	if nextStatus == model.TaskCompleted && item.Status != model.TaskCompleted && !isCurrentReviewer {
+		respondError(c, http.StatusForbidden, "TASK_REVIEWER_REQUIRED", "只有任务审核人才能将任务设为已完成")
+		return
+	}
+	if !canUpdateTask && !isCurrentAssignee && !isCurrentReviewer {
+		respondError(c, http.StatusForbidden, "TASK_STATUS_UPDATE_FORBIDDEN", "只有任务相关人员才能更新任务状态")
+		return
+	}
+
+	oldStatus := item.Status
+	oldProgress := item.Progress
+	if oldStatus == nextStatus {
+		if err := h.preloadTaskResponse(h.DB, &item); err != nil {
+			respondDBError(c, http.StatusInternalServerError, "QUERY_TASK_FAILED", err)
+			return
+		}
+		c.JSON(http.StatusOK, item)
+		return
+	}
+
+	item.Status = nextStatus
+	if item.Status == model.TaskCompleted && item.Progress < 100 {
+		item.Progress = 100
+	}
+
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&item).Updates(map[string]any{
+			"status":   item.Status,
+			"progress": item.Progress,
+		}).Error; err != nil {
+			return err
+		}
+		if err := h.preloadTaskResponse(tx, &item); err != nil {
+			return err
+		}
+		detail := fmt.Sprintf("状态：%s -> %s", oldStatus, item.Status)
+		if oldProgress != item.Progress {
+			detail += fmt.Sprintf("\n进度：%d -> %d", oldProgress, item.Progress)
+		}
+		if err := h.writeTaskActivityWithDB(tx, item.ID, currentUserID, "task.status_updated", taskActivitySummary("更新状态", item), detail, nil); err != nil {
+			return err
+		}
+		return h.writeAuditWithDB(c, tx, "tasks", "update_status", item.ID, true, auditDetailf("更新任务状态(id=%d)", item.ID))
+	}); err != nil {
+		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_STATUS_FAILED", err)
+		return
 	}
 
 	c.JSON(http.StatusOK, item)

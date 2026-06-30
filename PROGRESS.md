@@ -55,6 +55,11 @@
 - 完成：健康度评分采用计划进度与实际进度偏差，并结合逾期、里程碑逾期、未排期、待审核原因输出红黄绿
 - 完成：Dashboard 增加项目健康榜与风险项目计数，点击健康项可跳转到对应项目任务筛选
 - 完成：补充项目健康度 scope 集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
+- 完成：按 `Improvement.md` 推进 P0-2 Kanban 视图
+- 完成：任务页新增 List/Kanban 视图切换，复用现有项目、执行人、状态、优先级、标签筛选与分页数据
+- 完成：新增 `PATCH /tasks/:id/status`，支持看板拖拽轻量更新状态，完成状态仍要求审核人并自动补进度到 100
+- 完成：Kanban 按 pending/queued/processing/reviewing/completed 分列展示，处理中与待审核列内置 WIP 超限提示
+- 完成：补充状态更新 handler 单测和集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

@@ -75,7 +75,7 @@
 | `DELETE /projects/:id` | `projects.delete` |
 | `GET /tasks*` | `tasks.read` |
 | `POST /tasks` | `tasks.create` |
-| `PATCH /tasks/:id/progress` `PATCH /tasks/:id/complete` | `tasks.read` + 任务执行人/审核人关系校验 |
+| `PATCH /tasks/:id/progress` `PATCH /tasks/:id/status` `PATCH /tasks/:id/complete` | `tasks.read` + 任务执行人/审核人关系校验 |
 | `PUT /tasks/:id` `PUT /tasks/:id/dependencies` `PATCH /tasks/:id/schedule` | `tasks.update` |
 | `DELETE /tasks/:id` | `tasks.delete` |
 | `GET /tasks/:id/comments` `GET /tasks/:id/activities` | `comments.read` + 任务可见范围 |

@@ -44,7 +44,7 @@ Base URL: `http://localhost:8080/api/v1`
 | GET | `/tasks*` | `tasks.read` |
 | POST | `/tasks` | `tasks.create` |
 | PUT | `/tasks/:id` `/tasks/:id/dependencies` | `tasks.update` |
-| PATCH | `/tasks/:id/progress` `/tasks/:id/complete` | `tasks.read` + 任务执行人/审核人关系校验 |
+| PATCH | `/tasks/:id/progress` `/tasks/:id/status` `/tasks/:id/complete` | `tasks.read` + 任务执行人/审核人关系校验 |
 | PATCH | `/tasks/:id/schedule` | `tasks.update` |
 | DELETE | `/tasks/:id` | `tasks.delete` |
 | GET | `/tasks/:id/comments` `/tasks/:id/activities` | `comments.read` + 任务可见范围 |
@@ -180,7 +180,7 @@ Base URL: `http://localhost:8080/api/v1`
 - `dependencies` 格式: `[{ dependsOnTaskId, lagDays, type }]`
 - `creatorId` 默认使用当前登录用户
 - `taskNo` 唯一（为空自动生成）
-- `status` 支持 `pending|queued|processing|completed`
+- `status` 支持 `pending|queued|processing|reviewing|completed`
 - `priority` 支持 `high|medium|low`（默认 `high`）
 - `tagIds` 为标签 ID 数组；返回任务详情/列表时会包含 `tags`
 - `customField1~3` 为三个可选自定义长文本字段
@@ -197,6 +197,13 @@ Base URL: `http://localhost:8080/api/v1`
 ### PUT `/tasks/:id`
 ### PUT `/tasks/:id/dependencies`
 - 请求体: `{ dependencies: [{ dependsOnTaskId, lagDays, type }] }`
+
+### PATCH `/tasks/:id/status`
+- 权限: `tasks.read`
+- 范围: 只能更新当前账号可见任务；普通用户需为任务执行人或审核人，拥有 `tasks.update` 的用户可更新可见任务
+- 请求体: `{ status: "pending|queued|processing|reviewing|completed" }`
+- 规则: 更新到 `completed` 必须是任务审核人；完成时后端自动将 `progress` 补为 `100`
+- 用途: 任务页 Kanban 拖拽轻量更新状态；成功后返回完整 `Task`
 
 ### PATCH `/tasks/:id/schedule`
 - 请求体: `{ startAt, endAt }`

@@ -23,3 +23,27 @@ func TestNormalizeStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestParseExplicitTaskStatus(t *testing.T) {
+	cases := []struct {
+		in     string
+		want   model.TaskStatus
+		wantOK bool
+	}{
+		{in: "pending", want: model.TaskPending, wantOK: true},
+		{in: "queued", want: model.TaskQueued, wantOK: true},
+		{in: "processing", want: model.TaskProcessing, wantOK: true},
+		{in: "reviewing", want: model.TaskReviewing, wantOK: true},
+		{in: "completed", want: model.TaskCompleted, wantOK: true},
+		{in: " processing ", want: model.TaskProcessing, wantOK: true},
+		{in: "unknown", want: model.TaskPending, wantOK: false},
+		{in: "", want: model.TaskPending, wantOK: false},
+	}
+
+	for _, tc := range cases {
+		got, ok := parseExplicitTaskStatus(tc.in)
+		if got != tc.want || ok != tc.wantOK {
+			t.Fatalf("input %q expect (%s,%v) got (%s,%v)", tc.in, tc.want, tc.wantOK, got, ok)
+		}
+	}
+}

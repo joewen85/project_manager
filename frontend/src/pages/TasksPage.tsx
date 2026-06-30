@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { DragEvent, FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Settings2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { api, fetchData, fetchPage, hasPermission, readApiError } from '../services/api'
@@ -13,17 +13,24 @@ import { SearchableSelect } from '../components/SearchableSelect'
 import { TableHeaderFilter } from '../components/TableHeaderFilter'
 import { RemoteProjectSelect } from '../components/RemoteProjectSelect'
 import { formatDateTime } from '../utils/datetime'
-import { Project, Tag, Task, TaskActivity, TaskComment, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
+import { Project, Status, Tag, Task, TaskActivity, TaskComment, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { AttachmentField } from '../components/AttachmentField'
 import { DateTimeQuickField } from '../components/DateTimeQuickField'
 import { usePermissions } from '../hooks/usePermissions'
 
-const statusLabel: Record<string, string> = {
+const taskStatusOrder: Status[] = ['pending', 'queued', 'processing', 'reviewing', 'completed']
+
+const statusLabel: Record<Status, string> = {
   pending: '待处理',
   queued: '排队中',
   processing: '处理中',
   reviewing: '待审核',
   completed: '已完成'
+}
+
+const kanbanWipLimits: Partial<Record<Status, number>> = {
+  processing: 8,
+  reviewing: 6
 }
 
 const priorityLabel: Record<TaskPriority, string> = {
@@ -82,6 +89,7 @@ const initialForm: TaskForm = {
 
 type TaskSortKey = 'taskNo' | 'title' | 'priority' | 'status' | 'progress' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt'
 type TaskSortOrder = 'asc' | 'desc'
+type TaskViewMode = 'list' | 'kanban'
 type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'tags' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt' | 'assignees' | 'reviewers' | 'description' | 'customField1' | 'customField2' | 'customField3'
 interface TaskFieldSetting extends FieldSettingItem {
   key: TaskColumnKey
@@ -138,6 +146,7 @@ const activityTypeLabel: Record<string, string> = {
   'task.created': '创建',
   'task.updated': '更新',
   'task.progress_updated': '进度',
+  'task.status_updated': '状态',
   'task.completed': '审核',
   'task.dependencies_updated': '依赖',
   'task.schedule_updated': '排期',
@@ -224,6 +233,10 @@ export function TasksPage() {
   const [commentError, setCommentError] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [taskActionError, setTaskActionError] = useState('')
+  const [viewMode, setViewMode] = useState<TaskViewMode>('list')
+  const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null)
+  const [statusUpdatingTaskId, setStatusUpdatingTaskId] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
@@ -730,6 +743,14 @@ export function TasksPage() {
     Object.entries(priorityLabel).map(([value, label]) => ({ value, label }))
   ), [])
 
+  const tasksByStatus = useMemo(() => {
+    const grouped = new Map<Status, Task[]>(taskStatusOrder.map((status) => [status, []]))
+    tasks.forEach((task) => {
+      grouped.get(task.status)?.push(task)
+    })
+    return grouped
+  }, [tasks])
+
   const tagFilterOptions = useMemo(() => {
     const optionMap = new Map<string, { value: string; label: string; keywords: string[] }>()
     filterTags.forEach((tag) => {
@@ -763,7 +784,7 @@ export function TasksPage() {
 
   const statusOptions = useMemo(() => {
     const currentStatus = form.status
-    return Object.keys(statusLabel).filter((key) => {
+    return taskStatusOrder.filter((key) => {
       if (key === currentStatus) return true
       if (key === 'completed') return canCurrentUserCompleteForm
       if (!form.id) return true
@@ -779,6 +800,55 @@ export function TasksPage() {
       progress,
       status: prev.id && isEditingAssignee && progress >= 100 && prev.status !== 'completed' ? 'reviewing' : prev.status
     }))
+  }
+
+  const updateTaskStatus = async (task: Task, nextStatus: Status) => {
+    if (task.status === nextStatus) return
+    if (!canHandleTask(task)) {
+      setTaskActionError('当前账号不能更新该任务状态')
+      return
+    }
+    if (nextStatus === 'completed' && !isCurrentUserTaskReviewer(task)) {
+      setTaskActionError('只有任务审核人才能将任务拖到已完成')
+      return
+    }
+    try {
+      setStatusUpdatingTaskId(task.id)
+      setError('')
+      setTaskActionError('')
+      setBatchActionMessage('')
+      await api.patch(`/tasks/${task.id}/status`, { status: nextStatus })
+      setBatchActionMessage(`已将 ${task.taskNo || task.title} 更新为${statusLabel[nextStatus]}`)
+      await load()
+    } catch (statusError) {
+      setTaskActionError(readApiError(statusError, '更新任务状态失败'))
+    } finally {
+      setStatusUpdatingTaskId(null)
+    }
+  }
+
+  const onTaskDragStart = (event: DragEvent<HTMLElement>, task: Task) => {
+    if (!canHandleTask(task) || statusUpdatingTaskId === task.id) {
+      event.preventDefault()
+      return
+    }
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(task.id))
+    setDraggedTaskId(task.id)
+  }
+
+  const onKanbanDragOver = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }
+
+  const onKanbanDrop = (event: DragEvent<HTMLElement>, nextStatus: Status) => {
+    event.preventDefault()
+    const taskId = Number(event.dataTransfer.getData('text/plain') || draggedTaskId || 0)
+    const task = tasks.find((item) => item.id === taskId)
+    setDraggedTaskId(null)
+    if (!task) return
+    void updateTaskStatus(task, nextStatus)
   }
 
   const toggleSort = (nextKey: TaskSortKey) => {
@@ -924,6 +994,52 @@ export function TasksPage() {
     }
   }
 
+  const renderKanbanCard = (task: Task) => {
+    const assigneeNames = getTaskAssigneeNames(task)
+    const reviewerNames = getTaskReviewerNames(task)
+    const canMoveTask = canHandleTask(task) && statusUpdatingTaskId !== task.id
+
+    return (
+      <article
+        key={task.id}
+        id={`task-row-${task.id}`}
+        className={`kanban-task${draggedTaskId === task.id ? ' dragging' : ''}${statusUpdatingTaskId === task.id ? ' updating' : ''}${focusedTaskId === task.id ? ' focused' : ''}`}
+        draggable={canMoveTask}
+        onDragStart={(event) => onTaskDragStart(event, task)}
+        onDragEnd={() => setDraggedTaskId(null)}
+      >
+        <div className="kanban-task-header">
+          <span className="kanban-task-no">{task.taskNo || `#${task.id}`}</span>
+          <span className={`kanban-priority priority-${task.priority || 'high'}`}>{priorityLabel[(task.priority || 'high') as TaskPriority]}</span>
+        </div>
+        <button type="button" className="kanban-task-title" onClick={() => viewDetail(task)}>
+          {task.title}
+        </button>
+        <div className="kanban-task-meta">
+          <span>{getTaskProjectName(task, projects)}</span>
+          <span>{task.progress}%</span>
+        </div>
+        <div className="kanban-progress" aria-label={`任务进度 ${task.progress}%`}>
+          <span style={{ width: `${Math.max(0, Math.min(100, Number(task.progress || 0)))}%` }} />
+        </div>
+        <div className="kanban-task-people">
+          <span>执行：{assigneeNames.slice(0, 2).join('，') || '-'}</span>
+          <span>审核：{reviewerNames.slice(0, 2).join('，') || '-'}</span>
+        </div>
+        {(task.tags || []).length > 0 && (
+          <div className="task-tag-stack">
+            {(task.tags || []).slice(0, 3).map((tag) => <span key={tag.id} className="task-tag-badge">{tag.name}</span>)}
+          </div>
+        )}
+        <div className="table-actions">
+          <button className="btn secondary" onClick={() => viewDetail(task)}>查看详情</button>
+          {canHandleTask(task) && <button className="btn secondary" onClick={() => edit(task)}>{canUpdateTask ? '编辑' : '处理'}</button>}
+          {canDeleteTask && <button className="btn danger" onClick={() => onDelete(task.id)}>删除</button>}
+        </div>
+      </article>
+    )
+  }
+
   const selectNoParent = () => {
     setForm((prev) => ({ ...prev, parentId: undefined }))
     setParentTaskInput(noParentLabel)
@@ -1000,7 +1116,15 @@ export function TasksPage() {
       <FilterPanel
         title="任务筛选"
         activeCount={activeFilterCount}
-        actions={canCreateTask ? <button className="btn" onClick={openCreateModal}>新增任务</button> : undefined}
+        actions={(
+          <div className="task-view-actions">
+            <div className="task-view-toggle" role="group" aria-label="任务视图">
+              <button type="button" className={viewMode === 'list' ? 'active' : ''} onClick={() => setViewMode('list')}>List</button>
+              <button type="button" className={viewMode === 'kanban' ? 'active' : ''} onClick={() => setViewMode('kanban')}>Kanban</button>
+            </div>
+            {canCreateTask && <button className="btn" onClick={openCreateModal}>新增任务</button>}
+          </div>
+        )}
         bodyClassName="toolbar-grid"
       >
         {searchableFields.length > 0 && <SearchField className="toolbar-search-field" aria-label="搜索任务" value={keyword} placeholder="搜索：已启用可搜索字段" onChange={(value) => { setKeyword(value); setPage(1) }} />}
@@ -1035,7 +1159,7 @@ export function TasksPage() {
       </FilterPanel>
 
       <div className="card">
-        {(selectedTaskIds.length > 0 || batchActionMessage) && (
+        {(selectedTaskIds.length > 0 || batchActionMessage || taskActionError) && (
           <div className="task-batch-actions">
             {selectedTaskIds.length > 0 && <span>已选择 {selectedTaskIds.length} 项</span>}
             {selectedTaskIds.length > 0 && (
@@ -1053,10 +1177,11 @@ export function TasksPage() {
               </button>
             )}
             {batchActionMessage && <span className="success">{batchActionMessage}</span>}
+            {taskActionError && <span className="error">{taskActionError}</span>}
           </div>
         )}
         <DataState loading={loading} error={error} empty={!loading && !error && tasks.length === 0} emptyText="暂无匹配的任务" onRetry={() => { void load() }} />
-        {!loading && !error && tasks.length > 0 && (
+        {!loading && !error && tasks.length > 0 && viewMode === 'list' && (
           <table className="responsive-table"><thead><tr>
             <th className="task-selection-col">
               <input
@@ -1107,6 +1232,34 @@ export function TasksPage() {
               )
             })}
           </tbody></table>
+        )}
+        {!loading && !error && tasks.length > 0 && viewMode === 'kanban' && (
+          <div className="task-kanban-board">
+            {taskStatusOrder.map((status) => {
+              const columnTasks = tasksByStatus.get(status) || []
+              const limit = kanbanWipLimits[status]
+              const isOverLimit = Boolean(limit && columnTasks.length > limit)
+              return (
+                <section
+                  key={status}
+                  className={`kanban-column${isOverLimit ? ' over-limit' : ''}${draggedTaskId ? ' drop-ready' : ''}`}
+                  onDragOver={onKanbanDragOver}
+                  onDrop={(event) => onKanbanDrop(event, status)}
+                >
+                  <div className="kanban-column-header">
+                    <div>
+                      <h3>{statusLabel[status]}</h3>
+                      <span>{columnTasks.length} 项{limit ? ` / WIP ${limit}` : ''}</span>
+                    </div>
+                    {isOverLimit && <strong>已超限</strong>}
+                  </div>
+                  <div className="kanban-column-list">
+                    {columnTasks.length > 0 ? columnTasks.map((task) => renderKanbanCard(task)) : <p className="kanban-empty">暂无任务</p>}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
         )}
       </div>
 

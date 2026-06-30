@@ -113,6 +113,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			tasks.DELETE("/:id/comments/:commentId", middleware.RequirePermission(h.DB, "comments.delete"), h.DeleteTaskComment)
 			tasks.GET("/:id/activities", middleware.RequirePermission(h.DB, "comments.read"), h.ListTaskActivities)
 			tasks.PATCH("/:id/progress", middleware.RequirePermission(h.DB, "tasks.read"), h.UpdateTaskProgress)
+			tasks.PATCH("/:id/status", middleware.RequirePermission(h.DB, "tasks.read"), h.UpdateTaskStatus)
 			tasks.PATCH("/:id/complete", middleware.RequirePermission(h.DB, "tasks.read"), h.CompleteTask)
 			tasks.PUT("/:id", middleware.RequirePermission(h.DB, "tasks.update"), h.UpdateTask)
 			tasks.PUT("/:id/dependencies", middleware.RequirePermission(h.DB, "tasks.update"), h.UpdateTaskDependencies)

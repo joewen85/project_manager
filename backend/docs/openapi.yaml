@@ -721,6 +721,7 @@ paths:
           - pending
           - queued
           - processing
+          - reviewing
           - completed
       - in: query
         name: statuses
@@ -1000,6 +1001,30 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: patchTasksByIdProgress
+  /tasks/{id}/status:
+    patch:
+      summary: 更新任务状态
+      description: Kanban 拖拽使用的轻量状态更新；更新为 completed 时必须是任务审核人，后端会将进度补到 100。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskStatusUpdateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: patchTasksByIdStatus
   /tasks/{id}/complete:
     patch:
       summary: 审核人确认任务完成
@@ -1798,6 +1823,19 @@ components:
           type: integer
           minimum: 0
           maximum: 100
+    TaskStatusUpdateRequest:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - pending
+          - queued
+          - processing
+          - reviewing
+          - completed
     TaskDependenciesUpdateRequest:
       type: object
       properties:
