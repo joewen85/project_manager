@@ -92,6 +92,8 @@ Base URL: `http://localhost:8080/api/v1`
 | PATCH | `/notifications/:id/read` `/notifications/read-all` | `notifications.update` |
 | GET | `/audit/logs` | `audit.read` |
 
+字段级权限补充：项目预算、实际成本、预计收益、合同编号、合同附件、预算使用率和超预算状态需要 `finance.read`、`finance.update` 或管理员身份读取；写入这些字段需要 `finance.update`。
+
 ## 文件上传
 
 ### POST `/uploads`
@@ -161,10 +163,13 @@ Base URL: `http://localhost:8080/api/v1`
 ### GET `/projects`
 - Query: `page` `pageSize` `keyword` `searchFields`
   - `searchFields` 支持逗号分隔：`code,name,description`
+- 响应: `{ list, total, page, pageSize }`
+- 财务脱敏: 没有 `finance.read` / `finance.update` 的用户不会看到 `budgetAmount`、`actualCostAmount`、`expectedRevenueAmount`、`contractNo`、`contractAttachments`、`budgetUsageRate`、`costOverBudget`
 
 ### GET `/projects/export`
 - 用途: 导出当前可见项目为 CSV
 - Query: `keyword`
+- 财务列: 具备 `finance.read` / `finance.update` 的用户会追加 `预算`、`实际成本`、`预计收益`、`合同编号`、`预算使用率`、`是否超预算`；普通 `projects.read` 用户不导出这些列
 
 ### GET `/projects/editor-options`
 - 用途: 项目编辑弹窗选项（负责人、参与部门）
@@ -172,12 +177,20 @@ Base URL: `http://localhost:8080/api/v1`
 - 响应: `{ users: [{ id, name, username, email }], departments: [{ id, name }] }`
 
 ### GET `/projects/:id`
+- 财务脱敏规则同 `GET /projects`
 
 ### POST `/projects`
-- 请求体: `{ code?, name, description, startAt, endAt, attachments?, userIds, departmentIds }`
+- 请求体: `{ code?, name, description, startAt, endAt, attachments?, userIds, departmentIds, budgetAmount?, actualCostAmount?, expectedRevenueAmount?, contractNo?, contractAttachments? }`
 - `code` 为空时后端自动生成随机项目编码
+- 写入 `budgetAmount`、`actualCostAmount`、`expectedRevenueAmount`、`contractNo` 或 `contractAttachments` 需要 `finance.update`
+- 金额字段必须为非负数；`actualCostAmount > budgetAmount > 0` 时会向项目负责人发送 `项目成本超预算` 站内通知
+- `contractAttachments`: `[{ fileName, filePath, relativePath, fileSize, mimeType, category, version, accessLevel, expiresAt }]`
+  - `category`: `contract|invoice|acceptance|change|other`，空值默认 `contract`
+  - `accessLevel`: `finance|internal|external`，空值默认 `finance`
+  - `expiresAt`: 可空 RFC3339 时间
 
 ### PUT `/projects/:id`
+- 请求体同 `POST /projects`；未携带财务字段时普通 `projects.update` 可继续更新基础项，携带任一财务字段则要求 `finance.update`
 ### DELETE `/projects/:id`
 
 ### GET `/projects/:projectId/gantt`

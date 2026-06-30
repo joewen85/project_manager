@@ -13,15 +13,43 @@ import (
 )
 
 type projectRequest struct {
-	Code          string               `json:"code"`
-	Name          string               `json:"name" binding:"required"`
-	Description   string               `json:"description"`
-	StartAt       string               `json:"startAt"`
-	EndAt         string               `json:"endAt"`
-	Attachment    *attachmentRequest   `json:"attachment"`
-	Attachments   *[]attachmentRequest `json:"attachments"`
-	UserIDs       []uint               `json:"userIds"`
-	DepartmentIDs []uint               `json:"departmentIds"`
+	Code                  string                       `json:"code"`
+	Name                  string                       `json:"name" binding:"required"`
+	Description           string                       `json:"description"`
+	StartAt               string                       `json:"startAt"`
+	EndAt                 string                       `json:"endAt"`
+	BudgetAmount          *float64                     `json:"budgetAmount"`
+	ActualCostAmount      *float64                     `json:"actualCostAmount"`
+	ExpectedRevenueAmount *float64                     `json:"expectedRevenueAmount"`
+	ContractNo            *string                      `json:"contractNo"`
+	ContractAttachments   *[]contractAttachmentRequest `json:"contractAttachments"`
+	Attachment            *attachmentRequest           `json:"attachment"`
+	Attachments           *[]attachmentRequest         `json:"attachments"`
+	UserIDs               []uint                       `json:"userIds"`
+	DepartmentIDs         []uint                       `json:"departmentIds"`
+}
+
+type contractAttachmentRequest struct {
+	FileName     string `json:"fileName"`
+	FilePath     string `json:"filePath"`
+	RelativePath string `json:"relativePath"`
+	FileSize     int64  `json:"fileSize"`
+	MimeType     string `json:"mimeType"`
+	Category     string `json:"category"`
+	Version      string `json:"version"`
+	AccessLevel  string `json:"accessLevel"`
+	ExpiresAt    string `json:"expiresAt"`
+}
+
+type projectResponse struct {
+	model.Project
+	BudgetAmount          *float64                   `json:"budgetAmount,omitempty"`
+	ActualCostAmount      *float64                   `json:"actualCostAmount,omitempty"`
+	ExpectedRevenueAmount *float64                   `json:"expectedRevenueAmount,omitempty"`
+	ContractNo            *string                    `json:"contractNo,omitempty"`
+	ContractAttachments   []model.ContractAttachment `json:"contractAttachments,omitempty"`
+	BudgetUsageRate       *float64                   `json:"budgetUsageRate,omitempty"`
+	CostOverBudget        *bool                      `json:"costOverBudget,omitempty"`
 }
 
 type projectEditorOptionUser struct {
@@ -39,6 +67,204 @@ type projectEditorOptionDepartment struct {
 type projectEditorOptionsResponse struct {
 	Users       []projectEditorOptionUser       `json:"users"`
 	Departments []projectEditorOptionDepartment `json:"departments"`
+}
+
+func (h *Handler) canReadProjectFinance(c *gin.Context) bool {
+	return h.currentUserIsAdmin(c) || h.currentUserHasPermission(c, "finance.read") || h.currentUserHasPermission(c, "finance.update")
+}
+
+func (h *Handler) canUpdateProjectFinance(c *gin.Context) bool {
+	return h.currentUserIsAdmin(c) || h.currentUserHasPermission(c, "finance.update")
+}
+
+func hasProjectFinancePayload(req projectRequest) bool {
+	return req.BudgetAmount != nil ||
+		req.ActualCostAmount != nil ||
+		req.ExpectedRevenueAmount != nil ||
+		req.ContractNo != nil ||
+		req.ContractAttachments != nil
+}
+
+func validateProjectAmount(value float64, fieldLabel string) (string, string, bool) {
+	if value < 0 {
+		return "INVALID_PROJECT_FINANCE_AMOUNT", fieldLabel + "不能小于0", false
+	}
+	return "", "", true
+}
+
+func normalizeContractCategory(value string) string {
+	switch strings.TrimSpace(value) {
+	case "invoice", "acceptance", "change", "other":
+		return strings.TrimSpace(value)
+	default:
+		return "contract"
+	}
+}
+
+func normalizeContractAccessLevel(value string) string {
+	switch strings.TrimSpace(value) {
+	case "internal", "external":
+		return strings.TrimSpace(value)
+	default:
+		return "finance"
+	}
+}
+
+func contractAttachmentToAttachmentRequest(item contractAttachmentRequest) attachmentRequest {
+	return attachmentRequest{
+		FileName:     item.FileName,
+		FilePath:     item.FilePath,
+		RelativePath: item.RelativePath,
+		FileSize:     item.FileSize,
+		MimeType:     item.MimeType,
+	}
+}
+
+func isContractAttachmentEmpty(item contractAttachmentRequest) bool {
+	return isAttachmentEmpty(contractAttachmentToAttachmentRequest(item)) &&
+		strings.TrimSpace(item.Category) == "" &&
+		strings.TrimSpace(item.Version) == "" &&
+		strings.TrimSpace(item.AccessLevel) == "" &&
+		strings.TrimSpace(item.ExpiresAt) == ""
+}
+
+func (h *Handler) normalizeContractAttachments(c *gin.Context, items []contractAttachmentRequest) ([]model.ContractAttachment, bool) {
+	attachmentRequests := make([]attachmentRequest, 0, len(items))
+	for _, item := range items {
+		if isContractAttachmentEmpty(item) {
+			continue
+		}
+		attachmentRequests = append(attachmentRequests, contractAttachmentToAttachmentRequest(item))
+	}
+	if err := validateAttachments(attachmentRequests, h.Cfg.UploadPublicBase); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_CONTRACT_ATTACHMENT", err.Error())
+		return nil, false
+	}
+	out := make([]model.ContractAttachment, 0, len(items))
+	for _, item := range items {
+		if isContractAttachmentEmpty(item) {
+			continue
+		}
+		expiresAt, err := parseRFC3339(item.ExpiresAt)
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_CONTRACT_ATTACHMENT_EXPIRES_AT", "合同附件到期时间必须是 RFC3339 格式")
+			return nil, false
+		}
+		out = append(out, model.ContractAttachment{
+			FileName:     strings.TrimSpace(item.FileName),
+			FilePath:     normalizeAttachmentPath(item.FilePath),
+			RelativePath: normalizeRelativeUploadPath(item.RelativePath),
+			FileSize:     item.FileSize,
+			MimeType:     strings.TrimSpace(item.MimeType),
+			Category:     normalizeContractCategory(item.Category),
+			Version:      strings.TrimSpace(item.Version),
+			AccessLevel:  normalizeContractAccessLevel(item.AccessLevel),
+			ExpiresAt:    expiresAt,
+		})
+	}
+	return out, true
+}
+
+func (h *Handler) applyProjectFinanceRequest(c *gin.Context, item *model.Project, req projectRequest) (bool, bool) {
+	if !hasProjectFinancePayload(req) {
+		return false, true
+	}
+	if !h.canUpdateProjectFinance(c) {
+		respondError(c, http.StatusForbidden, "PROJECT_FINANCE_PERMISSION_REQUIRED", "需要 finance.update 权限才能维护项目经营信息")
+		return true, false
+	}
+	if req.BudgetAmount != nil {
+		if code, message, ok := validateProjectAmount(*req.BudgetAmount, "项目预算"); !ok {
+			respondError(c, http.StatusBadRequest, code, message)
+			return true, false
+		}
+		item.BudgetAmount = *req.BudgetAmount
+	}
+	if req.ActualCostAmount != nil {
+		if code, message, ok := validateProjectAmount(*req.ActualCostAmount, "项目成本"); !ok {
+			respondError(c, http.StatusBadRequest, code, message)
+			return true, false
+		}
+		item.ActualCostAmount = *req.ActualCostAmount
+	}
+	if req.ExpectedRevenueAmount != nil {
+		if code, message, ok := validateProjectAmount(*req.ExpectedRevenueAmount, "预计收益"); !ok {
+			respondError(c, http.StatusBadRequest, code, message)
+			return true, false
+		}
+		item.ExpectedRevenueAmount = *req.ExpectedRevenueAmount
+	}
+	if req.ContractNo != nil {
+		item.ContractNo = strings.TrimSpace(*req.ContractNo)
+	}
+	if req.ContractAttachments != nil {
+		attachments, ok := h.normalizeContractAttachments(c, *req.ContractAttachments)
+		if !ok {
+			return true, false
+		}
+		item.ContractAttachments = attachments
+	}
+	return true, true
+}
+
+func projectCostOverBudget(project model.Project) bool {
+	return project.BudgetAmount > 0 && project.ActualCostAmount > project.BudgetAmount
+}
+
+func projectBudgetUsageRate(project model.Project) float64 {
+	if project.BudgetAmount <= 0 {
+		return 0
+	}
+	return clampPercent(project.ActualCostAmount / project.BudgetAmount * 100)
+}
+
+func (h *Handler) projectResponse(c *gin.Context, project model.Project) projectResponse {
+	response := projectResponse{Project: project}
+	if h.canReadProjectFinance(c) {
+		budgetAmount := project.BudgetAmount
+		actualCostAmount := project.ActualCostAmount
+		expectedRevenueAmount := project.ExpectedRevenueAmount
+		contractNo := project.ContractNo
+		budgetUsageRate := projectBudgetUsageRate(project)
+		costOverBudget := projectCostOverBudget(project)
+		response.BudgetAmount = &budgetAmount
+		response.ActualCostAmount = &actualCostAmount
+		response.ExpectedRevenueAmount = &expectedRevenueAmount
+		response.ContractNo = &contractNo
+		response.ContractAttachments = project.ContractAttachments
+		response.BudgetUsageRate = &budgetUsageRate
+		response.CostOverBudget = &costOverBudget
+	}
+	return response
+}
+
+func (h *Handler) projectResponses(c *gin.Context, projects []model.Project) []projectResponse {
+	out := make([]projectResponse, 0, len(projects))
+	for _, project := range projects {
+		out = append(out, h.projectResponse(c, project))
+	}
+	return out
+}
+
+func (h *Handler) notifyProjectBudgetExceededWithDB(tx *gorm.DB, project model.Project) ([]uint, error) {
+	if !projectCostOverBudget(project) {
+		return nil, nil
+	}
+	recipients := make([]uint, 0, len(project.Users))
+	for _, user := range project.Users {
+		recipients = append(recipients, user.ID)
+	}
+	recipients = uniqueUint(recipients)
+	if len(recipients) == 0 {
+		return nil, nil
+	}
+	content := "项目 " + project.Code + " - " + project.Name + " 当前成本 " +
+		strconv.FormatFloat(project.ActualCostAmount, 'f', 2, 64) +
+		" 已超过预算 " + strconv.FormatFloat(project.BudgetAmount, 'f', 2, 64)
+	if err := h.createNotificationsWithDB(tx, recipients, "项目成本超预算", content, "projects", project.ID); err != nil {
+		return nil, err
+	}
+	return recipients, nil
 }
 
 func generateProjectCode() string {
@@ -94,7 +320,7 @@ func (h *Handler) ListProjects(c *gin.Context) {
 		respondDBError(c, http.StatusInternalServerError, "QUERY_PROJECTS_FAILED", err)
 		return
 	}
-	c.JSON(http.StatusOK, pageResult[model.Project]{List: projects, Total: total, Page: page, PageSize: pageSize})
+	c.JSON(http.StatusOK, pageResult[projectResponse]{List: h.projectResponses(c, projects), Total: total, Page: page, PageSize: pageSize})
 }
 
 func (h *Handler) ProjectEditorOptions(c *gin.Context) {
@@ -183,6 +409,10 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		Attachment:  firstModelAttachment(modelAttachments),
 		Attachments: modelAttachments,
 	}
+	if _, ok := h.applyProjectFinanceRequest(c, &item, req); !ok {
+		return
+	}
+	var notifyIDs []uint
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&item).Error; err != nil {
 			return err
@@ -216,14 +446,20 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		if err := tx.Preload("Users").Preload("Departments").First(&item, item.ID).Error; err != nil {
 			return err
 		}
+		budgetRecipients, err := h.notifyProjectBudgetExceededWithDB(tx, item)
+		if err != nil {
+			return err
+		}
+		notifyIDs = append(notifyIDs, budgetRecipients...)
 		return h.writeAuditWithDB(c, tx, "projects", "create", item.ID, true, auditDetailf("创建项目(id=%d)", item.ID))
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "CREATE_PROJECT_FAILED", err)
 		return
 	}
-	h.pushNotificationUpdates(req.UserIDs)
+	notifyIDs = append(notifyIDs, req.UserIDs...)
+	h.pushNotificationUpdates(uniqueUint(notifyIDs))
 
-	c.JSON(http.StatusCreated, item)
+	c.JSON(http.StatusCreated, h.projectResponse(c, item))
 }
 
 func (h *Handler) UpdateProject(c *gin.Context) {
@@ -268,6 +504,10 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 	item.Description = req.Description
 	item.StartAt = startAt
 	item.EndAt = endAt
+	wasOverBudget := projectCostOverBudget(item)
+	if _, ok := h.applyProjectFinanceRequest(c, &item, req); !ok {
+		return
+	}
 	if provided {
 		modelAttachments := toModelAttachments(attachments)
 		item.Attachment = firstModelAttachment(modelAttachments)
@@ -318,14 +558,21 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		if err := tx.Preload("Users").Preload("Departments").First(&item, item.ID).Error; err != nil {
 			return err
 		}
+		if !wasOverBudget && projectCostOverBudget(item) {
+			budgetRecipients, err := h.notifyProjectBudgetExceededWithDB(tx, item)
+			if err != nil {
+				return err
+			}
+			addedUsers = append(addedUsers, budgetRecipients...)
+		}
 		return h.writeAuditWithDB(c, tx, "projects", "update", item.ID, true, auditDetailf("更新项目(id=%d)", item.ID))
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_PROJECT_FAILED", err)
 		return
 	}
-	h.pushNotificationUpdates(append(addedUsers, removedUsers...))
+	h.pushNotificationUpdates(uniqueUint(append(addedUsers, removedUsers...)))
 
-	c.JSON(http.StatusOK, item)
+	c.JSON(http.StatusOK, h.projectResponse(c, item))
 }
 
 func (h *Handler) DeleteProject(c *gin.Context) {
@@ -380,5 +627,5 @@ func (h *Handler) ProjectDetail(c *gin.Context) {
 		respondError(c, http.StatusNotFound, "PROJECT_NOT_FOUND", "项目不存在")
 		return
 	}
-	c.JSON(http.StatusOK, project)
+	c.JSON(http.StatusOK, h.projectResponse(c, project))
 }

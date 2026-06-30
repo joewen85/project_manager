@@ -464,6 +464,7 @@ paths:
   /projects:
     get:
       summary: 项目列表
+      description: 返回当前用户可见项目；项目财务字段仅在用户具备 finance.read、finance.update 或管理员身份时返回。
       security:
       - bearerAuth: []
       parameters:
@@ -504,6 +505,7 @@ paths:
       operationId: getProjects
     post:
       summary: 创建项目
+      description: 创建项目。携带预算、成本、预计收益、合同编号或合同附件时需要 finance.update；成本超过预算会向项目负责人发送站内预警。
       security:
       - bearerAuth: []
       requestBody:
@@ -525,6 +527,7 @@ paths:
   /projects/export:
     get:
       summary: 导出项目 CSV
+      description: 导出当前用户可见项目；具备 finance.read、finance.update 或管理员身份时会追加预算、实际成本、预计收益、合同编号、预算使用率和是否超预算列。
       security:
       - bearerAuth: []
       parameters:
@@ -592,6 +595,7 @@ paths:
   /projects/{id}:
     get:
       summary: 项目详情
+      description: 返回当前用户可见项目详情；项目财务字段仅在用户具备 finance.read、finance.update 或管理员身份时返回。
       security:
       - bearerAuth: []
       parameters:
@@ -608,6 +612,7 @@ paths:
       operationId: getProjectsById
     put:
       summary: 更新项目
+      description: 更新项目基础字段需要 projects.update；携带预算、成本、预计收益、合同编号或合同附件时额外需要 finance.update。
       security:
       - bearerAuth: []
       parameters:
@@ -2584,6 +2589,34 @@ components:
           format: int64
         mimeType:
           type: string
+    ContractAttachment:
+      allOf:
+      - $ref: '#/components/schemas/Attachment'
+      - type: object
+        properties:
+          category:
+            type: string
+            enum:
+            - contract
+            - invoice
+            - acceptance
+            - change
+            - other
+            description: 合同附件分类，空值默认 contract。
+          version:
+            type: string
+          accessLevel:
+            type: string
+            enum:
+            - finance
+            - internal
+            - external
+            description: 合同附件访问级别，空值默认 finance。
+          expiresAt:
+            type: string
+            format: date-time
+            nullable: true
+            description: 合同附件到期提醒时间，可空。
     UploadResponse:
       type: object
       properties:
@@ -2960,6 +2993,33 @@ components:
           description: 附件数组（attachments[]）
           items:
             $ref: '#/components/schemas/Attachment'
+        budgetAmount:
+          type: number
+          format: double
+          description: 项目预算；仅 finance.read、finance.update 或管理员可见。
+        actualCostAmount:
+          type: number
+          format: double
+          description: 项目实际成本；仅 finance.read、finance.update 或管理员可见。
+        expectedRevenueAmount:
+          type: number
+          format: double
+          description: 项目预计收益；仅 finance.read、finance.update 或管理员可见。
+        contractNo:
+          type: string
+          description: 合同编号；仅 finance.read、finance.update 或管理员可见。
+        contractAttachments:
+          type: array
+          description: 合同附件及治理元数据；仅 finance.read、finance.update 或管理员可见。
+          items:
+            $ref: '#/components/schemas/ContractAttachment'
+        budgetUsageRate:
+          type: number
+          format: double
+          description: 预算使用率百分比；仅 finance.read、finance.update 或管理员可见。
+        costOverBudget:
+          type: boolean
+          description: 实际成本是否超过预算；仅 finance.read、finance.update 或管理员可见。
         users:
           type: array
           items:
@@ -2999,6 +3059,29 @@ components:
           description: 附件数组（attachments[]）
           items:
             $ref: '#/components/schemas/Attachment'
+        budgetAmount:
+          type: number
+          format: double
+          minimum: 0
+          description: 项目预算，写入需 finance.update。
+        actualCostAmount:
+          type: number
+          format: double
+          minimum: 0
+          description: 项目实际成本，写入需 finance.update；超过预算会触发项目成本超预算通知。
+        expectedRevenueAmount:
+          type: number
+          format: double
+          minimum: 0
+          description: 项目预计收益，写入需 finance.update。
+        contractNo:
+          type: string
+          description: 合同编号，写入需 finance.update。
+        contractAttachments:
+          type: array
+          description: 合同附件及治理元数据，写入需 finance.update。
+          items:
+            $ref: '#/components/schemas/ContractAttachment'
         userIds:
           type: array
           items:

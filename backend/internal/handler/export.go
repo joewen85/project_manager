@@ -72,8 +72,9 @@ func (h *Handler) ExportProjectsCSV(c *gin.Context) {
 	}
 
 	rows := make([][]string, 0, len(projects))
+	includeFinance := h.canReadProjectFinance(c)
 	for _, project := range projects {
-		rows = append(rows, []string{
+		row := []string{
 			strconv.FormatUint(uint64(project.ID), 10),
 			project.Code,
 			project.Name,
@@ -83,10 +84,25 @@ func (h *Handler) ExportProjectsCSV(c *gin.Context) {
 			joinUserNames(project.Users),
 			joinDepartmentNames(project.Departments),
 			project.CreatedAt.Format(time.RFC3339),
-		})
+		}
+		if includeFinance {
+			row = append(row,
+				strconv.FormatFloat(project.BudgetAmount, 'f', 2, 64),
+				strconv.FormatFloat(project.ActualCostAmount, 'f', 2, 64),
+				strconv.FormatFloat(project.ExpectedRevenueAmount, 'f', 2, 64),
+				project.ContractNo,
+				strconv.FormatFloat(projectBudgetUsageRate(project), 'f', 2, 64),
+				strconv.FormatBool(projectCostOverBudget(project)),
+			)
+		}
+		rows = append(rows, row)
+	}
+	header := []string{"ID", "编码", "名称", "描述", "开始时间", "结束时间", "负责人", "参与部门", "创建时间"}
+	if includeFinance {
+		header = append(header, "预算", "实际成本", "预计收益", "合同编号", "预算使用率", "是否超预算")
 	}
 	writeCSV(c, "projects.csv",
-		[]string{"ID", "编码", "名称", "描述", "开始时间", "结束时间", "负责人", "参与部门", "创建时间"},
+		header,
 		rows,
 	)
 }

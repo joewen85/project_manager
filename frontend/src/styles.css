@@ -1160,6 +1160,65 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
   border-radius: 8px;
   padding: 8px 10px;
 }
+.finance-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.finance-summary-item {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+}
+.finance-summary-item span,
+.contract-attachment-item span {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.finance-summary-item strong {
+  font-size: 18px;
+}
+.finance-summary-item.danger {
+  border-color: var(--color-danger);
+  background: color-mix(in oklab, var(--color-danger) 8%, var(--color-surface));
+}
+.contract-attachment-list,
+.contract-attachment-meta-list {
+  display: grid;
+  gap: 8px;
+}
+.contract-attachment-item,
+.contract-attachment-meta {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+}
+.contract-attachment-item {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(4, minmax(90px, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+.contract-attachment-meta {
+  display: grid;
+  grid-template-columns: 1.3fr repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+  align-items: end;
+}
+.contract-attachment-meta label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.contract-attachment-editor {
+  display: grid;
+  gap: 8px;
+}
 .attachment-preview {
   display: flex;
   flex-wrap: wrap;
@@ -2232,6 +2291,11 @@ td .btn + .btn { margin-left: 3px; }
     white-space: normal;
   }
   .report-filter-bar {
+    grid-template-columns: 1fr;
+  }
+  .finance-summary-grid,
+  .contract-attachment-item,
+  .contract-attachment-meta {
     grid-template-columns: 1fr;
   }
   .card {

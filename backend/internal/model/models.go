@@ -77,6 +77,18 @@ type Attachment struct {
 	MimeType     string `gorm:"size:120" json:"mimeType"`
 }
 
+type ContractAttachment struct {
+	FileName     string     `json:"fileName"`
+	FilePath     string     `json:"filePath"`
+	RelativePath string     `json:"relativePath"`
+	FileSize     int64      `json:"fileSize"`
+	MimeType     string     `json:"mimeType"`
+	Category     string     `json:"category"`
+	Version      string     `json:"version"`
+	AccessLevel  string     `json:"accessLevel"`
+	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
+}
+
 type User struct {
 	BaseModel
 	Username            string       `gorm:"size:64;uniqueIndex;not null" json:"username"`
@@ -143,16 +155,21 @@ type Tag struct {
 
 type Project struct {
 	BaseModel
-	Code        string       `gorm:"size:64;uniqueIndex;not null" json:"code"`
-	Name        string       `gorm:"size:150;not null" json:"name"`
-	Description string       `gorm:"type:text" json:"description"`
-	StartAt     *time.Time   `json:"startAt"`
-	EndAt       *time.Time   `json:"endAt"`
-	Attachment  Attachment   `gorm:"embedded;embeddedPrefix:attachment_" json:"attachment,omitempty"`
-	Attachments []Attachment `gorm:"serializer:json" json:"attachments"`
-	Users       []User       `gorm:"many2many:project_users;" json:"users,omitempty"`
-	Departments []Department `gorm:"many2many:project_departments;" json:"departments,omitempty"`
-	Tasks       []Task       `json:"tasks,omitempty"`
+	Code                  string               `gorm:"size:64;uniqueIndex;not null" json:"code"`
+	Name                  string               `gorm:"size:150;not null" json:"name"`
+	Description           string               `gorm:"type:text" json:"description"`
+	StartAt               *time.Time           `json:"startAt"`
+	EndAt                 *time.Time           `json:"endAt"`
+	BudgetAmount          float64              `gorm:"type:decimal(14,2);not null;default:0" json:"-"`
+	ActualCostAmount      float64              `gorm:"type:decimal(14,2);not null;default:0" json:"-"`
+	ExpectedRevenueAmount float64              `gorm:"type:decimal(14,2);not null;default:0" json:"-"`
+	ContractNo            string               `gorm:"size:120;index" json:"-"`
+	ContractAttachments   []ContractAttachment `gorm:"serializer:json" json:"-"`
+	Attachment            Attachment           `gorm:"embedded;embeddedPrefix:attachment_" json:"attachment,omitempty"`
+	Attachments           []Attachment         `gorm:"serializer:json" json:"attachments"`
+	Users                 []User               `gorm:"many2many:project_users;" json:"users,omitempty"`
+	Departments           []Department         `gorm:"many2many:project_departments;" json:"departments,omitempty"`
+	Tasks                 []Task               `json:"tasks,omitempty"`
 }
 
 type ProjectBaselineTaskSnapshot struct {

@@ -41,6 +41,9 @@ var permissionCatalog = []permissionSeed{
 	{Code: "projects.update", Name: "项目-更新", Description: "更新项目"},
 	{Code: "projects.delete", Name: "项目-删除", Description: "删除项目"},
 
+	{Code: "finance.read", Name: "项目经营-查看", Description: "查看项目预算、成本、预计收益与合同附件"},
+	{Code: "finance.update", Name: "项目经营-更新", Description: "维护项目预算、成本、预计收益与合同附件"},
+
 	{Code: "baselines.create", Name: "基线-创建", Description: "创建项目基线"},
 	{Code: "baselines.read", Name: "基线-查看", Description: "查看项目基线与关键路径"},
 	{Code: "baselines.delete", Name: "基线-删除", Description: "删除项目基线"},

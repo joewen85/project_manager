@@ -35,6 +35,8 @@
 | `projects.read` | 查看项目 |
 | `projects.update` | 更新项目 |
 | `projects.delete` | 删除项目 |
+| `finance.read` | 查看项目预算、成本、收益、合同编号、合同附件与财务导出列 |
+| `finance.update` | 维护项目预算、成本、收益、合同编号与合同附件 |
 | `baselines.create` | 创建项目基线 |
 | `baselines.read` | 查看项目基线与关键路径 |
 | `baselines.delete` | 删除项目基线 |
@@ -103,9 +105,9 @@
 | `POST /tags` | `tags.create` |
 | `PUT /tags/:id` | `tags.update` |
 | `DELETE /tags/:id` | `tags.delete` |
-| `GET /projects` `GET /projects/:id` `GET /projects/export` `GET /projects/editor-options` `GET /projects/:id/gantt` `GET /projects/gantt-portfolio` `GET /projects/:id/task-tree` | `projects.read` |
-| `POST /projects` | `projects.create` |
-| `PUT /projects/:id` `POST /projects/:id/gantt/auto-resolve` | `projects.update` |
+| `GET /projects` `GET /projects/:id` `GET /projects/export` `GET /projects/editor-options` `GET /projects/:id/gantt` `GET /projects/gantt-portfolio` `GET /projects/:id/task-tree` | `projects.read`；预算、成本、预计收益、合同编号、合同附件、预算使用率、超预算状态和项目导出财务列额外要求 `finance.read`、`finance.update` 或管理员 |
+| `POST /projects` | `projects.create`；携带预算、成本、预计收益、合同编号或合同附件时额外要求 `finance.update` |
+| `PUT /projects/:id` `POST /projects/:id/gantt/auto-resolve` | `projects.update`；`PUT /projects/:id` 携带任一财务字段时额外要求 `finance.update`，未携带财务字段可只更新基础项 |
 | `DELETE /projects/:id` | `projects.delete` |
 | `GET /projects/:id/critical-path` `GET /project-baselines` `GET /project-baselines/:id` | `baselines.read`；关键路径与基线比较只使用当前用户可见任务和依赖 |
 | `POST /project-baselines` | `baselines.create`；项目必须当前用户可见，快照只包含当前用户可见任务 |

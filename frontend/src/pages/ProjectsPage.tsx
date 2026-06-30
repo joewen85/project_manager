@@ -3,7 +3,7 @@ import { Settings2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { api, fetchArray, fetchData, fetchPage, hasPermission, readApiError } from '../services/api'
 import { TaskTree } from '../components/TaskTree'
-import { Task, Department, Project, UploadAttachment, User, emptyUploadAttachments } from '../types'
+import { Task, ContractAttachment, Department, Project, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { DataState } from '../components/DataState'
@@ -22,6 +22,11 @@ interface ProjectForm {
   description: string
   startAt: string
   endAt: string
+  budgetAmount: string
+  actualCostAmount: string
+  expectedRevenueAmount: string
+  contractNo: string
+  contractAttachments: ContractAttachment[]
   attachments: UploadAttachment[]
   userIds: number[]
   departmentIds: number[]
@@ -33,11 +38,27 @@ const normalizeAttachments = (item: { attachments?: UploadAttachment[]; attachme
   return emptyUploadAttachments()
 }
 
-const initialForm: ProjectForm = { code: '', name: '', description: '', startAt: '', endAt: '', attachments: emptyUploadAttachments(), userIds: [], departmentIds: [] }
+const emptyProjectForm = (): ProjectForm => ({
+  code: '',
+  name: '',
+  description: '',
+  startAt: '',
+  endAt: '',
+  budgetAmount: '',
+  actualCostAmount: '',
+  expectedRevenueAmount: '',
+  contractNo: '',
+  contractAttachments: [],
+  attachments: emptyUploadAttachments(),
+  userIds: [],
+  departmentIds: []
+})
+
+const initialForm: ProjectForm = emptyProjectForm()
 
 type SortKey = 'code' | 'name' | 'createdAt' | 'updatedAt' | 'startAt' | 'endAt'
 type SortOrder = 'asc' | 'desc'
-type ProjectColumnKey = 'code' | 'name' | 'description' | 'owners' | 'departments' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt'
+type ProjectColumnKey = 'code' | 'name' | 'description' | 'owners' | 'departments' | 'budgetAmount' | 'actualCostAmount' | 'contractNo' | 'budgetUsageRate' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt'
 interface ProjectFieldSetting extends FieldSettingItem {
   key: ProjectColumnKey
 }
@@ -49,14 +70,68 @@ const projectDefaultFieldSettings: ProjectFieldSetting[] = [
   { key: 'description', label: '描述', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
   { key: 'owners', label: '负责人', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
   { key: 'departments', label: '部门', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'budgetAmount', label: '预算', visible: false, editable: false, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'actualCostAmount', label: '实际成本', visible: false, editable: false, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'contractNo', label: '合同编号', visible: false, editable: false, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'budgetUsageRate', label: '预算使用率', visible: false, editable: false, sortable: false, searchable: false, filterable: false, custom: false },
   { key: 'startAt', label: '开始时间', visible: false, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'endAt', label: '结束时间', visible: false, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'createdAt', label: '创建时间', visible: false, editable: false, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'updatedAt', label: '更新时间', visible: false, editable: false, sortable: true, searchable: false, filterable: false, custom: false }
 ]
+const projectFinanceColumnKeys = new Set<ProjectColumnKey>(['budgetAmount', 'actualCostAmount', 'contractNo', 'budgetUsageRate'])
+const isProjectFinanceColumn = (key: ProjectColumnKey) => projectFinanceColumnKeys.has(key)
 
 const getProjectOwnerNames = (project: Project) => (project.users || []).map((user) => user.username || user.name).filter(Boolean)
 const getProjectDepartmentNames = (project: Project) => (project.departments || []).map((department) => department.name).filter(Boolean)
+const contractCategoryLabel: Record<NonNullable<ContractAttachment['category']>, string> = {
+  contract: '合同',
+  invoice: '发票',
+  acceptance: '验收',
+  change: '变更',
+  other: '其他'
+}
+const contractAccessLevelLabel: Record<NonNullable<ContractAttachment['accessLevel']>, string> = {
+  finance: '财务敏感',
+  internal: '内部可见',
+  external: '可对外'
+}
+
+const formatMoney = (value?: number) => typeof value === 'number' ? value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'
+const formatRate = (value?: number) => typeof value === 'number' ? `${value.toFixed(1)}%` : '-'
+
+const toLocalDateTimeInput = (value?: string) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (input: number) => String(input).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const parseOptionalDateTime = (value?: string) => {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+const normalizeContractAttachments = (items?: ContractAttachment[]) => (items || []).map((item) => ({
+  ...item,
+  category: item.category || 'contract',
+  accessLevel: item.accessLevel || 'finance',
+  version: item.version || '',
+  expiresAt: toLocalDateTimeInput(item.expiresAt)
+}))
+
+const mergeContractAttachmentMetadata = (origin: ContractAttachment[], incoming: UploadAttachment[]) => incoming.map((item) => {
+  const current = origin.find((originItem) => originItem.filePath === item.filePath)
+  return {
+    ...item,
+    category: current?.category || 'contract',
+    version: current?.version || '',
+    accessLevel: current?.accessLevel || 'finance',
+    expiresAt: current?.expiresAt || ''
+  } as ContractAttachment
+})
 
 const normalizeProjectFieldSettings = (raw: unknown): ProjectFieldSetting[] => {
   const fallbackMap = new Map(projectDefaultFieldSettings.map((field) => [field.key, field]))
@@ -89,6 +164,8 @@ export function ProjectsPage() {
   const canUpdateProject = hasPermission('projects.update', permissions)
   const canDeleteProject = hasPermission('projects.delete', permissions)
   const canUploadAttachment = hasPermission('uploads.create', permissions)
+  const canReadFinance = hasPermission('finance.read', permissions) || hasPermission('finance.update', permissions)
+  const canUpdateFinance = hasPermission('finance.update', permissions)
   const [projects, setProjects] = useState<Project[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -119,10 +196,18 @@ export function ProjectsPage() {
   const [formSuccess, setFormSuccess] = useState('')
   const [ownerKeyword, setOwnerKeyword] = useState('')
   const [departmentKeyword, setDepartmentKeyword] = useState('')
-  const fieldSettingsMap = useMemo(() => new Map(fieldSettings.map((field) => [field.key, field])), [fieldSettings])
-  const visibleColumns = useMemo(() => fieldSettings.filter((field) => field.visible).map((field) => field.key), [fieldSettings])
-  const searchableFields = useMemo(() => fieldSettings.filter((field) => field.searchable).map((field) => field.key), [fieldSettings])
-  const sortableFields = useMemo(() => new Set(fieldSettings.filter((field) => field.sortable).map((field) => field.key)), [fieldSettings])
+  const availableFieldSettings = useMemo(
+    () => canReadFinance ? fieldSettings : fieldSettings.filter((field) => !isProjectFinanceColumn(field.key)),
+    [canReadFinance, fieldSettings]
+  )
+  const availableDefaultFieldSettings = useMemo(
+    () => canReadFinance ? projectDefaultFieldSettings : projectDefaultFieldSettings.filter((field) => !isProjectFinanceColumn(field.key)),
+    [canReadFinance]
+  )
+  const fieldSettingsMap = useMemo(() => new Map(availableFieldSettings.map((field) => [field.key, field])), [availableFieldSettings])
+  const visibleColumns = useMemo(() => availableFieldSettings.filter((field) => field.visible).map((field) => field.key), [availableFieldSettings])
+  const searchableFields = useMemo(() => availableFieldSettings.filter((field) => field.searchable).map((field) => field.key), [availableFieldSettings])
+  const sortableFields = useMemo(() => new Set(availableFieldSettings.filter((field) => field.sortable).map((field) => field.key)), [availableFieldSettings])
   const isProjectFieldEditable = (key: ProjectColumnKey) => fieldSettingsMap.get(key)?.editable ?? true
   const activeFilterCount = Number(Boolean(keyword.trim()) && searchableFields.length > 0) + Number(sortKey !== 'updatedAt') + Number(sortOrder !== 'desc')
 
@@ -185,7 +270,7 @@ export function ProjectsPage() {
 
   const openCreateModal = () => {
     if (!canCreateProject) return
-    setForm(initialForm)
+    setForm(emptyProjectForm())
     setFormError('')
     setFormSuccess('')
     setOwnerKeyword('')
@@ -202,6 +287,11 @@ export function ProjectsPage() {
       description: item.description,
       startAt: item.startAt ? item.startAt.slice(0, 16) : '',
       endAt: item.endAt ? item.endAt.slice(0, 16) : '',
+      budgetAmount: typeof item.budgetAmount === 'number' ? String(item.budgetAmount) : '',
+      actualCostAmount: typeof item.actualCostAmount === 'number' ? String(item.actualCostAmount) : '',
+      expectedRevenueAmount: typeof item.expectedRevenueAmount === 'number' ? String(item.expectedRevenueAmount) : '',
+      contractNo: item.contractNo || '',
+      contractAttachments: normalizeContractAttachments(item.contractAttachments),
       attachments: normalizeAttachments(item),
       userIds: (item.users || []).map((user) => user.id),
       departmentIds: (item.departments || []).map((department) => department.id)
@@ -221,10 +311,42 @@ export function ProjectsPage() {
       setFormError('结束时间必须晚于开始时间')
       return
     }
+    const numericFields = [form.budgetAmount, form.actualCostAmount, form.expectedRevenueAmount]
+    if (canUpdateFinance && numericFields.some((value) => value !== '' && (Number.isNaN(Number(value)) || Number(value) < 0))) {
+      setFormError('预算、成本和预计收益必须是非负数字')
+      return
+    }
+    const contractAttachments = form.contractAttachments.map((item) => {
+      const expiresAt = parseOptionalDateTime(item.expiresAt)
+      if (expiresAt === null) return null
+      return {
+        ...item,
+        expiresAt,
+        category: item.category || 'contract',
+        accessLevel: item.accessLevel || 'finance',
+        version: item.version || ''
+      }
+    })
+    if (contractAttachments.some((item) => item === null)) {
+      setFormError('合同附件到期时间格式不正确')
+      return
+    }
     const payload = {
-      ...form,
+      code: form.code,
+      name: form.name,
+      description: form.description,
+      attachments: form.attachments,
+      userIds: form.userIds,
+      departmentIds: form.departmentIds,
       startAt: form.startAt ? new Date(form.startAt).toISOString() : '',
-      endAt: form.endAt ? new Date(form.endAt).toISOString() : ''
+      endAt: form.endAt ? new Date(form.endAt).toISOString() : '',
+      ...(canUpdateFinance ? {
+        budgetAmount: form.budgetAmount === '' ? 0 : Number(form.budgetAmount),
+        actualCostAmount: form.actualCostAmount === '' ? 0 : Number(form.actualCostAmount),
+        expectedRevenueAmount: form.expectedRevenueAmount === '' ? 0 : Number(form.expectedRevenueAmount),
+        contractNo: form.contractNo,
+        contractAttachments
+      } : {})
     }
 
     try {
@@ -234,7 +356,7 @@ export function ProjectsPage() {
       else await api.post('/projects', payload)
       setFormSuccess('保存成功')
       setModalOpen(false)
-      setForm(initialForm)
+      setForm(emptyProjectForm())
       await load()
     } catch (submitError) {
       setFormError(readApiError(submitError, '保存项目失败'))
@@ -262,6 +384,13 @@ export function ProjectsPage() {
       setDetailProject(item)
     }
     setDetailOpen(true)
+  }
+
+  const updateContractAttachment = (filePath: string, patch: Partial<ContractAttachment>) => {
+    setForm((prev) => ({
+      ...prev,
+      contractAttachments: prev.contractAttachments.map((item) => item.filePath === filePath ? { ...item, ...patch } : item)
+    }))
   }
 
   const renderProjectHeaderCell = (key: ProjectColumnKey) => {
@@ -297,6 +426,14 @@ export function ProjectsPage() {
             </div>
           </td>
         )
+      case 'budgetAmount':
+        return <td key={key} data-label="预算">{formatMoney(project.budgetAmount)}</td>
+      case 'actualCostAmount':
+        return <td key={key} data-label="实际成本">{formatMoney(project.actualCostAmount)}</td>
+      case 'contractNo':
+        return <td key={key} data-label="合同编号">{project.contractNo || '-'}</td>
+      case 'budgetUsageRate':
+        return <td key={key} data-label="预算使用率">{formatRate(project.budgetUsageRate)}</td>
       case 'startAt':
         return <td key={key} data-label="开始时间">{formatDateTime(project.startAt)}</td>
       case 'endAt':
@@ -382,11 +519,15 @@ export function ProjectsPage() {
       <FieldSettingsModal
         open={fieldSettingsOpen}
         title="项目列表字段设置"
-        fields={fieldSettings}
-        defaultFields={projectDefaultFieldSettings}
+        fields={availableFieldSettings}
+        defaultFields={availableDefaultFieldSettings}
         onClose={() => setFieldSettingsOpen(false)}
         onSave={(fields) => {
-          setFieldSettings(fields)
+          const nextFields = canReadFinance ? fields : [
+            ...fields,
+            ...fieldSettings.filter((field) => isProjectFinanceColumn(field.key))
+          ]
+          setFieldSettings(normalizeProjectFieldSettings(nextFields))
           setFieldSettingsOpen(false)
         }}
       />
@@ -420,6 +561,32 @@ export function ProjectsPage() {
                 <div className="detail-time-line"><strong>项目周期：</strong>{formatDateTime(detailProject.startAt)} - {formatDateTime(detailProject.endAt)}</div>
               </div>
             </section>
+            {canReadFinance && (
+              <section className="detail-section">
+                <h4>预算与合同</h4>
+                <div className="finance-summary-grid">
+                  <div className="finance-summary-item"><span>预算</span><strong>{formatMoney(detailProject.budgetAmount)}</strong></div>
+                  <div className="finance-summary-item"><span>实际成本</span><strong>{formatMoney(detailProject.actualCostAmount)}</strong></div>
+                  <div className="finance-summary-item"><span>预计收益</span><strong>{formatMoney(detailProject.expectedRevenueAmount)}</strong></div>
+                  <div className={`finance-summary-item${detailProject.costOverBudget ? ' danger' : ''}`}><span>预算使用率</span><strong>{formatRate(detailProject.budgetUsageRate)}</strong></div>
+                </div>
+                <div className="detail-columns">
+                  <div><strong>合同编号：</strong>{detailProject.contractNo || '-'}</div>
+                  <div><strong>成本状态：</strong>{detailProject.costOverBudget ? '超预算' : '未超预算'}</div>
+                </div>
+                <div className="contract-attachment-list">
+                  {(detailProject.contractAttachments || []).length > 0 ? (detailProject.contractAttachments || []).map((item) => (
+                    <article key={item.filePath} className="contract-attachment-item">
+                      <a href={item.filePath} target="_blank" rel="noreferrer">{item.relativePath || item.fileName || '合同附件'}</a>
+                      <span>{contractCategoryLabel[item.category || 'contract']}</span>
+                      <span>{item.version || '未标版本'}</span>
+                      <span>{contractAccessLevelLabel[item.accessLevel || 'finance']}</span>
+                      <span>{item.expiresAt ? `到期：${formatDateTime(item.expiresAt)}` : '无到期提醒'}</span>
+                    </article>
+                  )) : <p className="inline-tip">暂无合同附件</p>}
+                </div>
+              </section>
+            )}
             <section className="detail-section">
               <h4>关联信息</h4>
               <div className="detail-columns">
@@ -442,6 +609,56 @@ export function ProjectsPage() {
           <textarea id="project-description" rows={4} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!isProjectFieldEditable('description')} />
           <label htmlFor="project-attachment">附件</label>
           <AttachmentField inputId="project-attachment" value={form.attachments} disabled={!canUploadAttachment} onChange={(attachments) => setForm((prev) => ({ ...prev, attachments }))} />
+          {canUpdateFinance && (
+            <>
+              <label htmlFor="project-budget">预算</label>
+              <input id="project-budget" type="number" min="0" step="0.01" value={form.budgetAmount} onChange={(e) => setForm((prev) => ({ ...prev, budgetAmount: e.target.value }))} />
+              <label htmlFor="project-actual-cost">实际成本</label>
+              <input id="project-actual-cost" type="number" min="0" step="0.01" value={form.actualCostAmount} onChange={(e) => setForm((prev) => ({ ...prev, actualCostAmount: e.target.value }))} />
+              <label htmlFor="project-expected-revenue">预计收益</label>
+              <input id="project-expected-revenue" type="number" min="0" step="0.01" value={form.expectedRevenueAmount} onChange={(e) => setForm((prev) => ({ ...prev, expectedRevenueAmount: e.target.value }))} />
+              <label htmlFor="project-contract-no">合同编号</label>
+              <input id="project-contract-no" value={form.contractNo} onChange={(e) => setForm((prev) => ({ ...prev, contractNo: e.target.value }))} />
+              <label htmlFor="project-contract-attachments">合同附件</label>
+              <div className="contract-attachment-editor">
+                <AttachmentField
+                  inputId="project-contract-attachments"
+                  value={form.contractAttachments}
+                  disabled={!canUploadAttachment}
+                  onChange={(attachments) => setForm((prev) => ({ ...prev, contractAttachments: mergeContractAttachmentMetadata(prev.contractAttachments, attachments) }))}
+                />
+                {form.contractAttachments.length > 0 && (
+                  <div className="contract-attachment-meta-list">
+                    {form.contractAttachments.map((item) => (
+                      <article key={item.filePath} className="contract-attachment-meta">
+                        <strong>{item.relativePath || item.fileName || '合同附件'}</strong>
+                        <label>
+                          分类
+                          <select value={item.category || 'contract'} onChange={(event) => updateContractAttachment(item.filePath, { category: event.target.value as ContractAttachment['category'] })}>
+                            {Object.entries(contractCategoryLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          版本
+                          <input value={item.version || ''} onChange={(event) => updateContractAttachment(item.filePath, { version: event.target.value })} />
+                        </label>
+                        <label>
+                          权限级别
+                          <select value={item.accessLevel || 'finance'} onChange={(event) => updateContractAttachment(item.filePath, { accessLevel: event.target.value as ContractAttachment['accessLevel'] })}>
+                            {Object.entries(contractAccessLevelLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          到期提醒
+                          <DateTimeQuickField inputId={`contract-expires-${item.filePath.replace(/[^a-zA-Z0-9_-]/g, '-')}`} value={item.expiresAt || ''} onChange={(value) => updateContractAttachment(item.filePath, { expiresAt: value })} />
+                        </label>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
           <label htmlFor="project-start">开始时间</label>
           <DateTimeQuickField
             inputId="project-start"
@@ -478,7 +695,7 @@ export function ProjectsPage() {
           </div>
           <div className="row-actions">
             <button type="submit" className="btn" disabled={submitting || (form.id ? !canUpdateProject : !canCreateProject)}>{submitting ? '保存中...' : '保存项目'}</button>
-            <button type="button" className="btn secondary" onClick={() => setForm(initialForm)}>重置</button>
+            <button type="button" className="btn secondary" onClick={() => setForm(emptyProjectForm())}>重置</button>
           </div>
           {formError && <p className="error">{formError}</p>}
           {formSuccess && <p className="success">{formSuccess}</p>}

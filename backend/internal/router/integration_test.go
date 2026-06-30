@@ -987,6 +987,222 @@ func TestUserScopeAndExportFlow(t *testing.T) {
 	}
 }
 
+func TestProjectFinanceGovernancePermissionsExportAndNotification(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	financeRoleResp, financeRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "project-finance-editor",
+		"description": "project finance editor",
+		"permissionIds": []uint{
+			codeToID["projects.create"],
+			codeToID["projects.read"],
+			codeToID["projects.update"],
+			codeToID["finance.read"],
+			codeToID["finance.update"],
+			codeToID["notifications.read"],
+		},
+	})
+	if financeRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create finance role expected 201 got %d, body=%v", financeRoleResp.StatusCode, financeRoleBody)
+	}
+	financeRoleID := uint(financeRoleBody["id"].(float64))
+
+	plainRoleResp, plainRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "project-plain-editor",
+		"description": "project plain editor",
+		"permissionIds": []uint{
+			codeToID["projects.read"],
+			codeToID["projects.update"],
+		},
+	})
+	if plainRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create plain role expected 201 got %d, body=%v", plainRoleResp.StatusCode, plainRoleBody)
+	}
+	plainRoleID := uint(plainRoleBody["id"].(float64))
+
+	financeUserResp, financeUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "project_finance_user",
+		"name":          "Project Finance User",
+		"email":         "project_finance_user@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{financeRoleID},
+		"departmentIds": []uint{},
+	})
+	if financeUserResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create finance user expected 201 got %d, body=%v", financeUserResp.StatusCode, financeUserBody)
+	}
+	financeUserID := uint(financeUserBody["id"].(float64))
+
+	plainUserResp, plainUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "project_plain_user",
+		"name":          "Project Plain User",
+		"email":         "project_plain_user@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{plainRoleID},
+		"departmentIds": []uint{},
+	})
+	if plainUserResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create plain user expected 201 got %d, body=%v", plainUserResp.StatusCode, plainUserBody)
+	}
+	plainUserID := uint(plainUserBody["id"].(float64))
+
+	_, financeLoginBody := loginWithCredentials(t, ts.URL, "project_finance_user", "pass1234")
+	financeToken, _ := financeLoginBody["token"].(string)
+	if financeToken == "" {
+		t.Fatalf("finance token should not be empty")
+	}
+	_, plainLoginBody := loginWithCredentials(t, ts.URL, "project_plain_user", "pass1234")
+	plainToken, _ := plainLoginBody["token"].(string)
+	if plainToken == "" {
+		t.Fatalf("plain token should not be empty")
+	}
+
+	createResp, createBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", financeToken, map[string]any{
+		"code":                  "FIN-P1",
+		"name":                  "Finance Project",
+		"description":           "finance guarded project",
+		"budgetAmount":          1000,
+		"actualCostAmount":      1200,
+		"expectedRevenueAmount": 1800,
+		"contractNo":            "CNT-2026-001",
+		"contractAttachments": []map[string]any{
+			{
+				"fileName":     "contract.pdf",
+				"filePath":     "/static/uploads/contracts/contract.pdf",
+				"relativePath": "contracts/contract.pdf",
+				"fileSize":     128,
+				"mimeType":     "application/pdf",
+				"category":     "contract",
+				"version":      "v1",
+				"accessLevel":  "finance",
+				"expiresAt":    "2026-08-01T00:00:00Z",
+			},
+		},
+		"userIds":       []uint{financeUserID, plainUserID},
+		"departmentIds": []uint{},
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create finance project expected 201 got %d, body=%v", createResp.StatusCode, createBody)
+	}
+	projectID := int(createBody["id"].(float64))
+	if createBody["budgetAmount"].(float64) != 1000 || createBody["actualCostAmount"].(float64) != 1200 || createBody["costOverBudget"] != true {
+		t.Fatalf("finance fields should be returned to finance user: %v", createBody)
+	}
+	if attachments, _ := createBody["contractAttachments"].([]any); len(attachments) != 1 {
+		t.Fatalf("contract attachment should be returned to finance user: %v", createBody["contractAttachments"])
+	}
+
+	plainListResp, plainListBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/projects?page=1&pageSize=20", plainToken, nil)
+	if plainListResp.StatusCode != http.StatusOK {
+		t.Fatalf("plain project list expected 200 got %d, body=%v", plainListResp.StatusCode, plainListBody)
+	}
+	plainProjects, _ := plainListBody["list"].([]any)
+	if len(plainProjects) != 1 {
+		t.Fatalf("plain user should see owned project only, got %d", len(plainProjects))
+	}
+	plainProject, _ := plainProjects[0].(map[string]any)
+	if _, ok := plainProject["budgetAmount"]; ok {
+		t.Fatalf("plain list must not expose budgetAmount: %v", plainProject)
+	}
+	if _, ok := plainProject["contractNo"]; ok {
+		t.Fatalf("plain list must not expose contractNo: %v", plainProject)
+	}
+
+	plainDetailResp, plainDetailBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/projects/"+strconv.Itoa(projectID), plainToken, nil)
+	if plainDetailResp.StatusCode != http.StatusOK {
+		t.Fatalf("plain project detail expected 200 got %d, body=%v", plainDetailResp.StatusCode, plainDetailBody)
+	}
+	if _, ok := plainDetailBody["actualCostAmount"]; ok {
+		t.Fatalf("plain detail must not expose actualCostAmount: %v", plainDetailBody)
+	}
+	if _, ok := plainDetailBody["contractAttachments"]; ok {
+		t.Fatalf("plain detail must not expose contractAttachments: %v", plainDetailBody)
+	}
+
+	plainUpdateResp, plainUpdateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/projects/"+strconv.Itoa(projectID), plainToken, map[string]any{
+		"code":          "FIN-P1",
+		"name":          "Finance Project Renamed",
+		"description":   "plain update without finance payload",
+		"userIds":       []uint{financeUserID, plainUserID},
+		"departmentIds": []uint{},
+	})
+	if plainUpdateResp.StatusCode != http.StatusOK {
+		t.Fatalf("plain update without finance expected 200 got %d, body=%v", plainUpdateResp.StatusCode, plainUpdateBody)
+	}
+	if _, ok := plainUpdateBody["budgetAmount"]; ok {
+		t.Fatalf("plain update response must not expose budgetAmount: %v", plainUpdateBody)
+	}
+
+	plainFinanceUpdateResp, plainFinanceUpdateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/projects/"+strconv.Itoa(projectID), plainToken, map[string]any{
+		"code":          "FIN-P1",
+		"name":          "Finance Project Renamed",
+		"description":   "plain update with finance payload",
+		"budgetAmount":  2000,
+		"userIds":       []uint{financeUserID, plainUserID},
+		"departmentIds": []uint{},
+	})
+	if plainFinanceUpdateResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("plain finance update expected 403 got %d, body=%v", plainFinanceUpdateResp.StatusCode, plainFinanceUpdateBody)
+	}
+	if plainFinanceUpdateBody["code"] != "PROJECT_FINANCE_PERMISSION_REQUIRED" {
+		t.Fatalf("plain finance update expected PROJECT_FINANCE_PERMISSION_REQUIRED got %v", plainFinanceUpdateBody["code"])
+	}
+
+	invalidFinanceResp, invalidFinanceBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/projects/"+strconv.Itoa(projectID), financeToken, map[string]any{
+		"code":          "FIN-P1",
+		"name":          "Finance Project Renamed",
+		"description":   "negative budget",
+		"budgetAmount":  -1,
+		"userIds":       []uint{financeUserID, plainUserID},
+		"departmentIds": []uint{},
+	})
+	if invalidFinanceResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("negative project finance expected 400 got %d, body=%v", invalidFinanceResp.StatusCode, invalidFinanceBody)
+	}
+	if invalidFinanceBody["code"] != "INVALID_PROJECT_FINANCE_AMOUNT" {
+		t.Fatalf("negative project finance expected INVALID_PROJECT_FINANCE_AMOUNT got %v", invalidFinanceBody["code"])
+	}
+
+	financeExportReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/projects/export", nil)
+	financeExportReq.Header.Set("Authorization", "Bearer "+financeToken)
+	financeExportResp, err := http.DefaultClient.Do(financeExportReq)
+	if err != nil {
+		t.Fatalf("finance export failed: %v", err)
+	}
+	financeExportRaw, _ := io.ReadAll(financeExportResp.Body)
+	financeExportResp.Body.Close()
+	financeExportText := string(financeExportRaw)
+	if !strings.Contains(financeExportText, "预算") || !strings.Contains(financeExportText, "CNT-2026-001") || !strings.Contains(financeExportText, "true") {
+		t.Fatalf("finance export should contain finance columns and values, got: %s", financeExportText)
+	}
+
+	plainExportReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/projects/export", nil)
+	plainExportReq.Header.Set("Authorization", "Bearer "+plainToken)
+	plainExportResp, err := http.DefaultClient.Do(plainExportReq)
+	if err != nil {
+		t.Fatalf("plain export failed: %v", err)
+	}
+	plainExportRaw, _ := io.ReadAll(plainExportResp.Body)
+	plainExportResp.Body.Close()
+	plainExportText := string(plainExportRaw)
+	if strings.Contains(plainExportText, "预算") || strings.Contains(plainExportText, "CNT-2026-001") {
+		t.Fatalf("plain export must not contain finance columns or values, got: %s", plainExportText)
+	}
+
+	notificationResp, notificationBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/notifications?module=projects&keyword=项目成本超预算", financeToken, nil)
+	if notificationResp.StatusCode != http.StatusOK {
+		t.Fatalf("budget notification query expected 200 got %d, body=%v", notificationResp.StatusCode, notificationBody)
+	}
+	notifications, _ := notificationBody["list"].([]any)
+	if len(notifications) == 0 {
+		t.Fatalf("finance user should receive budget exceeded notification: %v", notificationBody)
+	}
+}
+
 func TestTaskWorkHoursCreateUpdateValidationAndExport(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

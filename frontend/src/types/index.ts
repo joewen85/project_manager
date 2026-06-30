@@ -47,6 +47,13 @@ export interface Project {
   description: string
   startAt?: string
   endAt?: string
+  budgetAmount?: number
+  actualCostAmount?: number
+  expectedRevenueAmount?: number
+  contractNo?: string
+  contractAttachments?: ContractAttachment[]
+  budgetUsageRate?: number
+  costOverBudget?: boolean
   attachment?: UploadAttachment
   attachments?: UploadAttachment[]
   createdAt?: string
@@ -559,6 +566,13 @@ export interface UploadAttachment {
   relativePath?: string
   fileSize: number
   mimeType: string
+}
+
+export interface ContractAttachment extends UploadAttachment {
+  category?: 'contract' | 'invoice' | 'acceptance' | 'change' | 'other'
+  version?: string
+  accessLevel?: 'finance' | 'internal' | 'external'
+  expiresAt?: string
 }
 
 export const emptyUploadAttachment = (): UploadAttachment => ({
