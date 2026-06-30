@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -1200,6 +1201,250 @@ func TestProjectFinanceGovernancePermissionsExportAndNotification(t *testing.T) 
 	notifications, _ := notificationBody["list"].([]any)
 	if len(notifications) == 0 {
 		t.Fatalf("finance user should receive budget exceeded notification: %v", notificationBody)
+	}
+}
+
+func TestAIAssistantPermissionsScopeAndReadOnlyDrafts(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+	for _, code := range []string{"ai.read", "projects.read", "tasks.read", "comments.read", "comments.create", "registers.read"} {
+		if codeToID[code] == 0 {
+			t.Fatalf("permission seed missing: %s", code)
+		}
+	}
+
+	noAIRoleResp, noAIRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "ai-without-entry",
+		"description": "no ai entry",
+		"permissionIds": []uint{
+			codeToID["projects.read"],
+		},
+	})
+	if noAIRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create no ai role expected 201 got %d, body=%v", noAIRoleResp.StatusCode, noAIRoleBody)
+	}
+	noAIRoleID := uint(noAIRoleBody["id"].(float64))
+
+	aiOnlyRoleResp, aiOnlyRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":          "ai-only-entry",
+		"description":   "ai entry only",
+		"permissionIds": []uint{codeToID["ai.read"]},
+	})
+	if aiOnlyRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create ai only role expected 201 got %d, body=%v", aiOnlyRoleResp.StatusCode, aiOnlyRoleBody)
+	}
+	aiOnlyRoleID := uint(aiOnlyRoleBody["id"].(float64))
+
+	fullRoleResp, fullRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "ai-project-manager",
+		"description": "ai project manager",
+		"permissionIds": []uint{
+			codeToID["ai.read"],
+			codeToID["projects.read"],
+			codeToID["tasks.read"],
+			codeToID["comments.read"],
+			codeToID["comments.create"],
+			codeToID["registers.read"],
+		},
+	})
+	if fullRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create ai full role expected 201 got %d, body=%v", fullRoleResp.StatusCode, fullRoleBody)
+	}
+	fullRoleID := uint(fullRoleBody["id"].(float64))
+
+	noAIUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "ai_no_entry",
+		"name":          "AI No Entry",
+		"email":         "ai_no_entry@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{noAIRoleID},
+		"departmentIds": []uint{},
+	})
+	if noAIUserResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create no ai user expected 201 got %d", noAIUserResp.StatusCode)
+	}
+
+	aiOnlyUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "ai_only_entry",
+		"name":          "AI Only Entry",
+		"email":         "ai_only_entry@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{aiOnlyRoleID},
+		"departmentIds": []uint{},
+	})
+	if aiOnlyUserResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create ai only user expected 201 got %d", aiOnlyUserResp.StatusCode)
+	}
+
+	fullUserResp, fullUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "ai_pm_user",
+		"name":          "AI PM User",
+		"email":         "ai_pm_user@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{fullRoleID},
+		"departmentIds": []uint{},
+	})
+	if fullUserResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create ai pm user expected 201 got %d, body=%v", fullUserResp.StatusCode, fullUserBody)
+	}
+	fullUserID := uint(fullUserBody["id"].(float64))
+
+	_, noAILoginBody := loginWithCredentials(t, ts.URL, "ai_no_entry", "pass1234")
+	noAIToken := noAILoginBody["token"].(string)
+	_, aiOnlyLoginBody := loginWithCredentials(t, ts.URL, "ai_only_entry", "pass1234")
+	aiOnlyToken := aiOnlyLoginBody["token"].(string)
+	_, fullLoginBody := loginWithCredentials(t, ts.URL, "ai_pm_user", "pass1234")
+	fullToken := fullLoginBody["token"].(string)
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":                  "AI-P1",
+		"name":                  "AI Visible Project",
+		"description":           "上线一个内部协作能力",
+		"budgetAmount":          98765,
+		"actualCostAmount":      1000,
+		"expectedRevenueAmount": 120000,
+		"contractNo":            "AI-CNT-SECRET",
+		"userIds":               []uint{fullUserID},
+		"departmentIds":         []uint{},
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create ai project expected 201 got %d, body=%v", projectResp.StatusCode, projectBody)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	hiddenProjectResp, hiddenProjectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "AI-HIDDEN",
+		"name":        "AI Hidden Project",
+		"description": "hidden ai project",
+	})
+	if hiddenProjectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden ai project expected 201 got %d, body=%v", hiddenProjectResp.StatusCode, hiddenProjectBody)
+	}
+	hiddenProjectID := int(hiddenProjectBody["id"].(float64))
+
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "完成上线准备",
+		"description": "确认上线清单和回滚预案",
+		"projectId":   projectID,
+		"status":      "processing",
+		"priority":    "high",
+		"progress":    60,
+		"startAt":     "2026-01-01T00:00:00Z",
+		"endAt":       "2026-01-10T00:00:00Z",
+		"assigneeIds": []uint{fullUserID},
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create ai task expected 201 got %d, body=%v", taskResp.StatusCode, taskBody)
+	}
+	taskID := int(taskBody["id"].(float64))
+
+	commentResp, commentBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/comments", fullToken, map[string]any{
+		"content": "本周已完成上线清单初稿，等待负责人确认。",
+	})
+	if commentResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create ai task comment expected 201 got %d, body=%v", commentResp.StatusCode, commentBody)
+	}
+
+	registerResp, registerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-registers", adminToken, map[string]any{
+		"type":         "risk",
+		"projectId":    projectID,
+		"title":        "上线窗口被压缩",
+		"description":  "外部窗口缩短，回滚验证时间不足",
+		"status":       "open",
+		"severity":     "high",
+		"probability":  "high",
+		"impact":       "critical",
+		"responsePlan": "提前完成回滚演练",
+		"ownerId":      fullUserID,
+	})
+	if registerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create ai register expected 201 got %d, body=%v", registerResp.StatusCode, registerBody)
+	}
+
+	noAIResp, noAIBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/ai/project-weekly-report", noAIToken, map[string]any{
+		"projectId": projectID,
+	})
+	if noAIResp.StatusCode != http.StatusForbidden || noAIBody["code"] != "FORBIDDEN" {
+		t.Fatalf("missing ai.read expected 403 FORBIDDEN got %d, body=%v", noAIResp.StatusCode, noAIBody)
+	}
+
+	aiOnlyResp, aiOnlyBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/ai/project-weekly-report", aiOnlyToken, map[string]any{
+		"projectId": projectID,
+	})
+	if aiOnlyResp.StatusCode != http.StatusForbidden || aiOnlyBody["code"] != "AI_SOURCE_PERMISSION_REQUIRED" {
+		t.Fatalf("ai without projects.read expected 403 AI_SOURCE_PERMISSION_REQUIRED got %d, body=%v", aiOnlyResp.StatusCode, aiOnlyBody)
+	}
+
+	hiddenResp, hiddenBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/ai/project-risk-summary", fullToken, map[string]any{
+		"projectId": hiddenProjectID,
+	})
+	if hiddenResp.StatusCode != http.StatusNotFound || hiddenBody["code"] != "PROJECT_NOT_FOUND" {
+		t.Fatalf("hidden ai project expected 404 PROJECT_NOT_FOUND got %d, body=%v", hiddenResp.StatusCode, hiddenBody)
+	}
+
+	weeklyResp, weeklyBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/ai/project-weekly-report", fullToken, map[string]any{
+		"projectId": projectID,
+		"weekStart": "2026-01-01T00:00:00Z",
+		"weekEnd":   "2026-12-31T23:59:59Z",
+	})
+	if weeklyResp.StatusCode != http.StatusOK {
+		t.Fatalf("weekly ai draft expected 200 got %d, body=%v", weeklyResp.StatusCode, weeklyBody)
+	}
+	if weeklyBody["requiresConfirmation"] != true || weeklyBody["mode"] != "weekly_report" {
+		t.Fatalf("weekly ai draft should require confirmation and mode weekly_report: %v", weeklyBody)
+	}
+	weeklyDraft, _ := weeklyBody["draft"].(string)
+	if !strings.Contains(weeklyDraft, "AI Visible Project") || !strings.Contains(weeklyDraft, "上线窗口被压缩") {
+		t.Fatalf("weekly draft should include visible project and register context, got: %s", weeklyDraft)
+	}
+	weeklyRaw := fmt.Sprint(weeklyBody)
+	if strings.Contains(weeklyRaw, "AI-CNT-SECRET") || strings.Contains(weeklyRaw, "98765") {
+		t.Fatalf("weekly draft must not leak project finance fields, got: %v", weeklyBody)
+	}
+	sourceRefs, _ := weeklyBody["sourceRefs"].([]any)
+	if len(sourceRefs) < 2 {
+		t.Fatalf("weekly draft should include traceable source refs, got: %v", weeklyBody["sourceRefs"])
+	}
+
+	riskResp, riskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/ai/project-risk-summary", fullToken, map[string]any{
+		"projectId": projectID,
+	})
+	if riskResp.StatusCode != http.StatusOK {
+		t.Fatalf("risk ai summary expected 200 got %d, body=%v", riskResp.StatusCode, riskBody)
+	}
+	riskDraft, _ := riskBody["draft"].(string)
+	if !strings.Contains(riskDraft, "上线窗口被压缩") || !strings.Contains(riskDraft, "逾期") {
+		t.Fatalf("risk draft should include visible risk and overdue reason, got: %s", riskDraft)
+	}
+
+	taskListBeforeResp, taskListBeforeBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks?projectId="+strconv.Itoa(projectID), fullToken, nil)
+	if taskListBeforeResp.StatusCode != http.StatusOK {
+		t.Fatalf("list tasks before ai breakdown expected 200 got %d, body=%v", taskListBeforeResp.StatusCode, taskListBeforeBody)
+	}
+	breakdownResp, breakdownBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/ai/task-breakdown", fullToken, map[string]any{
+		"projectId":   projectID,
+		"title":       "AI Visible Project",
+		"description": "需要上线内部协作能力并准备回滚预案",
+	})
+	if breakdownResp.StatusCode != http.StatusOK {
+		t.Fatalf("task breakdown expected 200 got %d, body=%v", breakdownResp.StatusCode, breakdownBody)
+	}
+	if breakdownBody["requiresConfirmation"] != true || breakdownBody["mode"] != "task_breakdown" {
+		t.Fatalf("task breakdown should require confirmation and mode task_breakdown: %v", breakdownBody)
+	}
+	suggestedTasks, _ := breakdownBody["tasks"].([]any)
+	if len(suggestedTasks) < 4 {
+		t.Fatalf("task breakdown should return task drafts, got: %v", breakdownBody["tasks"])
+	}
+	taskListAfterResp, taskListAfterBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks?projectId="+strconv.Itoa(projectID), fullToken, nil)
+	if taskListAfterResp.StatusCode != http.StatusOK {
+		t.Fatalf("list tasks after ai breakdown expected 200 got %d, body=%v", taskListAfterResp.StatusCode, taskListAfterBody)
+	}
+	if taskListBeforeBody["total"].(float64) != taskListAfterBody["total"].(float64) {
+		t.Fatalf("task breakdown must not persist tasks, before=%v after=%v", taskListBeforeBody["total"], taskListAfterBody["total"])
 	}
 }
 

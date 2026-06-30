@@ -63,6 +63,44 @@ export interface Project {
   tasks?: Task[]
 }
 
+export interface AISourceRef {
+  type: string
+  id?: number
+  label: string
+  path?: string
+}
+
+export interface AIDraftResponse {
+  mode: 'weekly_report' | 'risk_summary'
+  title: string
+  draft: string
+  highlights: string[]
+  recommendations: string[]
+  sourceRefs: AISourceRef[]
+  requiresConfirmation: boolean
+  generatedAt: string
+}
+
+export interface AISuggestedTask {
+  title: string
+  description: string
+  priority: TaskPriority
+  isMilestone?: boolean
+  relativeStartDay: number
+  durationDays: number
+  sourceRefs?: AISourceRef[]
+}
+
+export interface AITaskBreakdownResponse {
+  mode: 'task_breakdown'
+  title: string
+  summary: string
+  tasks: AISuggestedTask[]
+  sourceRefs: AISourceRef[]
+  requiresConfirmation: boolean
+  generatedAt: string
+}
+
 export interface Task {
   id: number
   taskNo: string

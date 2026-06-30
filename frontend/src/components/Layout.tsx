@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, Bell, Building2, CalendarDays, CalendarRange, ClipboardList, FolderKanban, GitBranch, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, RefreshCcw, Shield, Sun, Tag, UserCircle2, Users, Webhook, Workflow, X } from 'lucide-react'
+import { AlertTriangle, BarChart3, Bell, Building2, CalendarDays, CalendarRange, ClipboardList, FolderKanban, GitBranch, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, RefreshCcw, Shield, Sparkles, Sun, Tag, UserCircle2, Users, Webhook, Workflow, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, clearPermissions, fetchData, fetchPage, getPermissions, hasPermission, readApiError, setPermissions } from '../services/api'
@@ -23,6 +23,7 @@ const menus = [
   { to: '/reports', label: '报表中心', icon: BarChart3, permission: 'reports.read' },
   { to: '/requests', label: '请求入口', icon: ClipboardList, permission: 'requests.read' },
   { to: '/automation-rules', label: '自动化规则', icon: Workflow, permission: 'automations.read' },
+  { to: '/assistant', label: 'AI 助理', icon: Sparkles, permission: 'ai.read' },
   { to: '/webhooks', label: 'Webhook订阅', icon: Webhook, permission: 'webhooks.read' },
   { to: '/api-tokens', label: 'API Token', icon: KeyRound, permission: 'api_tokens.read' },
   { to: '/notifications', label: '站内通知', icon: Bell, permission: 'notifications.read' },
@@ -469,6 +470,7 @@ export function Layout() {
     ['/gantt', '甘特图模块'],
     ['/tasks', '任务列表'],
     ['/requests', '请求入口'],
+    ['/assistant', 'AI 助理'],
     ['/api-tokens', 'API Token'],
     ['/notifications', '站内通知'],
     ['/audit', '审计日志'],

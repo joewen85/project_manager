@@ -87,6 +87,7 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/automation-rules` | `automations.create` |
 | PUT | `/automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
 | DELETE | `/automation-rules/:id` | `automations.delete` |
+| POST | `/ai/project-weekly-report` `/ai/project-risk-summary` `/ai/task-breakdown` | `ai.read` + 对应源数据 read 权限 |
 | GET | `/stats/dashboard` `/stats/project-health` `/stats/member-workload` | `stats.read` |
 | GET | `/notifications` `/notifications/unread-count` | `notifications.read` |
 | PATCH | `/notifications/:id/read` `/notifications/read-all` | `notifications.update` |
@@ -612,6 +613,28 @@ API Token 用于外部系统以服务账号身份调用接口。请求仍使用 
 
 ### 后台执行
 - 服务启动后会注册小时级后台任务，定时执行已启用的逾期规则；后台执行写入 `runSource=scheduled` 的执行日志。
+
+## AI 助理
+
+AI 助理当前为本地结构化草稿生成：不调用外部模型、不保存草稿、不直接创建或更新项目/任务。所有响应都包含 `requiresConfirmation=true` 和 `sourceRefs`，前端展示为可编辑草稿。
+
+### POST `/ai/project-weekly-report`
+- 权限: `ai.read` + `projects.read`；任务状态需 `tasks.read`，评论/活动需 `comments.read`，登记册需 `registers.read`
+- 请求体: `{ projectId, weekStart?, weekEnd? }`
+- `weekStart/weekEnd`: 可空；传入时必须是 RFC3339，空值默认当前周
+- 响应: `{ mode, title, draft, highlights, recommendations, sourceRefs, requiresConfirmation, generatedAt }`
+
+### POST `/ai/project-risk-summary`
+- 权限: `ai.read` + `projects.read`；任务风险需 `tasks.read`，登记册风险需 `registers.read`
+- 请求体: `{ projectId }`
+- 响应: `{ mode, title, draft, highlights, recommendations, sourceRefs, requiresConfirmation, generatedAt }`
+
+### POST `/ai/task-breakdown`
+- 权限: `ai.read`；如传 `projectId` 则额外要求 `projects.read` 且项目当前用户可见
+- 请求体: `{ projectId?, title?, description? }`
+- 响应: `{ mode, title, summary, tasks, sourceRefs, requiresConfirmation, generatedAt }`
+- `tasks`: `[{ title, description, priority, isMilestone, relativeStartDay, durationDays, sourceRefs }]`
+- 安全边界: AI 助理不会读取财务字段、附件正文、密码、密钥或审计敏感数据；没有源权限时不会把对应源数据纳入草稿
 
 ## 统计分析
 

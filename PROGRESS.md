@@ -166,6 +166,12 @@
 - 完成：项目 CSV 导出在具备财务读取权限时追加预算、实际成本、预计收益、合同编号、预算使用率和是否超预算列
 - 完成：Projects 页面支持财务字段与合同附件治理元数据维护，并按权限隐藏财务列配置和详情区块
 - 完成：补充项目财务权限脱敏、写入拦截、导出列和超预算通知集成测试，并同步 README、API、OpenAPI、RBAC、PLAN
+- 完成：按 `Improvement.md` 完成 P2-4 AI 助理 MVP
+- 完成：新增 `ai.read` 权限与 `/ai/project-weekly-report`、`/ai/project-risk-summary`、`/ai/task-breakdown` 只读草稿接口
+- 完成：AI 助理生成项目周报草稿、风险摘要和任务拆解建议，响应包含来源引用与 `requiresConfirmation=true`，不直接写入项目或任务
+- 完成：AI 源数据读取继续受 `projects.read`、`tasks.read`、`comments.read`、`registers.read` 和项目/任务可见范围约束，避免旁路读取无权限项目或财务敏感字段
+- 完成：前端新增“AI 助理”页面，支持项目选择、周报/风险/任务拆解生成、草稿编辑、复制和来源跳转
+- 完成：补充 AI 助理入口权限、源权限、可见范围、财务不泄漏和任务拆解不落库集成测试，并同步 README、API、OpenAPI、RBAC、PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

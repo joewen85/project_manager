@@ -541,6 +541,91 @@ button, input, select, textarea { max-width: 100%; font: inherit; }
   gap: 10px;
   align-items: center;
 }
+.assistant-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+.assistant-control-panel,
+.assistant-output-card {
+  display: grid;
+  gap: 10px;
+}
+.assistant-output-panel {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.assistant-highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+.assistant-highlight-grid span,
+.assistant-source-item,
+.assistant-task-item {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+}
+.assistant-highlight-grid span {
+  padding: 8px 10px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+.assistant-draft-editor {
+  min-height: 420px;
+  resize: vertical;
+  line-height: 1.6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.assistant-source-list,
+.assistant-task-list {
+  display: grid;
+  gap: 8px;
+}
+.assistant-source-item {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  color: var(--color-text);
+  text-decoration: none;
+}
+.assistant-source-item:hover {
+  border-color: color-mix(in oklab, var(--color-primary) 35%, var(--color-border));
+}
+.assistant-source-item span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.assistant-source-item strong {
+  font-size: 13px;
+  word-break: break-word;
+}
+.assistant-task-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(4, auto);
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+}
+.assistant-task-item strong {
+  font-size: 14px;
+}
+.assistant-task-item p {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+.assistant-task-item > span {
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  padding: 3px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
 
 .charts { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .chart-card { min-height: 320px; }
@@ -2291,6 +2376,10 @@ td .btn + .btn { margin-left: 3px; }
     white-space: normal;
   }
   .report-filter-bar {
+    grid-template-columns: 1fr;
+  }
+  .assistant-grid,
+  .assistant-task-item {
     grid-template-columns: 1fr;
   }
   .finance-summary-grid,

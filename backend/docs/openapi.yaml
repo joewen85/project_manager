@@ -2351,6 +2351,72 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postAutomationRulesByIdRun
+  /ai/project-weekly-report:
+    post:
+      summary: AI 项目周报草稿
+      description: 生成只读项目周报草稿；入口需要 ai.read，项目上下文需要 projects.read，任务/评论/登记册上下文仍按各自 read 权限和可见范围收敛。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIProjectRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIDraftResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postAIProjectWeeklyReport
+  /ai/project-risk-summary:
+    post:
+      summary: AI 项目风险摘要
+      description: 生成只读风险摘要；不会读取财务字段、附件正文、密码、密钥或审计敏感数据。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIProjectRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIDraftResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postAIProjectRiskSummary
+  /ai/task-breakdown:
+    post:
+      summary: AI 任务拆解建议
+      description: 根据项目或文本生成任务草稿；只返回建议，不创建真实任务。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AITaskBreakdownRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AITaskBreakdownResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postAITaskBreakdown
   /stats/dashboard:
     get:
       summary: 仪表盘统计
@@ -4573,6 +4639,119 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Task'
+    AIProjectRequest:
+      type: object
+      required:
+      - projectId
+      properties:
+        projectId:
+          type: integer
+        weekStart:
+          type: string
+          format: date-time
+          description: 周报开始时间，可空。
+        weekEnd:
+          type: string
+          format: date-time
+          description: 周报结束时间，可空。
+    AITaskBreakdownRequest:
+      type: object
+      properties:
+        projectId:
+          type: integer
+          description: 可选项目 ID；传入时项目必须当前用户可见。
+        title:
+          type: string
+        description:
+          type: string
+    AISourceRef:
+      type: object
+      properties:
+        type:
+          type: string
+        id:
+          type: integer
+        label:
+          type: string
+        path:
+          type: string
+    AIDraftResponse:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+          - weekly_report
+          - risk_summary
+        title:
+          type: string
+        draft:
+          type: string
+        highlights:
+          type: array
+          items:
+            type: string
+        recommendations:
+          type: array
+          items:
+            type: string
+        sourceRefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AISourceRef'
+        requiresConfirmation:
+          type: boolean
+          description: AI 输出必须人工确认后再使用。
+        generatedAt:
+          type: string
+          format: date-time
+    AISuggestedTask:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        priority:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+        isMilestone:
+          type: boolean
+        relativeStartDay:
+          type: integer
+        durationDays:
+          type: integer
+        sourceRefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AISourceRef'
+    AITaskBreakdownResponse:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+          - task_breakdown
+        title:
+          type: string
+        summary:
+          type: string
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AISuggestedTask'
+        sourceRefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AISourceRef'
+        requiresConfirmation:
+          type: boolean
+        generatedAt:
+          type: string
+          format: date-time
     TaskCalendarResponse:
       type: object
       properties:

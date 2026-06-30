@@ -213,6 +213,13 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			automations.POST("/:id/run", middleware.RequirePermission(h.DB, "automations.update"), h.RunAutomationRule)
 		}
 
+		ai := authGroup.Group("/ai")
+		{
+			ai.POST("/project-weekly-report", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectWeeklyReport)
+			ai.POST("/project-risk-summary", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRiskSummary)
+			ai.POST("/task-breakdown", middleware.RequirePermission(h.DB, "ai.read"), h.AITaskBreakdown)
+		}
+
 		stats := authGroup.Group("/stats")
 		{
 			stats.GET("/dashboard", middleware.RequirePermission(h.DB, "stats.read"), h.DashboardStats)
