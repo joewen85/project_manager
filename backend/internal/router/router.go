@@ -111,6 +111,16 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			baselines.DELETE("/:id", middleware.RequirePermission(h.DB, "baselines.delete"), h.DeleteProjectBaseline)
 		}
 
+		registers := authGroup.Group("/project-registers")
+		{
+			registers.GET("", middleware.RequirePermission(h.DB, "registers.read"), h.ListProjectRegisters)
+			registers.POST("", middleware.RequirePermission(h.DB, "registers.create"), h.CreateProjectRegister)
+			registers.GET("/:id", middleware.RequirePermission(h.DB, "registers.read"), h.ProjectRegisterDetail)
+			registers.PUT("/:id", middleware.RequirePermission(h.DB, "registers.update"), h.UpdateProjectRegister)
+			registers.DELETE("/:id", middleware.RequirePermission(h.DB, "registers.delete"), h.DeleteProjectRegister)
+			registers.GET("/:id/activities", middleware.RequirePermission(h.DB, "registers.read"), h.ListProjectRegisterActivities)
+		}
+
 		tasks := authGroup.Group("/tasks")
 		{
 			tasks.GET("", middleware.RequirePermission(h.DB, "tasks.read"), h.ListTasks)

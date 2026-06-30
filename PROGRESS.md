@@ -153,6 +153,12 @@
 - 完成：请求入口前端支持提交变更申请、审批后应用变更、查看目标任务，任务动态显示变更活动
 - 完成：甘特图单项目模式在具备 `baselines.read` 时加载关键路径并高亮 timeline/grouped 两种视图，项目集模式保持原有展示
 - 完成：补充变更申请创建/审批/禁止转任务/应用/重复应用集成测试，并同步 README、API、OpenAPI、RBAC、PLAN
+- 完成：按 `Improvement.md` 完成 P2-2 风险、问题、决策登记册 MVP
+- 完成：新增 `project_registers` 与 `project_register_activities` 模型和显式 SQL 迁移，使用 `type=risk|issue|decision` 统一承载三类登记项
+- 完成：新增 `registers.create/read/update/delete` 权限与 `/project-registers` CRUD、登记项活动流接口，所有读写按当前用户项目可见范围收敛
+- 完成：登记项创建/更新会写活动、审计和 `module=project_registers` 通知，通知可跳转到 `/registers?registerId=...`
+- 完成：前端新增“风险问题决策”页面，支持筛选、创建/编辑、详情动态查看，Dashboard 健康榜展示高风险登记项和未解决问题
+- 完成：项目健康度聚合纳入未关闭高风险登记项与未解决问题；补充登记册 CRUD/范围/活动/通知/健康度集成测试，并同步 README、API、OpenAPI、RBAC、PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

@@ -1346,6 +1346,240 @@ func TestProjectHealthUsesVisibleTaskScope(t *testing.T) {
 	}
 }
 
+func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+	for _, code := range []string{
+		"projects.read",
+		"registers.create",
+		"registers.read",
+		"registers.update",
+		"registers.delete",
+		"stats.read",
+		"notifications.read",
+	} {
+		if codeToID[code] == 0 {
+			t.Fatalf("permission seed missing: %s", code)
+		}
+	}
+
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "register-scope-editor",
+		"description": "register scope editor",
+		"permissionIds": []uint{
+			codeToID["projects.read"],
+			codeToID["registers.create"],
+			codeToID["registers.read"],
+			codeToID["registers.update"],
+			codeToID["registers.delete"],
+			codeToID["stats.read"],
+			codeToID["notifications.read"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create register role expected 201 got %d, body=%v", roleResp.StatusCode, roleBody)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "register_scope_u1",
+		"name":          "Register Scope User",
+		"email":         "register_scope_u1@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if userResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create register user expected 201 got %d, body=%v", userResp.StatusCode, userBody)
+	}
+	userID := uint(userBody["id"].(float64))
+
+	visibleProjectResp, visibleProjectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":          "REGISTER-P1",
+		"name":          "Register Visible",
+		"description":   "visible register project",
+		"userIds":       []uint{userID},
+		"departmentIds": []uint{},
+	})
+	if visibleProjectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible register project expected 201 got %d, body=%v", visibleProjectResp.StatusCode, visibleProjectBody)
+	}
+	visibleProjectID := int(visibleProjectBody["id"].(float64))
+
+	hiddenProjectResp, hiddenProjectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "REGISTER-P2",
+		"name":        "Register Hidden",
+		"description": "hidden register project",
+	})
+	if hiddenProjectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden register project expected 201 got %d, body=%v", hiddenProjectResp.StatusCode, hiddenProjectBody)
+	}
+	hiddenProjectID := int(hiddenProjectBody["id"].(float64))
+
+	loginStatus, loginBody := loginWithCredentials(t, ts.URL, "register_scope_u1", "pass1234")
+	if loginStatus != http.StatusOK {
+		t.Fatalf("login register scope user expected 200 got %d", loginStatus)
+	}
+	userToken := loginBody["token"].(string)
+
+	riskPayload := map[string]any{
+		"type":           "risk",
+		"projectId":      visibleProjectID,
+		"title":          "供应商交付延期风险",
+		"description":    "核心物料可能晚于计划到达",
+		"status":         "open",
+		"severity":       "high",
+		"probability":    "high",
+		"impact":         "critical",
+		"source":         "周会",
+		"responsePlan":   "准备替代供应商",
+		"dueAt":          "2026-07-15T00:00:00Z",
+		"ownerId":        userID,
+		"participantIds": []uint{userID},
+	}
+	riskResp, riskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-registers", userToken, riskPayload)
+	if riskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create risk register expected 201 got %d, body=%v", riskResp.StatusCode, riskBody)
+	}
+	riskID := int(riskBody["id"].(float64))
+
+	issueResp, issueBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-registers", userToken, map[string]any{
+		"type":        "issue",
+		"projectId":   visibleProjectID,
+		"title":       "验收环境不可用",
+		"description": "测试团队无法进入验收环境",
+		"status":      "in_progress",
+		"severity":    "medium",
+		"source":      "测试日报",
+		"ownerId":     userID,
+	})
+	if issueResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create issue register expected 201 got %d, body=%v", issueResp.StatusCode, issueBody)
+	}
+
+	hiddenCreateResp, hiddenCreateBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-registers", userToken, map[string]any{
+		"type":      "risk",
+		"projectId": hiddenProjectID,
+		"title":     "隐藏项目风险",
+		"status":    "open",
+		"severity":  "critical",
+	})
+	if hiddenCreateResp.StatusCode != http.StatusNotFound || hiddenCreateBody["code"] != "PROJECT_NOT_FOUND" {
+		t.Fatalf("create hidden project register expected 404 PROJECT_NOT_FOUND got %d, body=%v", hiddenCreateResp.StatusCode, hiddenCreateBody)
+	}
+
+	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/project-registers", userToken, nil)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list registers expected 200 got %d, body=%v", listResp.StatusCode, listBody)
+	}
+	if int(listBody["total"].(float64)) != 2 {
+		t.Fatalf("scoped register list should contain two visible registers got %v", listBody)
+	}
+	list, _ := listBody["list"].([]any)
+	for _, raw := range list {
+		item, _ := raw.(map[string]any)
+		if int(item["projectId"].(float64)) != visibleProjectID {
+			t.Fatalf("scoped register list leaked hidden project item: %v", item)
+		}
+	}
+
+	filterResp, filterBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/project-registers?type=risk&severities=high,critical", userToken, nil)
+	if filterResp.StatusCode != http.StatusOK {
+		t.Fatalf("filter high risks expected 200 got %d, body=%v", filterResp.StatusCode, filterBody)
+	}
+	if int(filterBody["total"].(float64)) != 1 {
+		t.Fatalf("high risk filter should return one item got %v", filterBody)
+	}
+
+	updatePayload := map[string]any{
+		"type":           "risk",
+		"projectId":      visibleProjectID,
+		"title":          "供应商交付延期风险已升级",
+		"description":    "核心物料交付风险升级，需要管理层介入",
+		"status":         "open",
+		"severity":       "critical",
+		"probability":    "high",
+		"impact":         "critical",
+		"source":         "周会",
+		"responsePlan":   "启动替代供应商并每日跟进",
+		"dueAt":          "2026-07-15T00:00:00Z",
+		"ownerId":        userID,
+		"participantIds": []uint{userID},
+	}
+	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/project-registers/"+strconv.Itoa(riskID), userToken, updatePayload)
+	if updateResp.StatusCode != http.StatusOK {
+		t.Fatalf("update risk register expected 200 got %d, body=%v", updateResp.StatusCode, updateBody)
+	}
+	if updateBody["severity"] != "critical" || updateBody["title"] != "供应商交付延期风险已升级" {
+		t.Fatalf("updated register should return changed fields got %v", updateBody)
+	}
+
+	activityResp, activityBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/project-registers/"+strconv.Itoa(riskID)+"/activities", userToken, nil)
+	if activityResp.StatusCode != http.StatusOK {
+		t.Fatalf("list register activities expected 200 got %d, body=%v", activityResp.StatusCode, activityBody)
+	}
+	if int(activityBody["total"].(float64)) < 2 {
+		t.Fatalf("register should have create and update activities got %v", activityBody)
+	}
+	activities, _ := activityBody["list"].([]any)
+	foundUpdateActivity := false
+	for _, raw := range activities {
+		item, _ := raw.(map[string]any)
+		if item["type"] == "register.updated" && strings.Contains(item["summary"].(string), "更新") {
+			foundUpdateActivity = true
+			break
+		}
+	}
+	if !foundUpdateActivity {
+		t.Fatalf("expected register.updated activity got %v", activityBody)
+	}
+
+	healthResp, healthBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/stats/project-health", userToken, nil)
+	if healthResp.StatusCode != http.StatusOK {
+		t.Fatalf("register project health expected 200 got %d, body=%v", healthResp.StatusCode, healthBody)
+	}
+	projects, _ := healthBody["projects"].([]any)
+	if len(projects) != 1 {
+		t.Fatalf("scoped health should only include visible register project got %v", healthBody)
+	}
+	healthProject, _ := projects[0].(map[string]any)
+	if int(healthProject["projectId"].(float64)) != visibleProjectID {
+		t.Fatalf("health project id expected %d got %v", visibleProjectID, healthProject["projectId"])
+	}
+	if healthProject["health"] != "red" || int(healthProject["highRiskRegisters"].(float64)) != 1 || int(healthProject["unresolvedIssues"].(float64)) != 1 {
+		t.Fatalf("register health should be red with one high risk and one issue got %v", healthProject)
+	}
+
+	notificationResp, notificationBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/notifications?module=project_registers", userToken, nil)
+	if notificationResp.StatusCode != http.StatusOK {
+		t.Fatalf("register notifications expected 200 got %d, body=%v", notificationResp.StatusCode, notificationBody)
+	}
+	notifications, _ := notificationBody["list"].([]any)
+	foundRiskNotification := false
+	for _, raw := range notifications {
+		item, _ := raw.(map[string]any)
+		if item["targetId"] == float64(riskID) && strings.Contains(item["title"].(string), "登记项") {
+			foundRiskNotification = true
+			break
+		}
+	}
+	if !foundRiskNotification {
+		t.Fatalf("expected register notification for risk got %v", notificationBody)
+	}
+
+	deleteResp, deleteBody := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/project-registers/"+strconv.Itoa(riskID), userToken, nil)
+	if deleteResp.StatusCode != http.StatusOK {
+		t.Fatalf("delete risk register expected 200 got %d, body=%v", deleteResp.StatusCode, deleteBody)
+	}
+	detailAfterDeleteResp, _ := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/project-registers/"+strconv.Itoa(riskID), userToken, nil)
+	if detailAfterDeleteResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("deleted register detail expected 404 got %d", detailAfterDeleteResp.StatusCode)
+	}
+}
+
 func TestProjectBaselineAndCriticalPathMVP(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

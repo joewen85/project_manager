@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Building2, CalendarDays, CalendarRange, ClipboardList, FolderKanban, GitBranch, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, RefreshCcw, Shield, Sun, Tag, UserCircle2, Users, Webhook, Workflow, X } from 'lucide-react'
+import { AlertTriangle, BarChart3, Bell, Building2, CalendarDays, CalendarRange, ClipboardList, FolderKanban, GitBranch, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, RefreshCcw, Shield, Sun, Tag, UserCircle2, Users, Webhook, Workflow, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, clearPermissions, fetchData, fetchPage, getPermissions, hasPermission, readApiError, setPermissions } from '../services/api'
@@ -16,6 +16,7 @@ const menus = [
   { to: '/project-templates', label: '模板管理', icon: FolderKanban, permission: 'templates.read' },
   { to: '/gantt', label: '甘特模块', icon: CalendarRange, permission: 'projects.read' },
   { to: '/project-baselines', label: '基线关键路径', icon: GitBranch, permission: 'baselines.read' },
+  { to: '/registers', label: '风险问题决策', icon: AlertTriangle, permission: 'registers.read' },
   { to: '/tasks', label: '任务列表', icon: ListChecks, permission: 'tasks.read' },
   { to: '/sprints', label: '迭代管理', icon: RefreshCcw, permission: 'sprints.read' },
   { to: '/calendar', label: '我的日程', icon: CalendarDays, permission: 'tasks.read' },
@@ -310,6 +311,11 @@ export function Layout() {
       setNotificationMenuOpen(false)
       return
     }
+    if (item.module === 'project_registers' && item.targetId) {
+      navigate(`/registers?registerId=${item.targetId}`)
+      setNotificationMenuOpen(false)
+      return
+    }
     if (item.module === 'requests' && item.targetId) {
       navigate('/requests')
       setNotificationMenuOpen(false)
@@ -459,6 +465,7 @@ export function Layout() {
     ['/tags', '标签管理'],
     ['/projects', '项目列表'],
     ['/project-baselines', '基线关键路径'],
+    ['/registers', '风险问题决策'],
     ['/gantt', '甘特图模块'],
     ['/tasks', '任务列表'],
     ['/requests', '请求入口'],

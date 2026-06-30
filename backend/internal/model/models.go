@@ -215,6 +215,40 @@ const (
 	SavedReportTaskStatus     SavedReportType = "task_status"
 )
 
+type ProjectRegisterType string
+
+const (
+	ProjectRegisterRisk     ProjectRegisterType = "risk"
+	ProjectRegisterIssue    ProjectRegisterType = "issue"
+	ProjectRegisterDecision ProjectRegisterType = "decision"
+)
+
+type ProjectRegisterStatus string
+
+const (
+	ProjectRegisterOpen       ProjectRegisterStatus = "open"
+	ProjectRegisterInProgress ProjectRegisterStatus = "in_progress"
+	ProjectRegisterResolved   ProjectRegisterStatus = "resolved"
+	ProjectRegisterClosed     ProjectRegisterStatus = "closed"
+)
+
+type ProjectRegisterSeverity string
+
+const (
+	ProjectRegisterSeverityLow      ProjectRegisterSeverity = "low"
+	ProjectRegisterSeverityMedium   ProjectRegisterSeverity = "medium"
+	ProjectRegisterSeverityHigh     ProjectRegisterSeverity = "high"
+	ProjectRegisterSeverityCritical ProjectRegisterSeverity = "critical"
+)
+
+type ProjectRegisterProbability string
+
+const (
+	ProjectRegisterProbabilityLow    ProjectRegisterProbability = "low"
+	ProjectRegisterProbabilityMedium ProjectRegisterProbability = "medium"
+	ProjectRegisterProbabilityHigh   ProjectRegisterProbability = "high"
+)
+
 type SavedReportFilters struct {
 	ProjectID uint     `json:"projectId,omitempty"`
 	Keyword   string   `json:"keyword,omitempty"`
@@ -234,6 +268,46 @@ type SavedReport struct {
 	ChartConfig SavedReportChartConfig `gorm:"serializer:json" json:"chartConfig"`
 	CreatedByID uint                   `gorm:"not null;index" json:"createdById"`
 	CreatedBy   User                   `json:"createdBy,omitempty"`
+}
+
+type ProjectRegister struct {
+	BaseModel
+	Type           ProjectRegisterType        `gorm:"size:24;not null;index:idx_project_register_scope,priority:2" json:"type"`
+	ProjectID      uint                       `gorm:"not null;index:idx_project_register_scope,priority:1" json:"projectId"`
+	Project        Project                    `json:"project,omitempty"`
+	TaskID         *uint                      `gorm:"index" json:"taskId,omitempty"`
+	Task           *Task                      `json:"task,omitempty"`
+	Title          string                     `gorm:"size:180;not null;index" json:"title"`
+	Description    string                     `gorm:"type:text" json:"description"`
+	Status         ProjectRegisterStatus      `gorm:"size:24;not null;default:'open';index" json:"status"`
+	Severity       ProjectRegisterSeverity    `gorm:"size:24;not null;default:'medium';index" json:"severity"`
+	Probability    ProjectRegisterProbability `gorm:"size:24" json:"probability"`
+	Impact         ProjectRegisterSeverity    `gorm:"size:24" json:"impact"`
+	Source         string                     `gorm:"size:180" json:"source"`
+	ResponsePlan   string                     `gorm:"type:text" json:"responsePlan"`
+	Resolution     string                     `gorm:"type:text" json:"resolution"`
+	DecisionDetail string                     `gorm:"type:text" json:"decisionDetail"`
+	Background     string                     `gorm:"type:text" json:"background"`
+	ImpactScope    string                     `gorm:"type:text" json:"impactScope"`
+	DueAt          *time.Time                 `gorm:"index" json:"dueAt,omitempty"`
+	OwnerID        *uint                      `gorm:"index" json:"ownerId,omitempty"`
+	Owner          *User                      `json:"owner,omitempty"`
+	ParticipantIDs []uint                     `gorm:"serializer:json" json:"participantIds,omitempty"`
+	CreatedByID    uint                       `gorm:"not null;index" json:"createdById"`
+	CreatedBy      User                       `json:"createdBy,omitempty"`
+	LastActivityAt *time.Time                 `gorm:"index" json:"lastActivityAt,omitempty"`
+	Activities     []ProjectRegisterActivity  `gorm:"foreignKey:RegisterID" json:"activities,omitempty"`
+}
+
+type ProjectRegisterActivity struct {
+	BaseModel
+	RegisterID uint            `gorm:"not null;index" json:"registerId"`
+	Register   ProjectRegister `gorm:"foreignKey:RegisterID;constraint:OnDelete:CASCADE;" json:"register,omitempty"`
+	ActorID    uint            `gorm:"not null;index" json:"actorId"`
+	Actor      User            `json:"actor,omitempty"`
+	Type       string          `gorm:"size:64;not null;index" json:"type"`
+	Summary    string          `gorm:"size:180;not null" json:"summary"`
+	Detail     string          `gorm:"type:text" json:"detail"`
 }
 
 type SprintStatus string

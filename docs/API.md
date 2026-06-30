@@ -46,6 +46,10 @@ Base URL: `http://localhost:8080/api/v1`
 | GET | `/projects/:id/critical-path` `/project-baselines` `/project-baselines/:id` | `baselines.read` |
 | POST | `/project-baselines` | `baselines.create` |
 | DELETE | `/project-baselines/:id` | `baselines.delete` |
+| GET | `/project-registers` `/project-registers/:id` `/project-registers/:id/activities` | `registers.read` |
+| POST | `/project-registers` | `registers.create` |
+| PUT | `/project-registers/:id` | `registers.update` |
+| DELETE | `/project-registers/:id` | `registers.delete` |
 | GET | `/tasks*` `/tasks/calendar` `/tasks/calendar.ics` | `tasks.read` |
 | POST | `/tasks` | `tasks.create` |
 | PUT | `/tasks/:id` `/tasks/:id/dependencies` | `tasks.update` |
@@ -221,6 +225,45 @@ Base URL: `http://localhost:8080/api/v1`
 - 响应: `{ projectId, projectEndAt, totalDurationDays, criticalTaskIds, tasks, hasCycle }`
 - 规则: 若可见依赖存在环，返回 `400` 与错误码 `CRITICAL_PATH_CYCLE`
 - 健康度联动: 未完成的关键路径任务逾期时，`/stats/project-health` 的 `criticalOverdueTasks` 会计数，并将项目健康度置为 `red`
+
+## 风险、问题、决策登记册
+
+登记册用于沉淀项目级风险、执行问题和关键决策。所有接口都按当前用户项目可见范围收敛；创建和更新会写登记项活动、审计日志，并通过 `module=project_registers`、`targetId=登记项ID` 发送站内通知。
+
+### GET `/project-registers`
+- 权限: `registers.read`
+- Query: `page` `pageSize` `keyword` `type` `status` `statuses` `severity` `severities` `projectId`
+- `type`: `risk|issue|decision`
+- `status`: `open|in_progress|resolved|closed`
+- `severity`: `low|medium|high|critical`
+- `statuses`、`severities` 支持逗号分隔多选
+- 响应: `{ list, total, page, pageSize }`
+
+### GET `/project-registers/:id`
+- 权限: `registers.read`
+- 范围: 登记项所属项目必须当前用户可见
+
+### POST `/project-registers`
+- 权限: `registers.create`
+- 请求体: `{ type, projectId, taskId?, title, description?, status?, severity?, probability?, impact?, source?, responsePlan?, resolution?, decisionDetail?, background?, impactScope?, dueAt?, ownerId?, participantIds? }`
+- `probability`: `low|medium|high`
+- `impact`: `low|medium|high|critical`
+- 规则: `projectId` 必须当前用户可见；`taskId` 如填写，任务必须当前用户可见且属于同项目；负责人和参与人必须是有效用户；`dueAt` 如填写必须是 RFC3339；状态默认 `open`，等级默认 `medium`
+
+### PUT `/project-registers/:id`
+- 权限: `registers.update`
+- 请求体同创建
+- 效果: 更新登记项，写入 `register.updated` 活动、审计日志并通知相关用户
+
+### DELETE `/project-registers/:id`
+- 权限: `registers.delete`
+- 效果: 删除登记项并写审计日志
+
+### GET `/project-registers/:id/activities`
+- 权限: `registers.read`
+- Query: `page` `pageSize`
+- 响应: `{ list, total, page, pageSize }`
+- 动态项: `{ id, registerId, actorId, actor, type, summary, detail, createdAt }`
 
 ## 任务管理
 
@@ -565,12 +608,13 @@ API Token 用于外部系统以服务账号身份调用接口。请求仍使用 
 
 ### GET `/stats/project-health`
 - 权限: `stats.read`
-- 范围: 管理员查看全量任务聚合；普通用户仅按任务可见范围聚合项目。
+- 范围: 管理员查看全量任务和登记册聚合；普通用户仅按任务与项目可见范围聚合项目。
 - 响应: `{ projects: ProjectHealth[] }`
-- `ProjectHealth`: `{ projectId, projectCode, projectName, health, score, completionRate, totalTasks, completedTasks, overdueTasks, milestoneOverdue, unscheduledTasks, reviewingTasks, criticalOverdueTasks, reasons }`
+- `ProjectHealth`: `{ projectId, projectCode, projectName, health, score, completionRate, totalTasks, completedTasks, overdueTasks, milestoneOverdue, unscheduledTasks, reviewingTasks, criticalOverdueTasks, highRiskRegisters, unresolvedIssues, reasons }`
 - `score` 口径: 按任务“计划进度 - 实际进度”的滞后程度计算；实际进度为 `completed=100`，否则取 `progress`；计划进度按 `startAt/endAt` 和当前时间线性计算。
 - 权重: `high=3`、`medium=2`、`low=1`，里程碑任务额外 `+1`。
-- `health`: `green` 健康、`yellow` 关注、`red` 高风险；逾期、关键路径逾期、里程碑逾期、未排期、待审核堆积会进入 `reasons`。
+- `health`: `green` 健康、`yellow` 关注、`red` 高风险；逾期、关键路径逾期、里程碑逾期、未排期、待审核堆积、未关闭高风险登记项和未解决问题会进入 `reasons`。
+- 登记册联动: 未关闭高风险登记项会扣分并使项目置红；未解决问题会扣分并至少使项目进入关注状态。
 
 ### GET `/stats/member-workload`
 - 权限: `stats.read`
@@ -584,6 +628,7 @@ API Token 用于外部系统以服务账号身份调用接口。请求仍使用 
 
 ### GET `/notifications`
 - Query: `page` `pageSize` `isRead` `module` `keyword`
+- 登记册通知使用 `module=project_registers`、`targetId=登记项ID`，前端会跳转到 `/registers?registerId=...`
 
 ### GET `/notifications/unread-count`
 

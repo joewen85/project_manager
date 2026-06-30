@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchArray, fetchData, hasAnyPermission, readApiError } from '../services/api'
+import { fetchArray, fetchData, fetchPage, hasAnyPermission, hasPermission, readApiError } from '../services/api'
 import { STATUS_META, STATUS_ORDER } from '../constants/status'
-import { ProjectHealth, Status } from '../types'
+import { ProjectHealth, ProjectRegister, Status } from '../types'
 import { DataState } from '../components/DataState'
 import type { DashboardProgressItem } from '../components/DashboardCharts'
 import { usePermissions } from '../hooks/usePermissions'
@@ -73,9 +73,13 @@ export function DashboardPage() {
   const [projectHealthError, setProjectHealthError] = useState('')
   const [memberWorkload, setMemberWorkload] = useState<MemberWorkloadResponse>({ members: [] })
   const [memberWorkloadError, setMemberWorkloadError] = useState('')
+  const [highRiskRegisterCount, setHighRiskRegisterCount] = useState(0)
+  const [unresolvedIssueCount, setUnresolvedIssueCount] = useState(0)
+  const [registerError, setRegisterError] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const canViewUsers = hasAnyPermission(['users.read', 'users.create', 'users.update', 'users.delete', 'users.write', 'rbac.manage'], permissions)
+  const canReadRegisters = hasPermission('registers.read', permissions)
 
   const load = async () => {
     try {
@@ -84,7 +88,8 @@ export function DashboardPage() {
       setProgressError('')
       setProjectHealthError('')
       setMemberWorkloadError('')
-      const [statsData, raw, healthData, workloadData] = await Promise.all([
+      setRegisterError('')
+      const [statsData, raw, healthData, workloadData, highRiskData, unresolvedIssueData] = await Promise.all([
         fetchData<DashboardStats>('/stats/dashboard'),
         fetchArray<DashboardProgressRaw>('/tasks/progress-list', undefined, { silent: true }).catch((progressLoadError) => {
           setProgressError(readApiError(progressLoadError, '任务状态分布加载失败'))
@@ -97,10 +102,24 @@ export function DashboardPage() {
         fetchData<MemberWorkloadResponse>('/stats/member-workload', undefined, { silent: true }).catch((workloadError) => {
           setMemberWorkloadError(readApiError(workloadError, '成员负载加载失败'))
           return { members: [] } as MemberWorkloadResponse
-        })
+        }),
+        canReadRegisters
+          ? fetchPage<ProjectRegister>('/project-registers', { page: 1, pageSize: 1, type: 'risk', statuses: 'open,in_progress', severities: 'high,critical' }, { page: 1, pageSize: 1 }, { silent: true }).catch((registerLoadError) => {
+            setRegisterError(readApiError(registerLoadError, '登记册摘要加载失败'))
+            return { list: [] as ProjectRegister[], total: 0, page: 1, pageSize: 1 }
+          })
+          : Promise.resolve({ list: [] as ProjectRegister[], total: 0, page: 1, pageSize: 1 }),
+        canReadRegisters
+          ? fetchPage<ProjectRegister>('/project-registers', { page: 1, pageSize: 1, type: 'issue', statuses: 'open,in_progress' }, { page: 1, pageSize: 1 }, { silent: true }).catch((registerLoadError) => {
+            setRegisterError(readApiError(registerLoadError, '登记册摘要加载失败'))
+            return { list: [] as ProjectRegister[], total: 0, page: 1, pageSize: 1 }
+          })
+          : Promise.resolve({ list: [] as ProjectRegister[], total: 0, page: 1, pageSize: 1 })
       ])
       setStats(statsData)
       setProjectHealth(Array.isArray(healthData.projects) ? healthData.projects : [])
+      setHighRiskRegisterCount(highRiskData.total)
+      setUnresolvedIssueCount(unresolvedIssueData.total)
       setMemberWorkload({
         weekStart: workloadData.weekStart,
         weekEnd: workloadData.weekEnd,
@@ -129,6 +148,8 @@ export function DashboardPage() {
       setProgress([])
       setProjectHealth([])
       setMemberWorkload({ members: [] })
+      setHighRiskRegisterCount(0)
+      setUnresolvedIssueCount(0)
     } finally {
       setLoading(false)
     }
@@ -136,7 +157,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     void load()
-  }, [])
+  }, [canReadRegisters])
 
   return (
     <section className="page-section">
@@ -148,7 +169,10 @@ export function DashboardPage() {
         <article className="card metric-card"><p>完成率</p><strong>{((stats?.completionRate ?? 0) * 100).toFixed(1)}%</strong></article>
         <article className="card metric-card"><p>风险项目</p><strong>{projectHealth.filter((item) => item.health === 'red').length}</strong></article>
         <article className="card metric-card"><p>过载成员</p><strong>{(memberWorkload.members || []).filter((item) => item.overloaded).length}</strong></article>
+        {canReadRegisters && <article className="card metric-card"><p>高风险登记项</p><strong>{highRiskRegisterCount}</strong></article>}
+        {canReadRegisters && <article className="card metric-card"><p>未解决问题</p><strong>{unresolvedIssueCount}</strong></article>}
       </div>
+      {!loading && !error && registerError && <p className="inline-tip">{registerError}</p>}
       {!loading && !error && (
         <section className="card dashboard-health-panel">
           <div className="dashboard-health-header">
@@ -168,6 +192,8 @@ export function DashboardPage() {
                   <div className="dashboard-health-metrics">
                     <span>逾期 {item.overdueTasks}</span>
                     <span>关键逾期 {item.criticalOverdueTasks || 0}</span>
+                    <span>高风险 {item.highRiskRegisters || 0}</span>
+                    <span>问题 {item.unresolvedIssues || 0}</span>
                     <span>里程碑 {item.milestoneOverdue}</span>
                     <span>未排期 {item.unscheduledTasks}</span>
                     <span>待审核 {item.reviewingTasks}</span>

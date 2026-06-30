@@ -18,7 +18,7 @@ export function NotificationsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [isReadFilter, setIsReadFilter] = useState<'all' | 'unread' | 'read'>('all')
-  const [moduleFilter, setModuleFilter] = useState<'all' | 'tasks' | 'projects'>('all')
+  const [moduleFilter, setModuleFilter] = useState<'all' | 'tasks' | 'projects' | 'project_registers'>('all')
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -29,8 +29,8 @@ export function NotificationsPage() {
   const parseReadFilter = (value: string): 'all' | 'unread' | 'read' =>
     value === 'unread' || value === 'read' ? value : 'all'
 
-  const parseModuleFilter = (value: string): 'all' | 'tasks' | 'projects' =>
-    value === 'tasks' || value === 'projects' ? value : 'all'
+  const parseModuleFilter = (value: string): 'all' | 'tasks' | 'projects' | 'project_registers' =>
+    value === 'tasks' || value === 'projects' || value === 'project_registers' ? value : 'all'
 
   const load = async () => {
     try {
@@ -100,6 +100,10 @@ export function NotificationsPage() {
       navigate(`/projects?projectId=${item.targetId}`)
       return
     }
+    if (item.module === 'project_registers' && item.targetId) {
+      navigate(`/registers?registerId=${item.targetId}`)
+      return
+    }
     if (item.module === 'requests' && item.targetId) {
       navigate('/requests')
     }
@@ -127,6 +131,7 @@ export function NotificationsPage() {
           <option value="all">全部模块</option>
           <option value="tasks">任务模块</option>
           <option value="projects">项目模块</option>
+          <option value="project_registers">登记册</option>
         </select>
         <SearchField aria-label="通知关键字搜索" placeholder="搜索标题/内容" value={keyword} onChange={(value) => { setKeyword(value); setPage(1) }} />
       </FilterPanel>

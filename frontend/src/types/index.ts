@@ -329,6 +329,10 @@ export interface TaskCalendarResponse {
 }
 
 export type SavedReportType = 'project_health' | 'member_workload' | 'task_status'
+export type ProjectRegisterType = 'risk' | 'issue' | 'decision'
+export type ProjectRegisterStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
+export type ProjectRegisterSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type ProjectRegisterProbability = 'low' | 'medium' | 'high'
 
 export interface SavedReportFilters {
   projectId?: number
@@ -501,7 +505,52 @@ export interface ProjectHealth {
   unscheduledTasks: number
   reviewingTasks: number
   criticalOverdueTasks?: number
+  highRiskRegisters?: number
+  unresolvedIssues?: number
   reasons: string[]
+}
+
+export interface ProjectRegister {
+  id: number
+  type: ProjectRegisterType
+  projectId: number
+  project?: Project
+  taskId?: number
+  task?: Task
+  title: string
+  description?: string
+  status: ProjectRegisterStatus
+  severity: ProjectRegisterSeverity
+  probability?: ProjectRegisterProbability
+  impact?: ProjectRegisterSeverity
+  source?: string
+  responsePlan?: string
+  resolution?: string
+  decisionDetail?: string
+  background?: string
+  impactScope?: string
+  dueAt?: string
+  ownerId?: number
+  owner?: User
+  participantIds?: number[]
+  createdById: number
+  createdBy?: User
+  lastActivityAt?: string
+  createdAt?: string
+  updatedAt?: string
+  activities?: ProjectRegisterActivity[]
+}
+
+export interface ProjectRegisterActivity {
+  id: number
+  registerId: number
+  actorId: number
+  actor?: User
+  type: string
+  summary: string
+  detail?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface UploadAttachment {

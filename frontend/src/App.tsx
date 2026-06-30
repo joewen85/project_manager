@@ -16,6 +16,7 @@ const SprintsPage = lazy(async () => import('./pages/SprintsPage').then((module)
 const TagsPage = lazy(async () => import('./pages/TagsPage').then((module) => ({ default: module.TagsPage })))
 const ProjectsPage = lazy(async () => import('./pages/ProjectsPage').then((module) => ({ default: module.ProjectsPage })))
 const ProjectBaselinesPage = lazy(async () => import('./pages/ProjectBaselinesPage').then((module) => ({ default: module.ProjectBaselinesPage })))
+const ProjectRegistersPage = lazy(async () => import('./pages/ProjectRegistersPage').then((module) => ({ default: module.ProjectRegistersPage })))
 const GanttPage = lazy(async () => import('./pages/GanttPage').then((module) => ({ default: module.GanttPage })))
 const RbacPage = lazy(async () => import('./pages/RbacPage').then((module) => ({ default: module.RbacPage })))
 const AuditPage = lazy(async () => import('./pages/AuditPage').then((module) => ({ default: module.AuditPage })))
@@ -53,6 +54,7 @@ const protectedRoutes = [
   { path: '/project-templates', permission: 'templates.read' },
   { path: '/gantt', permission: 'projects.read' },
   { path: '/project-baselines', permission: 'baselines.read' },
+  { path: '/registers', permission: 'registers.read' },
   { path: '/tasks', permission: 'tasks.read' },
   { path: '/sprints', permission: 'sprints.read' },
   { path: '/calendar', permission: 'tasks.read' },
@@ -154,6 +156,7 @@ export default function App() {
           <Route path="project-templates" element={<PermissionGuard permission="templates.read"><ProjectTemplatesPage /></PermissionGuard>} />
           <Route path="gantt" element={<PermissionGuard permission="projects.read"><GanttPage /></PermissionGuard>} />
           <Route path="project-baselines" element={<PermissionGuard permission="baselines.read"><ProjectBaselinesPage /></PermissionGuard>} />
+          <Route path="registers" element={<PermissionGuard permission="registers.read"><ProjectRegistersPage /></PermissionGuard>} />
           <Route path="tasks" element={<PermissionGuard permission="tasks.read"><TasksPage /></PermissionGuard>} />
           <Route path="sprints" element={<PermissionGuard permission="sprints.read"><SprintsPage /></PermissionGuard>} />
           <Route path="calendar" element={<PermissionGuard permission="tasks.read"><CalendarPage /></PermissionGuard>} />

@@ -144,6 +144,8 @@ type projectHealthItem struct {
 	UnscheduledTasks     int64    `json:"unscheduledTasks"`
 	ReviewingTasks       int64    `json:"reviewingTasks"`
 	CriticalOverdueTasks int64    `json:"criticalOverdueTasks"`
+	HighRiskRegisters    int64    `json:"highRiskRegisters"`
+	UnresolvedIssues     int64    `json:"unresolvedIssues"`
 	Reasons              []string `json:"reasons"`
 }
 
@@ -171,6 +173,8 @@ type projectHealthAccumulator struct {
 	unscheduledTasks     int64
 	reviewingTasks       int64
 	criticalOverdueTasks int64
+	highRiskRegisters    int64
+	unresolvedIssues     int64
 	weightedScore        float64
 	weightTotal          float64
 }
@@ -275,6 +279,12 @@ func calculateProjectHealth(acc projectHealthAccumulator) projectHealthItem {
 	if acc.criticalOverdueTasks > 0 {
 		reasons = append(reasons, formatCriticalReason(acc.criticalOverdueTasks))
 	}
+	if acc.highRiskRegisters > 0 {
+		reasons = append(reasons, countReason(acc.highRiskRegisters, "个高风险登记项未关闭"))
+	}
+	if acc.unresolvedIssues > 0 {
+		reasons = append(reasons, countReason(acc.unresolvedIssues, "个问题登记项未解决"))
+	}
 	if acc.milestoneOverdue > 0 {
 		reasons = append(reasons, countReason(acc.milestoneOverdue, "个里程碑逾期"))
 	}
@@ -287,11 +297,18 @@ func calculateProjectHealth(acc projectHealthAccumulator) projectHealthItem {
 	if score < 85 && acc.weightTotal > 0 {
 		reasons = append(reasons, "实际进度落后于计划进度")
 	}
+	if acc.highRiskRegisters > 0 {
+		score -= int(acc.highRiskRegisters * 10)
+	}
+	if acc.unresolvedIssues > 0 {
+		score -= int(acc.unresolvedIssues * 5)
+	}
+	score = int(clampPercent(float64(score)))
 
 	health := "green"
-	if acc.criticalOverdueTasks > 0 || acc.milestoneOverdue > 0 || acc.overdueTasks >= 3 || score < 60 {
+	if acc.criticalOverdueTasks > 0 || acc.highRiskRegisters > 0 || acc.milestoneOverdue > 0 || acc.overdueTasks >= 3 || score < 60 {
 		health = "red"
-	} else if acc.overdueTasks > 0 || acc.reviewingTasks >= 3 || acc.unscheduledTasks > 0 || score < 85 {
+	} else if acc.unresolvedIssues > 0 || acc.overdueTasks > 0 || acc.reviewingTasks >= 3 || acc.unscheduledTasks > 0 || score < 85 {
 		health = "yellow"
 	}
 	if len(reasons) == 0 {
@@ -312,12 +329,50 @@ func calculateProjectHealth(acc projectHealthAccumulator) projectHealthItem {
 		UnscheduledTasks:     acc.unscheduledTasks,
 		ReviewingTasks:       acc.reviewingTasks,
 		CriticalOverdueTasks: acc.criticalOverdueTasks,
+		HighRiskRegisters:    acc.highRiskRegisters,
+		UnresolvedIssues:     acc.unresolvedIssues,
 		Reasons:              reasons,
 	}
 }
 
 func countReason(count int64, suffix string) string {
 	return strconv.FormatInt(count, 10) + suffix
+}
+
+type projectRegisterHealthCount struct {
+	ProjectID         uint
+	ProjectCode       string
+	ProjectName       string
+	HighRiskRegisters int64
+	UnresolvedIssues  int64
+}
+
+func (h *Handler) projectRegisterHealthCounts(c *gin.Context) (map[uint]projectRegisterHealthCount, error) {
+	var rows []projectRegisterHealthCount
+	query := h.scopeProjectRegistersQuery(c, h.DB.Model(&model.ProjectRegister{})).
+		Select(`
+			project_registers.project_id AS project_id,
+			projects.code AS project_code,
+			projects.name AS project_name,
+			SUM(CASE WHEN project_registers.type = ? AND project_registers.status IN ? AND project_registers.severity IN ? THEN 1 ELSE 0 END) AS high_risk_registers,
+			SUM(CASE WHEN project_registers.type = ? AND project_registers.status IN ? THEN 1 ELSE 0 END) AS unresolved_issues
+		`,
+			model.ProjectRegisterRisk,
+			[]model.ProjectRegisterStatus{model.ProjectRegisterOpen, model.ProjectRegisterInProgress},
+			[]model.ProjectRegisterSeverity{model.ProjectRegisterSeverityHigh, model.ProjectRegisterSeverityCritical},
+			model.ProjectRegisterIssue,
+			[]model.ProjectRegisterStatus{model.ProjectRegisterOpen, model.ProjectRegisterInProgress},
+		).
+		Joins("JOIN projects ON projects.id = project_registers.project_id").
+		Group("project_registers.project_id, projects.code, projects.name")
+	if err := query.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[uint]projectRegisterHealthCount, len(rows))
+	for _, row := range rows {
+		out[row.ProjectID] = row
+	}
+	return out, nil
 }
 
 func (h *Handler) ProjectHealth(c *gin.Context) {
@@ -365,6 +420,24 @@ func (h *Handler) ProjectHealth(c *gin.Context) {
 		if acc, ok := projects[projectID]; ok {
 			acc.criticalOverdueTasks = count
 		}
+	}
+	registerCounts, err := h.projectRegisterHealthCounts(c)
+	if err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_PROJECT_HEALTH_REGISTERS_FAILED", err)
+		return
+	}
+	for projectID, counts := range registerCounts {
+		acc, ok := projects[projectID]
+		if !ok {
+			acc = &projectHealthAccumulator{
+				projectID:   projectID,
+				projectCode: counts.ProjectCode,
+				projectName: counts.ProjectName,
+			}
+			projects[projectID] = acc
+		}
+		acc.highRiskRegisters = counts.HighRiskRegisters
+		acc.unresolvedIssues = counts.UnresolvedIssues
 	}
 
 	items := make([]projectHealthItem, 0, len(projects))

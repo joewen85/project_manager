@@ -797,6 +797,163 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: deleteProjectBaselinesById
+  /project-registers:
+    get:
+      summary: 风险、问题、决策登记册列表
+      description: 按当前用户项目可见范围返回风险、问题与决策登记项。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: type
+        schema:
+          type: string
+          enum:
+          - risk
+          - issue
+          - decision
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - open
+          - in_progress
+          - resolved
+          - closed
+      - in: query
+        name: statuses
+        schema:
+          type: string
+        description: 逗号分隔的状态列表
+      - in: query
+        name: severity
+        schema:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+          - critical
+      - in: query
+        name: severities
+        schema:
+          type: string
+        description: 逗号分隔的等级列表
+      - in: query
+        name: projectId
+        schema:
+          type: integer
+        description: 按项目筛选
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectRegisterPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectRegisters
+    post:
+      summary: 创建风险、问题或决策登记项
+      description: 项目必须当前用户可见；关联任务必须当前用户可见且属于同项目。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectRegisterUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectRegister'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postProjectRegisters
+  /project-registers/{id}:
+    get:
+      summary: 登记项详情
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectRegister'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectRegistersById
+    put:
+      summary: 更新登记项
+      description: 更新后写入登记项活动、审计日志和站内通知。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectRegisterUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectRegister'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putProjectRegistersById
+    delete:
+      summary: 删除登记项
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteProjectRegistersById
+  /project-registers/{id}/activities:
+    get:
+      summary: 登记项活动流
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectRegisterActivityPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getProjectRegistersByIdActivities
   /tasks:
     get:
       summary: 任务列表
@@ -2207,7 +2364,7 @@ paths:
   /stats/project-health:
     get:
       summary: 项目健康度
-      description: 基于当前用户可见任务，按计划进度与实际进度偏差、逾期、里程碑逾期、未排期和待审核任务聚合项目健康度。
+      description: 基于当前用户可见任务和项目登记册，按计划进度与实际进度偏差、逾期、里程碑逾期、未排期、待审核任务、未关闭高风险登记项和未解决问题聚合项目健康度。
       security:
       - bearerAuth: []
       responses:
@@ -3243,6 +3400,192 @@ components:
           $ref: '#/components/schemas/SavedReportFilters'
         chartConfig:
           $ref: '#/components/schemas/SavedReportChartConfig'
+    ProjectRegister:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum:
+          - risk
+          - issue
+          - decision
+        projectId:
+          type: integer
+        project:
+          $ref: '#/components/schemas/Project'
+        taskId:
+          type: integer
+          nullable: true
+        task:
+          $ref: '#/components/schemas/Task'
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum:
+          - open
+          - in_progress
+          - resolved
+          - closed
+        severity:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+          - critical
+        probability:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+        impact:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+          - critical
+        source:
+          type: string
+        responsePlan:
+          type: string
+        resolution:
+          type: string
+        decisionDetail:
+          type: string
+        background:
+          type: string
+        impactScope:
+          type: string
+        dueAt:
+          type: string
+          format: date-time
+          nullable: true
+        ownerId:
+          type: integer
+          nullable: true
+        owner:
+          $ref: '#/components/schemas/UserLite'
+        participantIds:
+          type: array
+          items:
+            type: integer
+        createdById:
+          type: integer
+        createdBy:
+          $ref: '#/components/schemas/UserLite'
+        lastActivityAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProjectRegisterUpsertRequest:
+      type: object
+      required:
+      - type
+      - projectId
+      - title
+      properties:
+        type:
+          type: string
+          enum:
+          - risk
+          - issue
+          - decision
+        projectId:
+          type: integer
+        taskId:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          default: open
+          enum:
+          - open
+          - in_progress
+          - resolved
+          - closed
+        severity:
+          type: string
+          default: medium
+          enum:
+          - low
+          - medium
+          - high
+          - critical
+        probability:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+        impact:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+          - critical
+        source:
+          type: string
+        responsePlan:
+          type: string
+        resolution:
+          type: string
+        decisionDetail:
+          type: string
+        background:
+          type: string
+        impactScope:
+          type: string
+        dueAt:
+          type: string
+          format: date-time
+        ownerId:
+          type: integer
+          nullable: true
+        participantIds:
+          type: array
+          items:
+            type: integer
+    ProjectRegisterActivity:
+      type: object
+      properties:
+        id:
+          type: integer
+        registerId:
+          type: integer
+        actorId:
+          type: integer
+        actor:
+          $ref: '#/components/schemas/UserLite'
+        type:
+          type: string
+        summary:
+          type: string
+        detail:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     Sprint:
       type: object
       properties:
@@ -4269,6 +4612,12 @@ components:
         criticalOverdueTasks:
           type: integer
           format: int64
+        highRiskRegisters:
+          type: integer
+          format: int64
+        unresolvedIssues:
+          type: integer
+          format: int64
         reasons:
           type: array
           items:
@@ -4477,6 +4826,34 @@ components:
           type: integer
         pageSize:
           type: integer
+    ProjectRegisterPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectRegister'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    ProjectRegisterActivityPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectRegisterActivity'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
     ProjectTemplatePageResult:
       type: object
       properties:
@@ -4676,6 +5053,12 @@ components:
   responses:
     BadRequest:
       description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiMessage'
+    NotFound:
+      description: Not Found
       content:
         application/json:
           schema:
