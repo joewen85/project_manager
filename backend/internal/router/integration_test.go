@@ -2823,6 +2823,152 @@ func TestWebhookSubscriptionSkipsInvisibleTaskForScopedUser(t *testing.T) {
 	}
 }
 
+func TestAPITokenServiceAccountAuthAndAudit(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+	for _, code := range []string{"api_tokens.create", "api_tokens.read", "api_tokens.update", "api_tokens.delete", "projects.create", "projects.read", "audit.read"} {
+		if codeToID[code] == 0 {
+			t.Fatalf("permission %s should be seeded", code)
+		}
+	}
+
+	invalidResp, invalidBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/api-tokens", adminToken, map[string]any{
+		"name":          "empty permissions",
+		"permissionIds": []uint{},
+	})
+	if invalidResp.StatusCode != http.StatusBadRequest || invalidBody["code"] != "INVALID_API_TOKEN" {
+		t.Fatalf("empty api token permissions expected 400 INVALID_API_TOKEN got %d %#v", invalidResp.StatusCode, invalidBody)
+	}
+
+	createResp, createBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/api-tokens", adminToken, map[string]any{
+		"name":        "Project Sync Token",
+		"description": "sync projects from external system",
+		"permissionIds": []uint{
+			codeToID["projects.create"],
+			codeToID["projects.read"],
+		},
+		"isEnabled": true,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create api token expected 201 got %d %#v", createResp.StatusCode, createBody)
+	}
+	plainToken, _ := createBody["token"].(string)
+	if !strings.HasPrefix(plainToken, "pmt_") {
+		t.Fatalf("create response should include one-time token with pmt_ prefix got %#v", createBody)
+	}
+	if _, ok := createBody["tokenHash"]; ok {
+		t.Fatalf("create response should not expose token hash got %#v", createBody)
+	}
+	apiTokenID := int(createBody["id"].(float64))
+	serviceAccountID := uint(createBody["serviceAccountId"].(float64))
+	if serviceAccountID == 0 {
+		t.Fatalf("api token should create service account got %#v", createBody)
+	}
+
+	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/api-tokens", adminToken, nil)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list api tokens expected 200 got %d %#v", listResp.StatusCode, listBody)
+	}
+	tokens, _ := listBody["list"].([]any)
+	if len(tokens) != 1 {
+		t.Fatalf("list api tokens should contain one item got %#v", listBody)
+	}
+	listItem := tokens[0].(map[string]any)
+	if _, ok := listItem["token"]; ok {
+		t.Fatalf("list response should not expose token got %#v", listItem)
+	}
+	if _, ok := listItem["tokenHash"]; ok {
+		t.Fatalf("list response should not expose token hash got %#v", listItem)
+	}
+	if listItem["tokenPrefix"] == "" || listItem["tokenLastFour"] == "" {
+		t.Fatalf("list response should include masked token metadata got %#v", listItem)
+	}
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", plainToken, map[string]any{
+		"code":        "API-TOKEN-P1",
+		"name":        "API Token Project",
+		"description": "created by service account",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("api token create project expected 201 got %d %#v", projectResp.StatusCode, projectBody)
+	}
+
+	projectListResp, projectListBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/projects?page=1&pageSize=20", plainToken, nil)
+	if projectListResp.StatusCode != http.StatusOK {
+		t.Fatalf("api token list projects expected 200 got %d %#v", projectListResp.StatusCode, projectListBody)
+	}
+	taskListResp, taskListBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks?page=1&pageSize=20", plainToken, nil)
+	if taskListResp.StatusCode != http.StatusForbidden || taskListBody["code"] != "FORBIDDEN" {
+		t.Fatalf("api token without tasks.read expected 403 FORBIDDEN got %d %#v", taskListResp.StatusCode, taskListBody)
+	}
+
+	auditResp, auditBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/audit/logs?module=projects&action=create&page=1&pageSize=20", adminToken, nil)
+	if auditResp.StatusCode != http.StatusOK {
+		t.Fatalf("list project audit expected 200 got %d %#v", auditResp.StatusCode, auditBody)
+	}
+	auditItems, _ := auditBody["list"].([]any)
+	if len(auditItems) == 0 {
+		t.Fatalf("project create should write audit log got %#v", auditBody)
+	}
+	foundServiceAudit := false
+	for _, raw := range auditItems {
+		item := raw.(map[string]any)
+		if uint(item["userId"].(float64)) == serviceAccountID {
+			foundServiceAudit = true
+			break
+		}
+	}
+	if !foundServiceAudit {
+		t.Fatalf("project audit should use service account id %d got %#v", serviceAccountID, auditBody)
+	}
+
+	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/api-tokens/"+strconv.Itoa(apiTokenID), adminToken, map[string]any{
+		"name":        "Project Sync Token",
+		"description": "disabled token",
+		"permissionIds": []uint{
+			codeToID["projects.create"],
+			codeToID["projects.read"],
+		},
+		"isEnabled": false,
+	})
+	if updateResp.StatusCode != http.StatusOK {
+		t.Fatalf("disable api token expected 200 got %d %#v", updateResp.StatusCode, updateBody)
+	}
+	disabledResp, disabledBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/projects?page=1&pageSize=20", plainToken, nil)
+	if disabledResp.StatusCode != http.StatusUnauthorized || disabledBody["code"] != "UNAUTHORIZED" {
+		t.Fatalf("disabled api token expected 401 UNAUTHORIZED got %d %#v", disabledResp.StatusCode, disabledBody)
+	}
+
+	enableResp, enableBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/api-tokens/"+strconv.Itoa(apiTokenID), adminToken, map[string]any{
+		"name":        "Project Sync Token",
+		"description": "enabled token",
+		"permissionIds": []uint{
+			codeToID["projects.create"],
+			codeToID["projects.read"],
+		},
+		"isEnabled": true,
+	})
+	if enableResp.StatusCode != http.StatusOK {
+		t.Fatalf("enable api token expected 200 got %d %#v", enableResp.StatusCode, enableBody)
+	}
+	enabledResp, enabledBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/projects?page=1&pageSize=20", plainToken, nil)
+	if enabledResp.StatusCode != http.StatusOK {
+		t.Fatalf("enabled api token expected 200 got %d %#v", enabledResp.StatusCode, enabledBody)
+	}
+
+	deleteResp, deleteBody := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/api-tokens/"+strconv.Itoa(apiTokenID), adminToken, nil)
+	if deleteResp.StatusCode != http.StatusOK {
+		t.Fatalf("delete api token expected 200 got %d %#v", deleteResp.StatusCode, deleteBody)
+	}
+	revokedResp, revokedBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/projects?page=1&pageSize=20", plainToken, nil)
+	if revokedResp.StatusCode != http.StatusUnauthorized || revokedBody["code"] != "UNAUTHORIZED" {
+		t.Fatalf("revoked api token expected 401 UNAUTHORIZED got %d %#v", revokedResp.StatusCode, revokedBody)
+	}
+}
+
 func TestAutomationRuleOverdueTaskNotification(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

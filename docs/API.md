@@ -5,6 +5,8 @@ Base URL: `http://localhost:8080/api/v1`
 
 ## 认证
 
+受保护接口统一使用 `Authorization: Bearer <token>`。`token` 可以是登录接口返回的 JWT，也可以是 API Token 模块生成的 `pmt_...` 服务账号 Token。
+
 ### POST `/auth/login`
 - 请求体: `{ "username": "admin", "password": "admin123" }`
 - 响应: `{ token, user, permissions }`
@@ -70,6 +72,10 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/webhooks` | `webhooks.create` |
 | PUT | `/webhooks/:id` `POST /webhooks/deliveries/:id/retry` | `webhooks.update` |
 | DELETE | `/webhooks/:id` | `webhooks.delete` |
+| GET | `/api-tokens` `/api-tokens/:id` `/api-tokens/permission-options` | `api_tokens.read` |
+| POST | `/api-tokens` | `api_tokens.create` |
+| PUT | `/api-tokens/:id` | `api_tokens.update` |
+| DELETE | `/api-tokens/:id` | `api_tokens.delete` |
 | GET | `/automation-rules` `/automation-rules/logs` | `automations.read` |
 | POST | `/automation-rules` | `automations.create` |
 | PUT | `/automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
@@ -436,6 +442,39 @@ Webhook 订阅用于让外部系统接收项目管理事件。当前支持 `task
 ### POST `/webhooks/deliveries/:id/retry`
 - 权限: `webhooks.update`
 - 范围: 管理员或订阅创建人；仅允许重试非成功投递记录，订阅停用时不可重试
+
+## API Token / 服务账号
+
+API Token 用于外部系统以服务账号身份调用接口。请求仍使用 `Authorization: Bearer <token>`；Token 明文只在创建时返回一次，后端仅保存哈希、前缀和后四位。调用时会按服务账号身份执行现有 RBAC、可见范围和审计逻辑。
+
+### GET `/api-tokens`
+- 权限: `api_tokens.read`
+- Query: `page` `pageSize` `keyword` `isEnabled`
+- 范围: 管理员查看全部；普通用户仅查看自己创建的 Token
+
+### GET `/api-tokens/permission-options`
+- 权限: `api_tokens.read`
+- 效果: 返回可分配给 Token 的权限候选列表
+
+### GET `/api-tokens/:id`
+- 权限: `api_tokens.read`
+- 范围: 管理员或 Token 创建人
+
+### POST `/api-tokens`
+- 权限: `api_tokens.create`
+- 请求体: `{ name, description?, permissionIds, isEnabled?, expiresAt? }`
+- `permissionIds` 至少 1 个；`expiresAt` 为 RFC3339 且必须晚于当前时间
+- 响应: 返回 Token 元数据和一次性明文 `token`
+
+### PUT `/api-tokens/:id`
+- 权限: `api_tokens.update`
+- 范围: 管理员或 Token 创建人
+- 请求体同创建；不会重新生成明文 Token；已撤销 Token 不可更新
+
+### DELETE `/api-tokens/:id`
+- 权限: `api_tokens.delete`
+- 范围: 管理员或 Token 创建人
+- 效果: 撤销 Token 并停用对应服务账号，保留记录用于审计
 
 ## 自动化规则
 

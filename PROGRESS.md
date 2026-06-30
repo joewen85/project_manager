@@ -135,6 +135,11 @@
 - 完成：新增 `webhooks.create/read/update/delete` 权限与 `/webhooks` CRUD、投递日志查询、投递重试接口，普通用户仅管理自己创建的订阅
 - 完成：任务状态通过 `PUT /tasks/:id`、`PATCH /tasks/:id/status`、`PATCH /tasks/:id/complete` 变更后触发订阅投递，URL 安全校验复用自动化 Webhook 策略；管理员订阅收全量事件，普通订阅仅收创建人可见任务事件
 - 完成：前端新增“Webhook订阅”页面，支持订阅维护、日志筛选和失败重试；补充失败投递/重试/不可见任务隔离集成测试并同步 API/OpenAPI/RBAC/README/PLAN
+- 完成：按 `Improvement.md` 完成 P1-5 集成与开放接口 API Token / 服务账号 MVP
+- 完成：新增 `api_tokens` 模型和显式 SQL 迁移，Token 仅保存哈希、前缀和后四位，创建响应一次性返回明文
+- 完成：新增 `api_tokens.create/read/update/delete` 权限与 `/api-tokens` 管理接口，创建 Token 时自动生成服务账号用户和独立角色
+- 完成：API Token 认证复用 `Authorization: Bearer`，以服务账号身份执行现有 RBAC、任务/项目可见范围与审计；支持独立停用、重新启用和撤销
+- 完成：前端新增“API Token”页面，支持 Token 筛选、创建、编辑、停用/启用、撤销和权限选择；补充最小权限/禁用/撤销/审计集成测试并同步 API/OpenAPI/RBAC/README/PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

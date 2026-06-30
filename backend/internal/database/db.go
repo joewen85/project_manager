@@ -17,6 +17,7 @@ func Migrate(db *gorm.DB) error {
 		&model.User{},
 		&model.Role{},
 		&model.Permission{},
+		&model.APIToken{},
 		&model.Department{},
 		&model.Tag{},
 		&model.Project{},

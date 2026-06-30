@@ -74,6 +74,11 @@ var permissionCatalog = []permissionSeed{
 	{Code: "webhooks.update", Name: "Webhook-更新", Description: "更新 Webhook 订阅并重试投递"},
 	{Code: "webhooks.delete", Name: "Webhook-删除", Description: "删除 Webhook 订阅"},
 
+	{Code: "api_tokens.create", Name: "API Token-创建", Description: "创建服务账号 API Token"},
+	{Code: "api_tokens.read", Name: "API Token-查看", Description: "查看服务账号 API Token"},
+	{Code: "api_tokens.update", Name: "API Token-更新", Description: "更新或禁用服务账号 API Token"},
+	{Code: "api_tokens.delete", Name: "API Token-删除", Description: "撤销服务账号 API Token"},
+
 	{Code: "automations.create", Name: "自动化-创建", Description: "创建自动化规则"},
 	{Code: "automations.read", Name: "自动化-查看", Description: "查看自动化规则与执行日志"},
 	{Code: "automations.update", Name: "自动化-更新", Description: "更新并执行自动化规则"},

@@ -240,6 +240,29 @@ export interface Permission {
   description: string
 }
 
+export interface ApiToken {
+  id: number
+  name: string
+  description: string
+  tokenPrefix: string
+  tokenLastFour: string
+  permissionCodes: string[]
+  isEnabled: boolean
+  expiresAt?: string
+  lastUsedAt?: string
+  lastUsedIp?: string
+  revokedAt?: string
+  createdById: number
+  serviceAccountId: number
+  serviceAccount?: User
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ApiTokenCreateResponse extends ApiToken {
+  token: string
+}
+
 export interface Notification {
   id: number
   userId: number

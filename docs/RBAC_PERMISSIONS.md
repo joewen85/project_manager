@@ -61,6 +61,10 @@
 | `webhooks.read` | 查看 Webhook 订阅与投递日志；普通用户仅查看自己的订阅与投递日志 |
 | `webhooks.update` | 更新 Webhook 订阅并重试投递 |
 | `webhooks.delete` | 删除 Webhook 订阅 |
+| `api_tokens.create` | 创建服务账号 API Token |
+| `api_tokens.read` | 查看服务账号 API Token 与权限候选 |
+| `api_tokens.update` | 更新或禁用服务账号 API Token |
+| `api_tokens.delete` | 撤销服务账号 API Token |
 | `automations.create` | 创建自动化规则 |
 | `automations.read` | 查看自动化规则与执行日志 |
 | `automations.update` | 更新并执行自动化规则 |
@@ -127,6 +131,10 @@
 | `PUT /webhooks/:id` `POST /webhooks/deliveries/:id/retry` | `webhooks.update`；普通用户仅更新自己创建的订阅并重试其投递 |
 | `DELETE /webhooks/:id` | `webhooks.delete`；普通用户仅删除自己创建的订阅 |
 | Webhook 订阅任务状态事件投递 | `webhooks.create/update` 控制订阅配置；管理员订阅接收全量事件，普通用户订阅仅接收订阅创建人可见任务事件 |
+| `GET /api-tokens` `GET /api-tokens/:id` `GET /api-tokens/permission-options` | `api_tokens.read`；普通用户仅查看自己创建的 Token |
+| `POST /api-tokens` | `api_tokens.create`；创建时自动生成服务账号和独立角色，明文 Token 仅返回一次 |
+| `PUT /api-tokens/:id` | `api_tokens.update`；普通用户仅更新自己创建的 Token |
+| `DELETE /api-tokens/:id` | `api_tokens.delete`；普通用户仅撤销自己创建的 Token |
 | `GET /automation-rules` `GET /automation-rules/logs` | `automations.read` |
 | `POST /automation-rules` | `automations.create` |
 | `PUT /automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |

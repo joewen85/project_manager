@@ -22,6 +22,7 @@ const menus = [
   { to: '/requests', label: '请求入口', icon: ClipboardList, permission: 'requests.read' },
   { to: '/automation-rules', label: '自动化规则', icon: Workflow, permission: 'automations.read' },
   { to: '/webhooks', label: 'Webhook订阅', icon: Webhook, permission: 'webhooks.read' },
+  { to: '/api-tokens', label: 'API Token', icon: KeyRound, permission: 'api_tokens.read' },
   { to: '/notifications', label: '站内通知', icon: Bell, permission: 'notifications.read' },
   { to: '/audit', label: '审计日志', icon: NotebookTabs, permission: 'audit.read' },
   { to: '/me', label: '个人工作', icon: UserCircle2, permission: 'tasks.read' }
@@ -459,6 +460,7 @@ export function Layout() {
     ['/gantt', '甘特图模块'],
     ['/tasks', '任务列表'],
     ['/requests', '请求入口'],
+    ['/api-tokens', 'API Token'],
     ['/notifications', '站内通知'],
     ['/audit', '审计日志'],
     ['/me', '个人工作']

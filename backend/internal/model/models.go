@@ -104,6 +104,27 @@ type Permission struct {
 	Description string `gorm:"size:255" json:"description"`
 }
 
+type APIToken struct {
+	BaseModel
+	Name             string     `gorm:"size:150;not null;index" json:"name"`
+	Description      string     `gorm:"size:255" json:"description"`
+	TokenPrefix      string     `gorm:"size:32;not null;index" json:"tokenPrefix"`
+	TokenLastFour    string     `gorm:"size:8;not null" json:"tokenLastFour"`
+	TokenHash        string     `gorm:"size:128;uniqueIndex;not null" json:"-"`
+	PermissionCodes  []string   `gorm:"serializer:json" json:"permissionCodes"`
+	IsEnabled        bool       `gorm:"default:true;index" json:"isEnabled"`
+	ExpiresAt        *time.Time `json:"expiresAt"`
+	LastUsedAt       *time.Time `json:"lastUsedAt"`
+	LastUsedIP       string     `gorm:"size:50" json:"lastUsedIp"`
+	RevokedAt        *time.Time `json:"revokedAt"`
+	CreatedByID      uint       `gorm:"not null;index" json:"createdById"`
+	CreatedBy        User       `json:"createdBy,omitempty"`
+	ServiceAccountID uint       `gorm:"not null;index" json:"serviceAccountId"`
+	ServiceAccount   User       `gorm:"foreignKey:ServiceAccountID" json:"serviceAccount,omitempty"`
+	ServiceRoleID    uint       `gorm:"not null;index" json:"serviceRoleId"`
+	ServiceRole      Role       `gorm:"foreignKey:ServiceRoleID" json:"serviceRole,omitempty"`
+}
+
 type Department struct {
 	BaseModel
 	Name        string    `gorm:"size:100;uniqueIndex;not null" json:"name"`

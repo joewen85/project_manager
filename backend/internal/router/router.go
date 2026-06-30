@@ -44,7 +44,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 	}
 
 	authGroup := api.Group("")
-	authGroup.Use(middleware.JWT(cfg.JWTSecret))
+	authGroup.Use(middleware.JWT(cfg.JWTSecret, h.DB))
 	{
 		authGroup.GET("/auth/profile", h.Profile)
 		authGroup.POST("/auth/change-password", h.ChangePassword)
@@ -171,6 +171,16 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			webhooks.GET("/:id", middleware.RequirePermission(h.DB, "webhooks.read"), h.WebhookSubscriptionDetail)
 			webhooks.PUT("/:id", middleware.RequirePermission(h.DB, "webhooks.update"), h.UpdateWebhookSubscription)
 			webhooks.DELETE("/:id", middleware.RequirePermission(h.DB, "webhooks.delete"), h.DeleteWebhookSubscription)
+		}
+
+		apiTokens := authGroup.Group("/api-tokens")
+		{
+			apiTokens.GET("", middleware.RequirePermission(h.DB, "api_tokens.read"), h.ListAPITokens)
+			apiTokens.POST("", middleware.RequirePermission(h.DB, "api_tokens.create"), h.CreateAPIToken)
+			apiTokens.GET("/permission-options", middleware.RequirePermission(h.DB, "api_tokens.read"), h.ListAPITokenPermissionOptions)
+			apiTokens.GET("/:id", middleware.RequirePermission(h.DB, "api_tokens.read"), h.APITokenDetail)
+			apiTokens.PUT("/:id", middleware.RequirePermission(h.DB, "api_tokens.update"), h.UpdateAPIToken)
+			apiTokens.DELETE("/:id", middleware.RequirePermission(h.DB, "api_tokens.delete"), h.DeleteAPIToken)
 		}
 
 		automations := authGroup.Group("/automation-rules")

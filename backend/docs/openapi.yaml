@@ -1803,6 +1803,125 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postWebhooksDeliveriesByIdRetry
+  /api-tokens:
+    get:
+      summary: API Token 列表
+      description: 普通用户仅返回自己创建的 Token；管理员可查看全部。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: isEnabled
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APITokenPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getApiTokens
+    post:
+      summary: 创建 API Token
+      description: 创建服务账号和独立角色；明文 Token 仅在本响应返回一次。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APITokenUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APITokenCreateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postApiTokens
+  /api-tokens/permission-options:
+    get:
+      summary: API Token 权限候选
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getApiTokensPermissionOptions
+  /api-tokens/{id}:
+    get:
+      summary: API Token 详情
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIToken'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getApiTokensById
+    put:
+      summary: 更新 API Token
+      description: 可更新元数据、权限、过期时间和启用状态；不会重新生成明文 Token。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APITokenUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIToken'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putApiTokensById
+    delete:
+      summary: 撤销 API Token
+      description: 撤销 Token 并停用对应服务账号，记录保留用于审计。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteApiTokensById
   /automation-rules:
     get:
       summary: 自动化规则列表
@@ -2985,6 +3104,83 @@ components:
         updatedAt:
           type: string
           format: date-time
+    APIToken:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        tokenPrefix:
+          type: string
+        tokenLastFour:
+          type: string
+        permissionCodes:
+          type: array
+          items:
+            type: string
+        isEnabled:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastUsedIp:
+          type: string
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdById:
+          type: integer
+        createdBy:
+          $ref: '#/components/schemas/User'
+        serviceAccountId:
+          type: integer
+        serviceAccount:
+          $ref: '#/components/schemas/User'
+        serviceRoleId:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    APITokenCreateResponse:
+      allOf:
+      - $ref: '#/components/schemas/APIToken'
+      - type: object
+        properties:
+          token:
+            type: string
+            description: 一次性明文 Token，仅创建时返回
+    APITokenUpsertRequest:
+      type: object
+      required:
+      - name
+      - permissionIds
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        permissionIds:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+        isEnabled:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
     AutomationConditions:
       type: object
       properties:
@@ -3960,6 +4156,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WebhookDelivery'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    APITokenPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIToken'
         total:
           type: integer
           format: int64
