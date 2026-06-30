@@ -1640,6 +1640,169 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: deleteSprintsByIdTasksByTaskId
+  /webhooks:
+    get:
+      summary: Webhook 订阅列表
+      description: 普通用户仅返回自己创建的订阅；管理员可查看全部。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: event
+        schema:
+          type: string
+          enum:
+          - task_status_changed
+      - in: query
+        name: isEnabled
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscriptionPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getWebhooks
+    post:
+      summary: 创建 Webhook 订阅
+      description: URL 默认禁止本机、内网和保留地址；普通用户创建的订阅只接收自己可见任务的事件。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookSubscriptionUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postWebhooks
+  /webhooks/{id}:
+    get:
+      summary: Webhook 订阅详情
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getWebhooksById
+    put:
+      summary: 更新 Webhook 订阅
+      description: 普通用户仅可更新自己创建的订阅；管理员可更新全部。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookSubscriptionUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putWebhooksById
+    delete:
+      summary: 删除 Webhook 订阅
+      description: 普通用户仅可删除自己创建的订阅；管理员可删除全部。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteWebhooksById
+  /webhooks/deliveries:
+    get:
+      summary: Webhook 投递日志
+      description: 普通用户仅返回自己订阅产生的投递日志；管理员可查看全部。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - in: query
+        name: subscriptionId
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - pending
+          - success
+          - failed
+      - in: query
+        name: event
+        schema:
+          type: string
+          enum:
+          - task_status_changed
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDeliveryPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getWebhooksDeliveries
+  /webhooks/deliveries/{id}/retry:
+    post:
+      summary: 重试 Webhook 投递
+      description: 仅失败或待处理投递可重试；普通用户仅可重试自己订阅的投递日志。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDelivery'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postWebhooksDeliveriesByIdRetry
   /automation-rules:
     get:
       summary: 自动化规则列表
@@ -2724,6 +2887,104 @@ components:
           type: array
           items:
             type: integer
+    WebhookSubscription:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        event:
+          type: string
+          enum:
+          - task_status_changed
+        url:
+          type: string
+          format: uri
+        isEnabled:
+          type: boolean
+        lastDeliveryStatus:
+          type: string
+          nullable: true
+          enum:
+          - pending
+          - success
+          - failed
+        lastDeliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastError:
+          type: string
+        createdById:
+          type: integer
+        createdBy:
+          $ref: '#/components/schemas/User'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    WebhookSubscriptionUpsertRequest:
+      type: object
+      required:
+      - name
+      - event
+      - url
+      properties:
+        name:
+          type: string
+        event:
+          type: string
+          enum:
+          - task_status_changed
+        url:
+          type: string
+          format: uri
+        isEnabled:
+          type: boolean
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: integer
+        subscriptionId:
+          type: integer
+        subscription:
+          $ref: '#/components/schemas/WebhookSubscription'
+        event:
+          type: string
+          enum:
+          - task_status_changed
+        status:
+          type: string
+          enum:
+          - pending
+          - success
+          - failed
+        attempts:
+          type: integer
+        payload:
+          type: string
+        responseStatus:
+          type: integer
+        errorMessage:
+          type: string
+        nextRetryAt:
+          type: string
+          format: date-time
+          nullable: true
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     AutomationConditions:
       type: object
       properties:
@@ -3671,6 +3932,34 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Sprint'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    WebhookSubscriptionPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookSubscription'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    WebhookDeliveryPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookDelivery'
         total:
           type: integer
           format: int64

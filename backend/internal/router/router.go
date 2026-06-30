@@ -162,6 +162,17 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			sprints.DELETE("/:id/tasks/:taskId", middleware.RequirePermission(h.DB, "sprints.update"), h.RemoveSprintTask)
 		}
 
+		webhooks := authGroup.Group("/webhooks")
+		{
+			webhooks.GET("", middleware.RequirePermission(h.DB, "webhooks.read"), h.ListWebhookSubscriptions)
+			webhooks.POST("", middleware.RequirePermission(h.DB, "webhooks.create"), h.CreateWebhookSubscription)
+			webhooks.GET("/deliveries", middleware.RequirePermission(h.DB, "webhooks.read"), h.ListWebhookDeliveries)
+			webhooks.POST("/deliveries/:id/retry", middleware.RequirePermission(h.DB, "webhooks.update"), h.RetryWebhookDelivery)
+			webhooks.GET("/:id", middleware.RequirePermission(h.DB, "webhooks.read"), h.WebhookSubscriptionDetail)
+			webhooks.PUT("/:id", middleware.RequirePermission(h.DB, "webhooks.update"), h.UpdateWebhookSubscription)
+			webhooks.DELETE("/:id", middleware.RequirePermission(h.DB, "webhooks.delete"), h.DeleteWebhookSubscription)
+		}
+
 		automations := authGroup.Group("/automation-rules")
 		{
 			automations.GET("", middleware.RequirePermission(h.DB, "automations.read"), h.ListAutomationRules)

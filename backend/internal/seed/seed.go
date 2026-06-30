@@ -69,6 +69,11 @@ var permissionCatalog = []permissionSeed{
 	{Code: "sprints.update", Name: "迭代-更新", Description: "更新迭代周期与任务范围"},
 	{Code: "sprints.delete", Name: "迭代-删除", Description: "删除迭代周期"},
 
+	{Code: "webhooks.create", Name: "Webhook-创建", Description: "创建外部 Webhook 订阅"},
+	{Code: "webhooks.read", Name: "Webhook-查看", Description: "查看 Webhook 订阅与投递日志"},
+	{Code: "webhooks.update", Name: "Webhook-更新", Description: "更新 Webhook 订阅并重试投递"},
+	{Code: "webhooks.delete", Name: "Webhook-删除", Description: "删除 Webhook 订阅"},
+
 	{Code: "automations.create", Name: "自动化-创建", Description: "创建自动化规则"},
 	{Code: "automations.read", Name: "自动化-查看", Description: "查看自动化规则与执行日志"},
 	{Code: "automations.update", Name: "自动化-更新", Description: "更新并执行自动化规则"},

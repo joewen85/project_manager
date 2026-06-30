@@ -215,6 +215,47 @@ type SprintTask struct {
 	Task      Task      `gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE;" json:"-"`
 }
 
+type WebhookEvent string
+
+const (
+	WebhookEventTaskStatusChanged WebhookEvent = "task_status_changed"
+)
+
+type WebhookDeliveryStatus string
+
+const (
+	WebhookDeliveryPending WebhookDeliveryStatus = "pending"
+	WebhookDeliverySuccess WebhookDeliveryStatus = "success"
+	WebhookDeliveryFailed  WebhookDeliveryStatus = "failed"
+)
+
+type WebhookSubscription struct {
+	BaseModel
+	Name               string                `gorm:"size:150;not null;index" json:"name"`
+	Event              WebhookEvent          `gorm:"size:60;not null;index" json:"event"`
+	URL                string                `gorm:"size:600;not null" json:"url"`
+	IsEnabled          bool                  `gorm:"default:true;index" json:"isEnabled"`
+	LastDeliveryStatus WebhookDeliveryStatus `gorm:"size:20" json:"lastDeliveryStatus"`
+	LastDeliveredAt    *time.Time            `json:"lastDeliveredAt"`
+	LastError          string                `gorm:"type:text" json:"lastError"`
+	CreatedByID        uint                  `gorm:"not null;index" json:"createdById"`
+	CreatedBy          User                  `json:"createdBy,omitempty"`
+}
+
+type WebhookDelivery struct {
+	BaseModel
+	SubscriptionID uint                  `gorm:"not null;index" json:"subscriptionId"`
+	Subscription   WebhookSubscription   `gorm:"foreignKey:SubscriptionID;constraint:OnDelete:CASCADE;" json:"subscription,omitempty"`
+	Event          WebhookEvent          `gorm:"size:60;not null;index" json:"event"`
+	Status         WebhookDeliveryStatus `gorm:"size:20;not null;default:'pending';index" json:"status"`
+	Attempts       int                   `gorm:"default:0" json:"attempts"`
+	Payload        string                `gorm:"type:longtext" json:"payload"`
+	ResponseStatus int                   `json:"responseStatus"`
+	ErrorMessage   string                `gorm:"type:text" json:"errorMessage"`
+	NextRetryAt    *time.Time            `json:"nextRetryAt"`
+	DeliveredAt    *time.Time            `json:"deliveredAt"`
+}
+
 type Task struct {
 	BaseModel
 	TaskNo         string           `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`

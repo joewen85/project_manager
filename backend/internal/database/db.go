@@ -24,6 +24,8 @@ func Migrate(db *gorm.DB) error {
 		&model.SavedReport{},
 		&model.Sprint{},
 		&model.SprintTask{},
+		&model.WebhookSubscription{},
+		&model.WebhookDelivery{},
 		&model.Task{},
 		&model.TaskDependency{},
 		&model.TaskComment{},

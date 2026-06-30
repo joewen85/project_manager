@@ -130,6 +130,11 @@
 - 完成：新增 `sprints.create/read/update/delete` 权限与 `/sprints` CRUD、任务加入/移除接口，普通用户仅读取自己创建或包含自己可见任务的迭代，任务范围写入额外要求 `tasks.read`
 - 完成：任务列表新增 `sprintId` 过滤，前端新增“迭代管理”页面，并支持任务列表/Kanban 按迭代筛选
 - 完成：补充迭代 CRUD/非法状态/任务可见范围/完成率/任务筛选集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
+- 完成：按 `Improvement.md` 推进 P1-5 集成与开放接口 Webhook 订阅 MVP
+- 完成：新增 `webhook_subscriptions` 与 `webhook_deliveries` 模型和显式 SQL 迁移，支持任务状态变更订阅、投递日志、失败重试
+- 完成：新增 `webhooks.create/read/update/delete` 权限与 `/webhooks` CRUD、投递日志查询、投递重试接口，普通用户仅管理自己创建的订阅
+- 完成：任务状态通过 `PUT /tasks/:id`、`PATCH /tasks/:id/status`、`PATCH /tasks/:id/complete` 变更后触发订阅投递，URL 安全校验复用自动化 Webhook 策略；管理员订阅收全量事件，普通订阅仅收创建人可见任务事件
+- 完成：前端新增“Webhook订阅”页面，支持订阅维护、日志筛选和失败重试；补充失败投递/重试/不可见任务隔离集成测试并同步 API/OpenAPI/RBAC/README/PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

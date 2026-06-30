@@ -2565,6 +2565,264 @@ func TestSprintsCRUDTaskMembershipAndTaskFilter(t *testing.T) {
 	}
 }
 
+func TestWebhookSubscriptionTaskStatusDeliveryAndRetry(t *testing.T) {
+	var shouldSucceed atomic.Bool
+	var receivedCount atomic.Int32
+	var lastPayload atomic.Value
+	var lastEventHeader atomic.Value
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedCount.Add(1)
+		raw, _ := io.ReadAll(r.Body)
+		lastPayload.Store(string(raw))
+		lastEventHeader.Store(r.Header.Get("X-Project-Manager-Event"))
+		if !shouldSucceed.Load() {
+			http.Error(w, "temporary failure", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer target.Close()
+
+	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
+		h.Cfg.WebhookPrivateOK = true
+	})
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	invalidResp, invalidBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/webhooks", adminToken, map[string]any{
+		"name":  "bad event",
+		"event": "task_created",
+		"url":   target.URL,
+	})
+	if invalidResp.StatusCode != http.StatusBadRequest || invalidBody["code"] != "INVALID_WEBHOOK_EVENT" {
+		t.Fatalf("invalid webhook event expected 400 INVALID_WEBHOOK_EVENT got %d %#v", invalidResp.StatusCode, invalidBody)
+	}
+
+	createWebhookResp, createWebhookBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/webhooks", adminToken, map[string]any{
+		"name":      "状态同步",
+		"event":     "task_status_changed",
+		"url":       target.URL,
+		"isEnabled": true,
+	})
+	if createWebhookResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create webhook expected 201 got %d %#v", createWebhookResp.StatusCode, createWebhookBody)
+	}
+	webhookID := int(createWebhookBody["id"].(float64))
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code": "WH-P1",
+		"name": "Webhook Project",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create webhook project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := uint(projectBody["id"].(float64))
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":     "Webhook Task",
+		"projectId": projectID,
+		"status":    "pending",
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create webhook task expected 201 got %d %#v", taskResp.StatusCode, taskBody)
+	}
+	taskID := int(taskBody["id"].(float64))
+
+	statusResp, statusBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/status", adminToken, map[string]any{
+		"status": "processing",
+	})
+	if statusResp.StatusCode != http.StatusOK {
+		t.Fatalf("update task status expected 200 got %d %#v", statusResp.StatusCode, statusBody)
+	}
+	if receivedCount.Load() != 1 {
+		t.Fatalf("webhook target should receive first delivery got %d", receivedCount.Load())
+	}
+	if lastEventHeader.Load() != "task_status_changed" {
+		t.Fatalf("webhook event header mismatch: %v", lastEventHeader.Load())
+	}
+	if !strings.Contains(lastPayload.Load().(string), `"fromStatus":"pending"`) || !strings.Contains(lastPayload.Load().(string), `"toStatus":"processing"`) {
+		t.Fatalf("webhook payload should include status change got %s", lastPayload.Load().(string))
+	}
+
+	deliveriesResp, deliveriesBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/webhooks/deliveries?subscriptionId="+strconv.Itoa(webhookID), adminToken, nil)
+	if deliveriesResp.StatusCode != http.StatusOK {
+		t.Fatalf("list webhook deliveries expected 200 got %d %#v", deliveriesResp.StatusCode, deliveriesBody)
+	}
+	deliveries, _ := deliveriesBody["list"].([]any)
+	if len(deliveries) != 1 {
+		t.Fatalf("expected one webhook delivery got %#v", deliveriesBody)
+	}
+	delivery := deliveries[0].(map[string]any)
+	if delivery["status"] != "failed" || int(delivery["attempts"].(float64)) != 1 || int(delivery["responseStatus"].(float64)) != http.StatusInternalServerError {
+		t.Fatalf("delivery should fail with one attempt got %#v", delivery)
+	}
+	deliveryID := int(delivery["id"].(float64))
+
+	shouldSucceed.Store(true)
+	retryResp, retryBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/webhooks/deliveries/"+strconv.Itoa(deliveryID)+"/retry", adminToken, nil)
+	if retryResp.StatusCode != http.StatusOK {
+		t.Fatalf("retry webhook delivery expected 200 got %d %#v", retryResp.StatusCode, retryBody)
+	}
+	if retryBody["status"] != "success" || int(retryBody["attempts"].(float64)) != 2 {
+		t.Fatalf("retry should mark success with two attempts got %#v", retryBody)
+	}
+	if receivedCount.Load() != 2 {
+		t.Fatalf("webhook target should receive retry got %d", receivedCount.Load())
+	}
+
+	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/webhooks", adminToken, nil)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list webhook subscriptions expected 200 got %d", listResp.StatusCode)
+	}
+	subscriptions, _ := listBody["list"].([]any)
+	if len(subscriptions) == 0 {
+		t.Fatalf("webhook subscription list should include created item got %#v", listBody)
+	}
+	firstSubscription := subscriptions[0].(map[string]any)
+	if firstSubscription["lastDeliveryStatus"] != "success" {
+		t.Fatalf("subscription should track last delivery success got %#v", firstSubscription)
+	}
+}
+
+func TestWebhookSubscriptionSkipsInvisibleTaskForScopedUser(t *testing.T) {
+	var visibleCalls atomic.Int32
+	var hiddenCalls atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/visible":
+			visibleCalls.Add(1)
+		case "/hidden":
+			hiddenCalls.Add(1)
+		default:
+			t.Fatalf("unexpected webhook path %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer target.Close()
+
+	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
+		h.Cfg.WebhookPrivateOK = true
+	})
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name": "webhook-scoped-user",
+		"permissionIds": []uint{
+			codeToID["webhooks.create"],
+			codeToID["webhooks.read"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create webhook scoped role expected 201 got %d %#v", roleResp.StatusCode, roleBody)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	visibleUserResp, visibleUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "webhook_visible_user",
+		"name":          "Webhook Visible User",
+		"email":         "webhook_visible_user@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if visibleUserResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible webhook user expected 201 got %d %#v", visibleUserResp.StatusCode, visibleUserBody)
+	}
+	visibleUserID := uint(visibleUserBody["id"].(float64))
+
+	hiddenUserResp, hiddenUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "webhook_hidden_user",
+		"name":          "Webhook Hidden User",
+		"email":         "webhook_hidden_user@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if hiddenUserResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden webhook user expected 201 got %d %#v", hiddenUserResp.StatusCode, hiddenUserBody)
+	}
+
+	visibleLoginStatus, visibleLoginBody := loginWithCredentials(t, ts.URL, "webhook_visible_user", "pass1234")
+	if visibleLoginStatus != http.StatusOK {
+		t.Fatalf("login visible webhook user expected 200 got %d", visibleLoginStatus)
+	}
+	visibleToken := visibleLoginBody["token"].(string)
+	hiddenLoginStatus, hiddenLoginBody := loginWithCredentials(t, ts.URL, "webhook_hidden_user", "pass1234")
+	if hiddenLoginStatus != http.StatusOK {
+		t.Fatalf("login hidden webhook user expected 200 got %d", hiddenLoginStatus)
+	}
+	hiddenToken := hiddenLoginBody["token"].(string)
+
+	visibleWebhookResp, visibleWebhookBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/webhooks", visibleToken, map[string]any{
+		"name":      "可见任务同步",
+		"event":     "task_status_changed",
+		"url":       target.URL + "/visible",
+		"isEnabled": true,
+	})
+	if visibleWebhookResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible user webhook expected 201 got %d %#v", visibleWebhookResp.StatusCode, visibleWebhookBody)
+	}
+	hiddenWebhookResp, hiddenWebhookBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/webhooks", hiddenToken, map[string]any{
+		"name":      "不可见任务同步",
+		"event":     "task_status_changed",
+		"url":       target.URL + "/hidden",
+		"isEnabled": true,
+	})
+	if hiddenWebhookResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden user webhook expected 201 got %d %#v", hiddenWebhookResp.StatusCode, hiddenWebhookBody)
+	}
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code": "WH-SCOPE-P1",
+		"name": "Webhook Scope Project",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create webhook scope project expected 201 got %d %#v", projectResp.StatusCode, projectBody)
+	}
+	projectID := uint(projectBody["id"].(float64))
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Webhook Visible Scope Task",
+		"projectId":   projectID,
+		"status":      "pending",
+		"assigneeIds": []uint{visibleUserID},
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create webhook scope task expected 201 got %d %#v", taskResp.StatusCode, taskBody)
+	}
+	taskID := int(taskBody["id"].(float64))
+
+	statusResp, statusBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/status", adminToken, map[string]any{
+		"status": "processing",
+	})
+	if statusResp.StatusCode != http.StatusOK {
+		t.Fatalf("update webhook scope task status expected 200 got %d %#v", statusResp.StatusCode, statusBody)
+	}
+	if visibleCalls.Load() != 1 {
+		t.Fatalf("visible user webhook should receive one delivery got %d", visibleCalls.Load())
+	}
+	if hiddenCalls.Load() != 0 {
+		t.Fatalf("hidden user webhook should not receive delivery got %d", hiddenCalls.Load())
+	}
+
+	visibleDeliveriesResp, visibleDeliveriesBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/webhooks/deliveries", visibleToken, nil)
+	if visibleDeliveriesResp.StatusCode != http.StatusOK {
+		t.Fatalf("visible deliveries expected 200 got %d %#v", visibleDeliveriesResp.StatusCode, visibleDeliveriesBody)
+	}
+	visibleDeliveries, _ := visibleDeliveriesBody["list"].([]any)
+	if len(visibleDeliveries) != 1 {
+		t.Fatalf("visible user should see one delivery got %#v", visibleDeliveriesBody)
+	}
+	hiddenDeliveriesResp, hiddenDeliveriesBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/webhooks/deliveries", hiddenToken, nil)
+	if hiddenDeliveriesResp.StatusCode != http.StatusOK {
+		t.Fatalf("hidden deliveries expected 200 got %d %#v", hiddenDeliveriesResp.StatusCode, hiddenDeliveriesBody)
+	}
+	hiddenDeliveries, _ := hiddenDeliveriesBody["list"].([]any)
+	if len(hiddenDeliveries) != 0 {
+		t.Fatalf("hidden user should not see delivery for invisible task got %#v", hiddenDeliveriesBody)
+	}
+}
+
 func TestAutomationRuleOverdueTaskNotification(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

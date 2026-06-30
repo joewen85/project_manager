@@ -57,6 +57,10 @@
 | `sprints.read` | 查看迭代周期与迭代任务 |
 | `sprints.update` | 更新迭代周期与任务范围 |
 | `sprints.delete` | 删除迭代周期 |
+| `webhooks.create` | 创建外部 Webhook 订阅 |
+| `webhooks.read` | 查看 Webhook 订阅与投递日志；普通用户仅查看自己的订阅与投递日志 |
+| `webhooks.update` | 更新 Webhook 订阅并重试投递 |
+| `webhooks.delete` | 删除 Webhook 订阅 |
 | `automations.create` | 创建自动化规则 |
 | `automations.read` | 查看自动化规则与执行日志 |
 | `automations.update` | 更新并执行自动化规则 |
@@ -118,6 +122,11 @@
 | `PUT /sprints/:id` | `sprints.update`；普通用户仅更新自己创建的迭代 |
 | `POST /sprints/:id/tasks` `DELETE /sprints/:id/tasks/:taskId` | `sprints.update` + `tasks.read`；普通用户仅更新自己创建的迭代，加入/移除任务仍校验任务可见范围 |
 | `DELETE /sprints/:id` | `sprints.delete`；普通用户仅删除自己创建的迭代 |
+| `GET /webhooks` `GET /webhooks/:id` `GET /webhooks/deliveries` | `webhooks.read`；普通用户仅查看自己创建的订阅和投递日志 |
+| `POST /webhooks` | `webhooks.create` |
+| `PUT /webhooks/:id` `POST /webhooks/deliveries/:id/retry` | `webhooks.update`；普通用户仅更新自己创建的订阅并重试其投递 |
+| `DELETE /webhooks/:id` | `webhooks.delete`；普通用户仅删除自己创建的订阅 |
+| Webhook 订阅任务状态事件投递 | `webhooks.create/update` 控制订阅配置；管理员订阅接收全量事件，普通用户订阅仅接收订阅创建人可见任务事件 |
 | `GET /automation-rules` `GET /automation-rules/logs` | `automations.read` |
 | `POST /automation-rules` | `automations.create` |
 | `PUT /automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |

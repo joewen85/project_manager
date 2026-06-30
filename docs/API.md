@@ -66,6 +66,10 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/sprints` | `sprints.create` |
 | PUT | `/sprints/:id` `POST /sprints/:id/tasks` `DELETE /sprints/:id/tasks/:taskId` | `sprints.update` |
 | DELETE | `/sprints/:id` | `sprints.delete` |
+| GET | `/webhooks` `/webhooks/:id` `/webhooks/deliveries` | `webhooks.read` |
+| POST | `/webhooks` | `webhooks.create` |
+| PUT | `/webhooks/:id` `POST /webhooks/deliveries/:id/retry` | `webhooks.update` |
+| DELETE | `/webhooks/:id` | `webhooks.delete` |
 | GET | `/automation-rules` `/automation-rules/logs` | `automations.read` |
 | POST | `/automation-rules` | `automations.create` |
 | PUT | `/automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
@@ -394,6 +398,44 @@ Base URL: `http://localhost:8080/api/v1`
 ### DELETE `/sprints/:id`
 - 权限: `sprints.delete`
 - 范围: 管理员或迭代创建人
+
+## Webhook 订阅
+
+Webhook 订阅用于让外部系统接收项目管理事件。当前支持 `task_status_changed`。URL 校验复用自动化 Webhook 安全策略：默认禁止本机、内网和保留地址；测试或内网部署可通过 `AUTOMATION_WEBHOOK_ALLOW_PRIVATE=true` 放开。
+
+管理员创建的订阅接收全量任务状态事件；普通用户创建的订阅仅接收其作为创建人、执行人或审核人可见任务的事件。普通用户也只能查看和重试自己订阅产生的投递日志。
+
+### GET `/webhooks`
+- 权限: `webhooks.read`
+- Query: `page` `pageSize` `keyword` `event` `isEnabled`
+- 范围: 管理员查看全部；普通用户仅查看自己创建的订阅
+
+### GET `/webhooks/:id`
+- 权限: `webhooks.read`
+
+### POST `/webhooks`
+- 权限: `webhooks.create`
+- 请求体: `{ name, event, url, isEnabled? }`
+- `event`: `task_status_changed`
+
+### PUT `/webhooks/:id`
+- 权限: `webhooks.update`
+- 范围: 管理员或订阅创建人
+- 请求体同创建
+
+### DELETE `/webhooks/:id`
+- 权限: `webhooks.delete`
+- 范围: 管理员或订阅创建人
+
+### GET `/webhooks/deliveries`
+- 权限: `webhooks.read`
+- Query: `page` `pageSize` `subscriptionId` `event` `status`
+- 范围: 管理员查看全部；普通用户仅查看自己订阅产生的投递日志
+- `status`: `pending|success|failed`
+
+### POST `/webhooks/deliveries/:id/retry`
+- 权限: `webhooks.update`
+- 范围: 管理员或订阅创建人；仅允许重试非成功投递记录，订阅停用时不可重试
 
 ## 自动化规则
 

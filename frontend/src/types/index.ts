@@ -6,6 +6,8 @@ export type AutomationTrigger = 'task_overdue' | 'task_status_changed' | 'task_p
 export type AssigneeChangeType = 'added' | 'removed'
 export type AutomationExecutionStatus = 'success' | 'skipped' | 'failed'
 export type SprintStatus = 'planned' | 'active' | 'closed'
+export type WebhookEvent = 'task_status_changed'
+export type WebhookDeliveryStatus = 'pending' | 'success' | 'failed'
 
 export interface PageResult<T> {
   list: T[]
@@ -328,6 +330,37 @@ export interface Sprint {
   completedTaskCount?: number
   completionRate?: number
   tasks?: Task[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface WebhookSubscription {
+  id: number
+  name: string
+  event: WebhookEvent
+  url: string
+  isEnabled: boolean
+  lastDeliveryStatus?: WebhookDeliveryStatus
+  lastDeliveredAt?: string
+  lastError?: string
+  createdById: number
+  createdBy?: User
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface WebhookDelivery {
+  id: number
+  subscriptionId: number
+  subscription?: WebhookSubscription
+  event: WebhookEvent
+  status: WebhookDeliveryStatus
+  attempts: number
+  payload?: string
+  responseStatus?: number
+  errorMessage?: string
+  nextRetryAt?: string
+  deliveredAt?: string
   createdAt?: string
   updatedAt?: string
 }

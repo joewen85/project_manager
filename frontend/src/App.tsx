@@ -22,6 +22,7 @@ const AutomationRulesPage = lazy(async () => import('./pages/AutomationRulesPage
 const CalendarPage = lazy(async () => import('./pages/CalendarPage').then((module) => ({ default: module.CalendarPage })))
 const TasksPage = lazy(async () => import('./pages/TasksPage').then((module) => ({ default: module.TasksPage })))
 const UsersPage = lazy(async () => import('./pages/UsersPage').then((module) => ({ default: module.UsersPage })))
+const WebhooksPage = lazy(async () => import('./pages/WebhooksPage').then((module) => ({ default: module.WebhooksPage })))
 
 interface ProfilePermission {
   code?: string
@@ -55,6 +56,7 @@ const protectedRoutes = [
   { path: '/reports', permission: 'reports.read' },
   { path: '/requests', permission: 'requests.read' },
   { path: '/automation-rules', permission: 'automations.read' },
+  { path: '/webhooks', permission: 'webhooks.read' },
   { path: '/notifications', permission: 'notifications.read' },
   { path: '/audit', permission: 'audit.read' },
   { path: '/me', permission: 'tasks.read' }
@@ -153,6 +155,7 @@ export default function App() {
           <Route path="reports" element={<PermissionGuard permission="reports.read"><ReportsPage /></PermissionGuard>} />
           <Route path="requests" element={<PermissionGuard permission="requests.read"><RequestsPage /></PermissionGuard>} />
           <Route path="automation-rules" element={<PermissionGuard permission="automations.read"><AutomationRulesPage /></PermissionGuard>} />
+          <Route path="webhooks" element={<PermissionGuard permission="webhooks.read"><WebhooksPage /></PermissionGuard>} />
           <Route path="notifications" element={<PermissionGuard permission="notifications.read"><NotificationsPage /></PermissionGuard>} />
           <Route path="audit" element={<PermissionGuard permission="audit.read"><AuditPage /></PermissionGuard>} />
           <Route path="me" element={<PermissionGuard permission="tasks.read"><MyWorkPage /></PermissionGuard>} />

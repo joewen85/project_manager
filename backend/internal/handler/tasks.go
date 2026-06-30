@@ -1215,6 +1215,7 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	}
 	automationNotifyIDs = append(automationNotifyIDs, automationEffects.NotifiedIDs...)
 	h.deliverAutomationWebhooks(automationEffects.WebhookJobs)
+	h.dispatchTaskStatusWebhooks(item, oldStatus, item.Status, currentUserID)
 
 	if len(addedAssigneeIDs) > 0 {
 		h.queueTaskChannelNotifications(addedAssigneeIDs, "你被加入任务执行人", "任务 "+item.TaskNo+" - "+item.Title+" 已将你设为执行人", item)
@@ -1416,6 +1417,7 @@ func (h *Handler) UpdateTaskStatus(c *gin.Context) {
 	}
 	automationNotifyIDs = append(automationNotifyIDs, automationEffects.NotifiedIDs...)
 	h.deliverAutomationWebhooks(automationEffects.WebhookJobs)
+	h.dispatchTaskStatusWebhooks(item, oldStatus, item.Status, currentUserID)
 	h.pushNotificationUpdates(automationNotifyIDs)
 
 	c.JSON(http.StatusOK, item)
@@ -1481,6 +1483,7 @@ func (h *Handler) CompleteTask(c *gin.Context) {
 	}
 	automationNotifyIDs = append(automationNotifyIDs, automationEffects.NotifiedIDs...)
 	h.deliverAutomationWebhooks(automationEffects.WebhookJobs)
+	h.dispatchTaskStatusWebhooks(item, oldStatus, item.Status, currentUserID)
 	h.pushNotificationUpdates(automationNotifyIDs)
 
 	c.JSON(http.StatusOK, item)
