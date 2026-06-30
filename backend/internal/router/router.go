@@ -139,6 +139,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			requests.GET("", middleware.RequirePermission(h.DB, "requests.read"), h.ListWorkRequests)
 			requests.POST("", middleware.RequirePermission(h.DB, "requests.create"), h.CreateWorkRequest)
 			requests.PATCH("/:id/review", middleware.RequirePermission(h.DB, "requests.update"), h.ReviewWorkRequest)
+			requests.POST("/:id/apply-change", middleware.RequirePermission(h.DB, "requests.update"), h.ApplyWorkRequestChange)
 			requests.POST("/:id/convert-task", middleware.RequirePermission(h.DB, "requests.update"), h.ConvertWorkRequestToTask)
 		}
 

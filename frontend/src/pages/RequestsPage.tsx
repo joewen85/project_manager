@@ -8,7 +8,7 @@ import { Pagination } from '../components/Pagination'
 import { SearchField } from '../components/SearchField'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { formatDateTime } from '../utils/datetime'
-import { Project, Tag, TaskPriority, User, WorkRequest, WorkRequestStatus, WorkRequestType } from '../types'
+import { Project, Tag, Task, TaskPriority, User, WorkRequest, WorkRequestStatus, WorkRequestType } from '../types'
 import { DateTimeQuickField } from '../components/DateTimeQuickField'
 import { usePermissions } from '../hooks/usePermissions'
 
@@ -23,7 +23,8 @@ const requestStatusLabel: Record<WorkRequestStatus, string> = {
   submitted: '待审批',
   approved: '已通过',
   rejected: '已拒绝',
-  converted: '已转任务'
+  converted: '已转任务',
+  applied: '已应用'
 }
 
 const priorityLabel: Record<TaskPriority, string> = {
@@ -38,6 +39,12 @@ interface RequestForm {
   description: string
   priority: TaskPriority
   projectId: string
+  targetTaskId: string
+  changeStartAt: string
+  changeEndAt: string
+  changePriority: '' | TaskPriority
+  changeAssigneeIds: number[]
+  changeScopeDescription: string
 }
 
 interface ReviewForm {
@@ -59,7 +66,13 @@ const initialRequestForm: RequestForm = {
   title: '',
   description: '',
   priority: 'medium',
-  projectId: ''
+  projectId: '',
+  targetTaskId: '',
+  changeStartAt: '',
+  changeEndAt: '',
+  changePriority: '',
+  changeAssigneeIds: [],
+  changeScopeDescription: ''
 }
 
 const initialReviewForm: ReviewForm = {
@@ -78,6 +91,12 @@ const initialConvertForm: ConvertForm = {
 
 const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
 const formatUserName = (user?: User) => user ? (user.name && user.username ? `${user.name}（${user.username}）` : user.name || user.username) : '-'
+const formatTaskName = (task?: Task) => task ? `${task.taskNo || `#${task.id}`} - ${task.title}` : '-'
+const parseOptionalDateTime = (value: string) => {
+  if (!value) return undefined
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
 
 export function RequestsPage() {
   const navigate = useNavigate()
@@ -86,8 +105,10 @@ export function RequestsPage() {
   const canUpdateRequest = hasPermission('requests.update', permissions)
   const canReadProjects = hasPermission('projects.read', permissions)
   const canReadTasks = hasPermission('tasks.read', permissions)
+  const canReadUsers = hasPermission('users.read', permissions)
   const [items, setItems] = useState<WorkRequest[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [keywordInput, setKeywordInput] = useState('')
@@ -106,6 +127,8 @@ export function RequestsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [actionSuccess, setActionSuccess] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
@@ -116,6 +139,12 @@ export function RequestsPage() {
     label: `${project.code} - ${project.name}`,
     keywords: [project.code, project.name, project.description || '']
   })), [projects])
+
+  const taskOptions = useMemo(() => tasks.map((task) => ({
+    value: String(task.id),
+    label: formatTaskName(task),
+    keywords: [task.taskNo, task.title, task.projectName || '', task.projectCode || '']
+  })), [tasks])
 
   const requestTypeOptions = useMemo(() => Object.entries(requestTypeLabel).map(([value, label]) => ({ value, label })), [])
   const requestStatusOptions = useMemo(() => Object.entries(requestStatusLabel).map(([value, label]) => ({ value, label })), [])
@@ -154,18 +183,36 @@ export function RequestsPage() {
 
   useEffect(() => {
     if (!canUpdateRequest) {
+      setTags([])
+    }
+    const shouldLoadUsers = canUpdateRequest || (canCreateRequest && canReadUsers)
+    if (!shouldLoadUsers && !canUpdateRequest) {
       setUsers([])
       setTags([])
       return
     }
     void Promise.all([
-      fetchPage<User>('/users', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as User[], total: 0, page: 1, pageSize: 100 })),
-      fetchPage<Tag>('/tags', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as Tag[], total: 0, page: 1, pageSize: 100 }))
+      shouldLoadUsers
+        ? fetchPage<User>('/users', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as User[], total: 0, page: 1, pageSize: 100 }))
+        : Promise.resolve({ list: [] as User[], total: 0, page: 1, pageSize: 100 }),
+      canUpdateRequest
+        ? fetchPage<Tag>('/tags', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as Tag[], total: 0, page: 1, pageSize: 100 }))
+        : Promise.resolve({ list: [] as Tag[], total: 0, page: 1, pageSize: 100 })
     ]).then(([userPage, tagPage]) => {
       setUsers(userPage.list)
       setTags(tagPage.list)
     })
-  }, [canUpdateRequest])
+  }, [canUpdateRequest, canCreateRequest, canReadUsers])
+
+  useEffect(() => {
+    if (!canReadTasks) {
+      setTasks([])
+      return
+    }
+    void fetchPage<Task>('/tasks', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true })
+      .then((res) => setTasks(res.list))
+      .catch(() => setTasks([]))
+  }, [canReadTasks])
 
   const openCreateModal = () => {
     if (!canCreateRequest) return
@@ -202,10 +249,54 @@ export function RequestsPage() {
     try {
       setSubmitting(true)
       setFormError('')
-      await api.post('/requests', {
-        ...requestForm,
-        projectId: requestForm.projectId ? Number(requestForm.projectId) : undefined
-      })
+      if (requestForm.type === 'change') {
+        if (!canReadTasks) {
+          setFormError('当前账号无任务查看权限，无法选择变更目标')
+          return
+        }
+        if (!requestForm.targetTaskId) {
+          setFormError('请选择变更目标任务')
+          return
+        }
+        const startAt = parseOptionalDateTime(requestForm.changeStartAt)
+        const endAt = parseOptionalDateTime(requestForm.changeEndAt)
+        if (startAt === null || endAt === null) {
+          setFormError('请填写有效的变更时间')
+          return
+        }
+        if (startAt && endAt && new Date(endAt).getTime() <= new Date(startAt).getTime()) {
+          setFormError('变更结束时间必须晚于开始时间')
+          return
+        }
+        const changePayload = {
+          startAt,
+          endAt,
+          priority: requestForm.changePriority || undefined,
+          assigneeIds: requestForm.changeAssigneeIds.length > 0 ? requestForm.changeAssigneeIds : undefined,
+          scopeDescription: requestForm.changeScopeDescription.trim() || undefined
+        }
+        const hasChange = Boolean(changePayload.startAt || changePayload.endAt || changePayload.priority || changePayload.assigneeIds || changePayload.scopeDescription)
+        if (!hasChange) {
+          setFormError('至少填写一个变更项')
+          return
+        }
+        await api.post('/requests', {
+          type: requestForm.type,
+          title: requestForm.title,
+          description: requestForm.description,
+          priority: requestForm.priority,
+          targetTaskId: Number(requestForm.targetTaskId),
+          changePayload
+        })
+      } else {
+        await api.post('/requests', {
+          type: requestForm.type,
+          title: requestForm.title,
+          description: requestForm.description,
+          priority: requestForm.priority,
+          projectId: requestForm.projectId ? Number(requestForm.projectId) : undefined
+        })
+      }
       setFormSuccess('提交成功')
       setCreateOpen(false)
       setRequestForm(initialRequestForm)
@@ -263,9 +354,26 @@ export function RequestsPage() {
     }
   }
 
-  const openTask = async (item: WorkRequest) => {
-    if (!item.convertedTaskId || !canReadTasks) return
-    navigate(`/tasks?taskId=${item.convertedTaskId}&view=1`)
+  const applyChange = async (item: WorkRequest) => {
+    if (!canUpdateRequest || item.type !== 'change' || item.status !== 'approved') return
+    try {
+      setSubmitting(true)
+      setActionError('')
+      setActionSuccess('')
+      await api.post(`/requests/${item.id}/apply-change`, undefined, { silent: true })
+      setActionSuccess('变更已应用到目标任务')
+      await load()
+      window.dispatchEvent(new Event('notifications:changed'))
+    } catch (applyError) {
+      setActionError(readApiError(applyError, '应用变更失败'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const openTask = async (taskId?: number) => {
+    if (!taskId || !canReadTasks) return
+    navigate(`/tasks?taskId=${taskId}&view=1`)
   }
 
   return (
@@ -322,6 +430,13 @@ export function RequestsPage() {
         </div>
       </FilterPanel>
 
+      {(actionError || actionSuccess) && (
+        <div className="card">
+          {actionError && <p className="error">{actionError}</p>}
+          {actionSuccess && <p className="success">{actionSuccess}</p>}
+        </div>
+      )}
+
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && items.length === 0} emptyText="暂无请求数据" onRetry={() => { void load() }} />
         {!loading && !error && items.length > 0 && (
@@ -332,7 +447,13 @@ export function RequestsPage() {
               <tr key={item.id}>
                 <td data-label="ID">{item.id}</td>
                 <td data-label="类型">{requestTypeLabel[item.type]}</td>
-                <td data-label="标题">{item.title}</td>
+                <td data-label="标题">
+                  <div className="request-title-cell">
+                    <span>{item.title}</span>
+                    {item.type === 'change' && item.targetTask && <small>目标：{formatTaskName(item.targetTask)}</small>}
+                    {item.status === 'applied' && <small>应用：{formatDateTime(item.appliedAt)} · {formatUserName(item.appliedBy)}</small>}
+                  </div>
+                </td>
                 <td data-label="状态">{requestStatusLabel[item.status]}</td>
                 <td data-label="优先级">{priorityLabel[item.priority || 'medium']}</td>
                 <td data-label="关联项目">{item.project ? `${item.project.code} - ${item.project.name}` : '-'}</td>
@@ -341,13 +462,19 @@ export function RequestsPage() {
                 <td data-label="创建时间">{formatDateTime(item.createdAt)}</td>
                 <td data-label="操作">
                   <div className="table-actions">
-                    {canUpdateRequest && item.status !== 'converted' && (
+                    {canUpdateRequest && item.status !== 'converted' && item.status !== 'applied' && (
                       <>
                         <button className="btn secondary" onClick={() => openReviewModal(item, 'approved')}>审批</button>
-                        <button className="btn secondary" disabled={item.status === 'rejected'} onClick={() => openConvertModal(item)}>转任务</button>
+                        {item.type !== 'change' && <button className="btn secondary" disabled={item.status === 'rejected'} onClick={() => openConvertModal(item)}>转任务</button>}
+                        {item.type === 'change' && item.status === 'approved' && (
+                          <button className="btn secondary" disabled={submitting} onClick={() => { void applyChange(item) }}>
+                            {submitting ? '处理中...' : '应用变更'}
+                          </button>
+                        )}
                       </>
                     )}
-                    {item.convertedTaskId && canReadTasks && <button className="btn secondary" onClick={() => { void openTask(item) }}>查看任务</button>}
+                    {item.convertedTaskId && canReadTasks && <button className="btn secondary" onClick={() => { void openTask(item.convertedTaskId) }}>查看任务</button>}
+                    {item.type === 'change' && item.targetTaskId && canReadTasks && <button className="btn secondary" onClick={() => { void openTask(item.targetTaskId) }}>目标任务</button>}
                   </div>
                 </td>
               </tr>
@@ -361,7 +488,10 @@ export function RequestsPage() {
       <Modal open={createOpen} title="提交请求" onClose={() => setCreateOpen(false)}>
         <form className="form-grid" onSubmit={submitRequest}>
           <label className="required-label" htmlFor="request-type">类型</label>
-          <select id="request-type" value={requestForm.type} onChange={(event) => setRequestForm((prev) => ({ ...prev, type: event.target.value as WorkRequestType }))}>
+          <select id="request-type" value={requestForm.type} onChange={(event) => {
+            const nextType = event.target.value as WorkRequestType
+            setRequestForm((prev) => ({ ...prev, type: nextType, projectId: nextType === 'change' ? '' : prev.projectId }))
+          }}>
             {Object.entries(requestTypeLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
           <label className="required-label" htmlFor="request-title">标题</label>
@@ -372,7 +502,7 @@ export function RequestsPage() {
           <select id="request-priority" value={requestForm.priority} onChange={(event) => setRequestForm((prev) => ({ ...prev, priority: event.target.value as TaskPriority }))}>
             {Object.entries(priorityLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
-          {canReadProjects && (
+          {canReadProjects && requestForm.type !== 'change' && (
             <>
               <label htmlFor="request-project">关联项目（可选）</label>
               <SearchableSelect
@@ -384,6 +514,40 @@ export function RequestsPage() {
                 noResultsText="没有匹配的项目"
                 onChange={(value) => setRequestForm((prev) => ({ ...prev, projectId: value }))}
               />
+            </>
+          )}
+          {requestForm.type === 'change' && (
+            <>
+              <label className="required-label" htmlFor="request-target-task">目标任务</label>
+              {canReadTasks ? (
+                <SearchableSelect
+                  ariaLabel="变更目标任务"
+                  value={requestForm.targetTaskId}
+                  options={taskOptions}
+                  defaultOptionLabel="请选择任务"
+                  placeholder="搜索任务编号/标题/项目"
+                  noResultsText="没有匹配的任务"
+                  onChange={(value) => setRequestForm((prev) => ({ ...prev, targetTaskId: value }))}
+                />
+              ) : (
+                <p className="inline-tip">当前账号无任务查看权限，无法选择变更目标。</p>
+              )}
+              <label htmlFor="request-change-start">变更开始时间</label>
+              <DateTimeQuickField inputId="request-change-start" value={requestForm.changeStartAt} onChange={(value) => setRequestForm((prev) => ({ ...prev, changeStartAt: value }))} />
+              <label htmlFor="request-change-end">变更结束时间</label>
+              <DateTimeQuickField inputId="request-change-end" value={requestForm.changeEndAt} onChange={(value) => setRequestForm((prev) => ({ ...prev, changeEndAt: value }))} />
+              <label htmlFor="request-change-priority">变更优先级</label>
+              <select id="request-change-priority" value={requestForm.changePriority} onChange={(event) => setRequestForm((prev) => ({ ...prev, changePriority: event.target.value as RequestForm['changePriority'] }))}>
+                <option value="">不调整</option>
+                {Object.entries(priorityLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              <label htmlFor="request-change-assignees">变更执行人</label>
+              <select id="request-change-assignees" multiple value={requestForm.changeAssigneeIds.map(String)} onChange={(event) => setRequestForm((prev) => ({ ...prev, changeAssigneeIds: Array.from(event.target.selectedOptions).map((option) => Number(option.value)) }))}>
+                {users.map((user) => <option key={user.id} value={user.id}>{formatUserName(user)}</option>)}
+              </select>
+              {users.length === 0 && <p className="inline-tip">暂无可选执行人；可只提交排期、优先级或范围变更。</p>}
+              <label htmlFor="request-change-scope">范围说明</label>
+              <textarea id="request-change-scope" rows={3} value={requestForm.changeScopeDescription} onChange={(event) => setRequestForm((prev) => ({ ...prev, changeScopeDescription: event.target.value }))} />
             </>
           )}
           <div className="row-actions">

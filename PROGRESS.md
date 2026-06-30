@@ -147,6 +147,12 @@
 - 完成：项目健康度新增 `criticalOverdueTasks`，关键路径任务逾期且未完成时项目自动置红并输出原因
 - 完成：前端新增“基线关键路径”页面，支持基线筛选、创建、详情对比、关键路径查看；Dashboard 健康榜展示关键逾期数
 - 完成：补充基线创建/偏差比较/关键路径/健康度联动/删除集成测试，并同步 README、API、OpenAPI、RBAC、PLAN
+- 完成：按 `Improvement.md` 完成 P2-1 变更控制 MVP 与甘特图关键路径高亮
+- 完成：复用 `work_requests` 支持变更申请目标任务、变更载荷、应用状态、应用人和应用时间，并提供显式 SQL 迁移
+- 完成：新增 `POST /requests/:id/apply-change`，审批通过后可将排期、优先级和执行人变更应用到目标任务，写入任务活动、审计和通知
+- 完成：请求入口前端支持提交变更申请、审批后应用变更、查看目标任务，任务动态显示变更活动
+- 完成：甘特图单项目模式在具备 `baselines.read` 时加载关键路径并高亮 timeline/grouped 两种视图，项目集模式保持原有展示
+- 完成：补充变更申请创建/审批/禁止转任务/应用/重复应用集成测试，并同步 README、API、OpenAPI、RBAC、PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

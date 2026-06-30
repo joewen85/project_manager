@@ -1,7 +1,7 @@
 export type Status = 'pending' | 'queued' | 'processing' | 'reviewing' | 'completed'
 export type TaskPriority = 'high' | 'medium' | 'low'
 export type WorkRequestType = 'project' | 'task' | 'bug' | 'change'
-export type WorkRequestStatus = 'submitted' | 'approved' | 'rejected' | 'converted'
+export type WorkRequestStatus = 'submitted' | 'approved' | 'rejected' | 'converted' | 'applied'
 export type AutomationTrigger = 'task_overdue' | 'task_status_changed' | 'task_progress_changed' | 'task_assignee_changed'
 export type AssigneeChangeType = 'added' | 'removed'
 export type AutomationExecutionStatus = 'success' | 'skipped' | 'failed'
@@ -141,8 +141,22 @@ export interface WorkRequest {
   approvalNote?: string
   convertedTaskId?: number
   convertedTask?: Task
+  targetTaskId?: number
+  targetTask?: Task
+  changePayload?: WorkRequestChangePayload
+  appliedAt?: string
+  appliedById?: number
+  appliedBy?: User
   createdAt: string
   updatedAt?: string
+}
+
+export interface WorkRequestChangePayload {
+  startAt?: string
+  endAt?: string
+  priority?: TaskPriority
+  assigneeIds?: number[]
+  scopeDescription?: string
 }
 
 export interface TemplateTaskDependency {

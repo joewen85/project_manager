@@ -1294,6 +1294,7 @@ paths:
           - approved
           - rejected
           - converted
+          - applied
       - in: query
         name: statuses
         schema:
@@ -1379,6 +1380,26 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postRequestsByIdConvertTask
+  /requests/{id}/apply-change:
+    post:
+      summary: 应用变更申请
+      description: 仅已审批通过的变更申请可应用到目标任务；会更新目标任务排期、优先级和执行人并写入活动。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkRequestApplyChangeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      operationId: postRequestsByIdApplyChange
   /project-templates:
     get:
       summary: 项目模板列表
@@ -3840,6 +3861,7 @@ components:
           - approved
           - rejected
           - converted
+          - applied
         projectId:
           type: integer
           nullable: true
@@ -3861,6 +3883,22 @@ components:
           nullable: true
         convertedTask:
           $ref: '#/components/schemas/Task'
+        targetTaskId:
+          type: integer
+          nullable: true
+        targetTask:
+          $ref: '#/components/schemas/Task'
+        changePayload:
+          $ref: '#/components/schemas/WorkRequestChangePayload'
+        appliedAt:
+          type: string
+          format: date-time
+          nullable: true
+        appliedById:
+          type: integer
+          nullable: true
+        appliedBy:
+          $ref: '#/components/schemas/UserLite'
         createdAt:
           type: string
           format: date-time
@@ -3893,6 +3931,32 @@ components:
         projectId:
           type: integer
           nullable: true
+        targetTaskId:
+          type: integer
+          nullable: true
+        changePayload:
+          $ref: '#/components/schemas/WorkRequestChangePayload'
+    WorkRequestChangePayload:
+      type: object
+      properties:
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        priority:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+        assigneeIds:
+          type: array
+          items:
+            type: integer
+        scopeDescription:
+          type: string
     WorkRequestReviewRequest:
       type: object
       required:
@@ -3935,6 +3999,13 @@ components:
       properties:
         requestId:
           type: integer
+        task:
+          $ref: '#/components/schemas/Task'
+    WorkRequestApplyChangeResponse:
+      type: object
+      properties:
+        request:
+          $ref: '#/components/schemas/WorkRequest'
         task:
           $ref: '#/components/schemas/Task'
     TaskTreeNode:

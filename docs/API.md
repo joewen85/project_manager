@@ -57,7 +57,7 @@ Base URL: `http://localhost:8080/api/v1`
 | DELETE | `/tasks/:id/comments/:commentId` | `comments.delete` + 评论作者/管理员 |
 | GET | `/requests` | `requests.read` |
 | POST | `/requests` | `requests.create` |
-| PATCH | `/requests/:id/review` `POST /requests/:id/convert-task` | `requests.update` |
+| PATCH | `/requests/:id/review` `POST /requests/:id/convert-task` `POST /requests/:id/apply-change` | `requests.update` |
 | GET | `/project-templates` | `templates.read` |
 | POST | `/project-templates` | `templates.create` |
 | PUT | `/project-templates/:id` | `templates.update` |
@@ -178,6 +178,7 @@ Base URL: `http://localhost:8080/api/v1`
 
 ### GET `/projects/:projectId/gantt`
 - 甘特图任务数据（含优先级、里程碑、执行人、依赖）
+- 前端单项目甘特在具备 `baselines.read` 时会额外读取 `/projects/:projectId/critical-path`，并高亮关键路径任务；关键路径加载失败只影响高亮提示，不影响甘特主数据
 
 ### GET `/projects/gantt-portfolio`
 - 项目集甘特数据（支持多项目统筹）
@@ -329,23 +330,32 @@ Base URL: `http://localhost:8080/api/v1`
 - 范围: 管理员和具备 `requests.update` 的用户可查看全部请求；普通用户只查看自己提交的请求
 - Query: `page` `pageSize` `keyword` `type` `status` `statuses` `projectId`
 - `type`: `project|task|bug|change`
-- `status`: `submitted|approved|rejected|converted`
+- `status`: `submitted|approved|rejected|converted|applied`
 
 ### POST `/requests`
 - 权限: `requests.create`
-- 请求体: `{ type, title, description?, priority?, projectId? }`
+- 普通请求体: `{ type, title, description?, priority?, projectId? }`
+- 变更申请请求体: `{ type: "change", title, description?, priority?, targetTaskId, changePayload }`
+- `changePayload`: `{ startAt?, endAt?, priority?, assigneeIds?, scopeDescription? }`，至少填写一个变更项；`priority` 取值 `high|medium|low`
+- 规则: 变更申请必须选择当前用户可见任务，系统以目标任务项目作为请求项目；`assigneeIds` 必须是有效用户
 - 用途: 业务用户提交项目申请、任务请求、缺陷/问题或变更申请；不要求项目/任务创建权限
 
 ### PATCH `/requests/:id/review`
 - 权限: `requests.update`
 - 请求体: `{ status: "approved|rejected", note? }`
-- 效果: 记录审批人、审批意见，并通知请求提交人
+- 效果: 记录审批人、审批意见，并通知请求提交人；变更申请审批通过后还需要调用应用接口才会修改任务
 
 ### POST `/requests/:id/convert-task`
 - 权限: `requests.update`
 - 请求体: `{ projectId, assigneeIds?, reviewerIds?, tagIds?, startAt?, endAt? }`
-- 规则: 已拒绝或已转换的请求不能再次转任务
+- 规则: 已拒绝、已转换、已应用或 `type=change` 的请求不能转任务
 - 效果: 创建任务，复制请求标题/描述/优先级，回填 `convertedTaskId` 并将请求状态置为 `converted`
+
+### POST `/requests/:id/apply-change`
+- 权限: `requests.update`
+- 规则: 仅 `type=change` 且状态为 `approved` 的请求可应用；目标任务项目必须当前用户可见
+- 效果: 将 `changePayload` 中的排期、优先级和执行人应用到目标任务；写入 `change_request.applied` 任务活动、审计、申请人通知，执行人变化会触发对应通知和自动化规则；请求状态置为 `applied` 并记录 `appliedAt/appliedById`
+- 响应: `{ request, task }`
 
 ## 项目模板
 

@@ -2,9 +2,9 @@ import dayjs from 'dayjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Gantt, { GanttTask } from 'frappe-gantt'
 import '../../vendor/frappe-gantt.css'
-import { api, fetchArray, fetchPage, hasPermission, readApiError } from '../../services/api'
+import { api, fetchArray, fetchData, fetchPage, hasPermission, readApiError } from '../../services/api'
 import { STATUS_META } from '../../constants/status'
-import { Project, Task, TaskDependency } from '../../types'
+import { CriticalPathResult, Project, Task, TaskDependency } from '../../types'
 import { DataState } from '../../components/DataState'
 import { RemoteProjectMultiSelect } from '../../components/RemoteProjectMultiSelect'
 import { RemoteProjectSelect } from '../../components/RemoteProjectSelect'
@@ -103,6 +103,7 @@ export function GanttModule({ initialProjectId }: Props) {
   const permissions = usePermissions()
   const canUpdateSchedule = hasPermission('tasks.update', permissions)
   const canAutoResolveDependencies = hasPermission('projects.update', permissions)
+  const canReadBaselines = hasPermission('baselines.read', permissions)
   const canEditDependencies = canUpdateSchedule && canAutoResolveDependencies
   const [scopeMode, setScopeMode] = useState<ScopeMode>('single')
   const [timelineMode, setTimelineMode] = useState<TimelineMode>('Week')
@@ -111,6 +112,9 @@ export function GanttModule({ initialProjectId }: Props) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>(initialProjectId ? [initialProjectId] : [])
   const [tasks, setTasks] = useState<Task[]>([])
+  const [criticalPath, setCriticalPath] = useState<CriticalPathResult | null>(null)
+  const [criticalLoading, setCriticalLoading] = useState(false)
+  const [criticalError, setCriticalError] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
@@ -180,6 +184,34 @@ export function GanttModule({ initialProjectId }: Props) {
   }, [loadGanttTasks])
 
   useEffect(() => {
+    if (scopeMode !== 'single' || !activeProjectId || !canReadBaselines) {
+      setCriticalPath(null)
+      setCriticalError('')
+      setCriticalLoading(false)
+      return
+    }
+    let cancelled = false
+    setCriticalLoading(true)
+    setCriticalError('')
+    void fetchData<CriticalPathResult>(`/projects/${activeProjectId}/critical-path`, undefined, { silent: true })
+      .then((result) => {
+        if (cancelled) return
+        setCriticalPath(result)
+      })
+      .catch((loadError) => {
+        if (cancelled) return
+        setCriticalPath(null)
+        setCriticalError(readApiError(loadError, '关键路径加载失败'))
+      })
+      .finally(() => {
+        if (!cancelled) setCriticalLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [scopeMode, activeProjectId, canReadBaselines, tasks])
+
+  useEffect(() => {
     taskMapRef.current = new Map(tasks.map((task) => [task.id, task]))
   }, [tasks])
 
@@ -197,6 +229,20 @@ export function GanttModule({ initialProjectId }: Props) {
     () => tasks.filter((task) => task.startAt && task.endAt && dayjs(task.endAt).isAfter(dayjs(task.startAt))),
     [tasks]
   )
+  const criticalTaskIdSet = useMemo(
+    () => new Set((criticalPath?.criticalTaskIds || []).map((id) => Number(id))),
+    [criticalPath]
+  )
+  const criticalHelperText = useMemo(() => {
+    if (scopeMode !== 'single') return '项目集模式暂不显示关键路径'
+    if (!activeProjectId) return '请选择项目后查看关键路径'
+    if (!canReadBaselines) return '缺少基线查看权限，未高亮关键路径'
+    if (criticalLoading) return '关键路径加载中...'
+    if (criticalError) return criticalError
+    if (criticalPath?.hasCycle) return '任务依赖存在环，暂不可计算关键路径'
+    const count = criticalTaskIdSet.size
+    return count > 0 ? `关键路径 ${count} 个任务` : '暂无关键路径任务'
+  }, [scopeMode, activeProjectId, canReadBaselines, criticalLoading, criticalError, criticalPath, criticalTaskIdSet])
   const unscheduledCount = tasks.length - scheduledTasks.length
   const isFlatStructure = useMemo(
     () => tasks.length > 0 && !tasks.some((task) => Number(task.parentId || 0) > 0),
@@ -257,10 +303,10 @@ export function GanttModule({ initialProjectId }: Props) {
       end: dayjs(task.endAt).toISOString(),
       progress: Number(task.progress || 0),
       dependencies: (task.dependencies || []).map((dependency) => String(dependency.dependsOnTaskId)).join(','),
-      custom_class: `pm-gantt-bar--priority-${task.priority || 'high'}--status-${task.status}--milestone-${task.isMilestone ? '1' : '0'}`,
+      custom_class: `pm-gantt-bar--priority-${task.priority || 'high'}--status-${task.status}--milestone-${task.isMilestone ? '1' : '0'}--critical-${criticalTaskIdSet.has(task.id) ? '1' : '0'}`,
       description: task.description || ''
     }))
-  }, [scheduledTasks])
+  }, [scheduledTasks, criticalTaskIdSet])
 
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === selectedTaskId),
@@ -623,6 +669,7 @@ export function GanttModule({ initialProjectId }: Props) {
             </select>
           )}
           {isFlatStructure && <span className="helper-text">当前无子任务结构，默认使用分组进度模式</span>}
+          <span className="helper-text">{criticalHelperText}</span>
         </div>
         <DataState loading={loading} error={error} empty={!loading && !error && tasks.length === 0} emptyText="暂无甘特图任务" onRetry={() => { void loadGanttTasks() }} />
         {!loading && !error && tasks.length > 0 && displayMode === 'timeline' && <div className="pm-gantt-shell data-viz-surface" ref={ganttWrapRef} />}
@@ -676,11 +723,12 @@ export function GanttModule({ initialProjectId }: Props) {
                         const marginLeftPercent = hasSchedule
                           ? Math.min(rawMarginLeftPercent, Math.max(0, 100 - widthPercent))
                           : 0
+                        const isCritical = criticalTaskIdSet.has(task.id)
 
                         return (
                           <div
                             key={task.id}
-                            className={`gantt-row gantt-group-row${selectedTaskId === task.id ? ' gantt-group-row--active' : ''}`}
+                            className={`gantt-row gantt-group-row${selectedTaskId === task.id ? ' gantt-group-row--active' : ''}${isCritical ? ' gantt-group-row--critical' : ''}`}
                             role="button"
                             tabIndex={0}
                             onClick={() => setSelectedTaskId(task.id)}
@@ -694,19 +742,20 @@ export function GanttModule({ initialProjectId }: Props) {
                             <span className="gantt-label">
                               {formatTaskName(task)}
                               <em className="status-dot" style={{ background: statusMeta.color }}>{statusMeta.label}</em>
+                              {isCritical && <em className="gantt-critical-badge">关键</em>}
                               <small className="gantt-row-period">{formatTaskPeriod(task)}</small>
                             </span>
                             <div className="gantt-track">
                               {hasSchedule ? (
                                 <div
-                                  className="gantt-bar"
+                                  className={`gantt-bar${isCritical ? ' gantt-bar--critical' : ''}`}
                                   style={{ marginLeft: `${marginLeftPercent}%`, width: `${widthPercent}%`, borderColor: statusMeta.color }}
                                 >
                                   <span className="gantt-bar-progress" style={{ width: `${progress}%`, background: statusMeta.color }} />
                                   <span className="gantt-bar-text">{progress}%</span>
                                 </div>
                               ) : (
-                                <div className="gantt-bar gantt-bar-unscheduled" style={{ width: '100%', borderColor: statusMeta.color }}>
+                                <div className={`gantt-bar gantt-bar-unscheduled${isCritical ? ' gantt-bar--critical' : ''}`} style={{ width: '100%', borderColor: statusMeta.color }}>
                                   <span className="gantt-bar-progress" style={{ width: `${progress}%`, background: statusMeta.color }} />
                                   <span className="gantt-bar-text">未排期 · {progress}%</span>
                                 </div>

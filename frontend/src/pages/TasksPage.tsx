@@ -174,6 +174,7 @@ const activityTypeLabel: Record<string, string> = {
   'task.dependencies_updated': '依赖',
   'task.schedule_updated': '排期',
   'task.schedule_auto_resolved': '顺延',
+  'change_request.applied': '变更',
   'comment.created': '评论',
   'comment.deleted': '评论'
 }

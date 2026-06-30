@@ -2190,6 +2190,211 @@ func TestWorkRequestSubmitReviewAndConvertToTask(t *testing.T) {
 	}
 }
 
+func TestWorkRequestChangeControlApplyToTask(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	requesterRoleResp, requesterRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "change-requester",
+		"description": "change requester",
+		"permissionIds": []uint{
+			codeToID["requests.create"],
+			codeToID["requests.read"],
+			codeToID["notifications.read"],
+		},
+	})
+	if requesterRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create change requester role expected 201 got %d", requesterRoleResp.StatusCode)
+	}
+	requesterRoleID := uint(requesterRoleBody["id"].(float64))
+
+	managerRoleResp, managerRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "change-manager",
+		"description": "change manager",
+		"permissionIds": []uint{
+			codeToID["requests.read"],
+			codeToID["requests.update"],
+			codeToID["projects.read"],
+			codeToID["tasks.read"],
+			codeToID["comments.read"],
+		},
+	})
+	if managerRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create change manager role expected 201 got %d", managerRoleResp.StatusCode)
+	}
+	managerRoleID := uint(managerRoleBody["id"].(float64))
+
+	requesterResp, requesterBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "change_requester",
+		"name":          "Change Requester",
+		"email":         "change_requester@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{requesterRoleID},
+		"departmentIds": []uint{},
+	})
+	if requesterResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create change requester expected 201 got %d", requesterResp.StatusCode)
+	}
+	requesterID := uint(requesterBody["id"].(float64))
+
+	managerResp, managerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "change_manager",
+		"name":          "Change Manager",
+		"email":         "change_manager@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{managerRoleID},
+		"departmentIds": []uint{},
+	})
+	if managerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create change manager expected 201 got %d", managerResp.StatusCode)
+	}
+	managerID := uint(managerBody["id"].(float64))
+
+	newAssigneeResp, newAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "change_new_assignee",
+		"name":          "Change New Assignee",
+		"email":         "change_new_assignee@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{},
+		"departmentIds": []uint{},
+	})
+	if newAssigneeResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create change new assignee expected 201 got %d", newAssigneeResp.StatusCode)
+	}
+	newAssigneeID := uint(newAssigneeBody["id"].(float64))
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "CHANGE-P1",
+		"name":        "Change Project",
+		"description": "change project",
+		"userIds":     []uint{managerID},
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create change project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Change Controlled Task",
+		"projectId":   projectID,
+		"status":      "processing",
+		"priority":    "high",
+		"progress":    30,
+		"startAt":     "2026-01-01T00:00:00Z",
+		"endAt":       "2026-01-03T00:00:00Z",
+		"assigneeIds": []uint{requesterID},
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create change target task expected 201 got %d, body=%v", taskResp.StatusCode, taskBody)
+	}
+	taskID := int(taskBody["id"].(float64))
+
+	requesterLoginStatus, requesterLoginBody := loginWithCredentials(t, ts.URL, "change_requester", "pass1234")
+	if requesterLoginStatus != http.StatusOK {
+		t.Fatalf("login change requester expected 200 got %d", requesterLoginStatus)
+	}
+	requesterToken := requesterLoginBody["token"].(string)
+	managerLoginStatus, managerLoginBody := loginWithCredentials(t, ts.URL, "change_manager", "pass1234")
+	if managerLoginStatus != http.StatusOK {
+		t.Fatalf("login change manager expected 200 got %d", managerLoginStatus)
+	}
+	managerToken := managerLoginBody["token"].(string)
+
+	missingTargetResp, missingTargetBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/requests", requesterToken, map[string]any{
+		"type":        "change",
+		"title":       "缺少目标任务",
+		"description": "should fail",
+	})
+	if missingTargetResp.StatusCode != http.StatusBadRequest || missingTargetBody["code"] != "CHANGE_TARGET_TASK_REQUIRED" {
+		t.Fatalf("change request without target expected 400 CHANGE_TARGET_TASK_REQUIRED got %d %#v", missingTargetResp.StatusCode, missingTargetBody)
+	}
+
+	changeResp, changeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/requests", requesterToken, map[string]any{
+		"type":         "change",
+		"title":        "调整关键任务排期和负责人",
+		"description":  "需要重新排期",
+		"priority":     "high",
+		"targetTaskId": taskID,
+		"changePayload": map[string]any{
+			"startAt":          "2026-01-04T00:00:00Z",
+			"endAt":            "2026-01-06T00:00:00Z",
+			"priority":         "low",
+			"assigneeIds":      []uint{newAssigneeID},
+			"scopeDescription": "范围收敛到交付验收",
+		},
+	})
+	if changeResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create change request expected 201 got %d %#v", changeResp.StatusCode, changeBody)
+	}
+	changeRequestID := int(changeBody["id"].(float64))
+	if changeBody["status"] != "submitted" || int(changeBody["targetTaskId"].(float64)) != taskID || int(changeBody["projectId"].(float64)) != projectID {
+		t.Fatalf("unexpected change request body %#v", changeBody)
+	}
+
+	convertResp, convertBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/requests/"+strconv.Itoa(changeRequestID)+"/convert-task", managerToken, map[string]any{
+		"projectId": projectID,
+	})
+	if convertResp.StatusCode != http.StatusBadRequest || convertBody["code"] != "CHANGE_REQUEST_NOT_CONVERTIBLE" {
+		t.Fatalf("change request convert expected 400 CHANGE_REQUEST_NOT_CONVERTIBLE got %d %#v", convertResp.StatusCode, convertBody)
+	}
+
+	earlyApplyResp, earlyApplyBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/requests/"+strconv.Itoa(changeRequestID)+"/apply-change", managerToken, nil)
+	if earlyApplyResp.StatusCode != http.StatusBadRequest || earlyApplyBody["code"] != "WORK_REQUEST_NOT_APPROVED" {
+		t.Fatalf("change apply before approval expected 400 WORK_REQUEST_NOT_APPROVED got %d %#v", earlyApplyResp.StatusCode, earlyApplyBody)
+	}
+
+	approveResp, approveBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/requests/"+strconv.Itoa(changeRequestID)+"/review", managerToken, map[string]any{
+		"status": "approved",
+		"note":   "批准调整",
+	})
+	if approveResp.StatusCode != http.StatusOK || approveBody["status"] != "approved" {
+		t.Fatalf("approve change request expected 200 approved got %d %#v", approveResp.StatusCode, approveBody)
+	}
+
+	applyResp, applyBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/requests/"+strconv.Itoa(changeRequestID)+"/apply-change", managerToken, nil)
+	if applyResp.StatusCode != http.StatusOK {
+		t.Fatalf("apply change request expected 200 got %d %#v", applyResp.StatusCode, applyBody)
+	}
+	appliedRequest, _ := applyBody["request"].(map[string]any)
+	updatedTask, _ := applyBody["task"].(map[string]any)
+	if appliedRequest["status"] != "applied" || appliedRequest["appliedAt"] == nil || int(appliedRequest["appliedById"].(float64)) != int(managerID) {
+		t.Fatalf("applied request should record applied status/person got %#v", appliedRequest)
+	}
+	if updatedTask["priority"] != "low" || updatedTask["startAt"] == nil || updatedTask["endAt"] == nil {
+		t.Fatalf("updated task should include changed schedule and priority got %#v", updatedTask)
+	}
+	assignees, _ := updatedTask["assignees"].([]any)
+	if len(assignees) != 1 || int(assignees[0].(map[string]any)["id"].(float64)) != int(newAssigneeID) {
+		t.Fatalf("updated task should replace assignees got %#v", updatedTask["assignees"])
+	}
+
+	activityResp, activityBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/activities", adminToken, nil)
+	if activityResp.StatusCode != http.StatusOK {
+		t.Fatalf("change task activities expected 200 got %d", activityResp.StatusCode)
+	}
+	activities, _ := activityBody["list"].([]any)
+	foundChangeActivity := false
+	for _, raw := range activities {
+		item, _ := raw.(map[string]any)
+		detail, _ := item["detail"].(string)
+		if item["type"] == "change_request.applied" && strings.Contains(detail, "范围收敛") {
+			foundChangeActivity = true
+			break
+		}
+	}
+	if !foundChangeActivity {
+		t.Fatalf("expected change_request.applied activity got %#v", activityBody)
+	}
+
+	reapplyResp, reapplyBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/requests/"+strconv.Itoa(changeRequestID)+"/apply-change", managerToken, nil)
+	if reapplyResp.StatusCode != http.StatusBadRequest || reapplyBody["code"] != "WORK_REQUEST_ALREADY_APPLIED" {
+		t.Fatalf("reapply change expected 400 WORK_REQUEST_ALREADY_APPLIED got %d %#v", reapplyResp.StatusCode, reapplyBody)
+	}
+}
+
 func TestProjectTemplateCreateAndGenerateProjectTree(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

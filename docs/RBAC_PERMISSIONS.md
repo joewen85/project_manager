@@ -47,7 +47,7 @@
 | `comments.delete` | 删除自己的任务评论 |
 | `requests.create` | 提交项目、任务、缺陷或变更请求 |
 | `requests.read` | 查看请求入口与审批记录 |
-| `requests.update` | 审批请求并转为任务 |
+| `requests.update` | 审批请求、转为任务并应用变更 |
 | `templates.create` | 创建项目模板 |
 | `templates.read` | 查看项目模板 |
 | `templates.update` | 更新项目模板 |
@@ -117,6 +117,7 @@
 | `GET /requests` | `requests.read`；普通用户仅查看自己提交的请求 |
 | `POST /requests` | `requests.create` |
 | `PATCH /requests/:id/review` `POST /requests/:id/convert-task` | `requests.update` |
+| `POST /requests/:id/apply-change` | `requests.update`；仅审批通过的变更申请可应用，目标任务所属项目必须当前用户可见 |
 | `GET /project-templates` | `templates.read` |
 | `POST /project-templates` | `templates.create` |
 | `PUT /project-templates/:id` | `templates.update` |
