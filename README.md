@@ -21,6 +21,7 @@
 - 统计分析
 - 项目健康度 Dashboard
 - 资源容量与工时管理（任务估算/实际/剩余工时、用户周容量、本周成员负载）
+- 报表中心（保存项目健康、成员负载、任务状态报表配置）
 - 个人工作（我的任务 / 我的创建 / 我的参与）
 - 站内通知（未读计数 / 已读管理）
 - 甘特图独立模块（单项目/项目集、里程碑、依赖拖拽、自动顺延、冲突与缓冲分析）
@@ -263,7 +264,7 @@ make notify-test PROVIDER=feishu
 - RBAC 权限清单：`docs/RBAC_PERMISSIONS.md`
 - 前端 UI 规范：`docs/FRONTEND_UI_GUIDE.md`
 - 前端 UI 验收清单：`docs/UI_QA_CHECKLIST.md`
-- 数据库迁移：`backend/migrations/`（评论/活动流、请求/模板、自动化、资源容量与工时字段已提供显式 SQL；本地测试仍通过 GORM AutoMigrate 初始化）
+- 数据库迁移：`backend/migrations/`（评论/活动流、请求/模板、自动化、资源容量与工时字段、保存报表已提供显式 SQL；本地测试仍通过 GORM AutoMigrate 初始化）
 
 ## Helm 部署
 ```bash

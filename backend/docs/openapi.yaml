@@ -1378,6 +1378,110 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postProjectTemplatesByIdCreateProject
+  /reports:
+    get:
+      summary: 保存报表列表
+      description: 普通用户仅返回自己创建的保存报表；管理员可查看全部。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: type
+        schema:
+          type: string
+          enum:
+          - project_health
+          - member_workload
+          - task_status
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedReportPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getReports
+    post:
+      summary: 创建保存报表
+      description: 保存报表配置，不生成 PDF 或定时发送任务。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavedReportUpsertRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postReports
+  /reports/{id}:
+    get:
+      summary: 保存报表详情
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getReportsById
+    put:
+      summary: 更新保存报表
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavedReportUpsertRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putReportsById
+    delete:
+      summary: 删除保存报表
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteReportsById
   /automation-rules:
     get:
       summary: 自动化规则列表
@@ -2307,6 +2411,81 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Task'
+    SavedReportFilters:
+      type: object
+      properties:
+        projectId:
+          type: integer
+          description: 项目 ID 筛选；为空或 0 表示不限项目。
+        keyword:
+          type: string
+          description: 报表数据关键词筛选。
+        statuses:
+          type: array
+          items:
+            type: string
+            enum:
+            - pending
+            - queued
+            - processing
+            - reviewing
+            - completed
+    SavedReportChartConfig:
+      type: object
+      properties:
+        displayMode:
+          type: string
+          default: summary
+          description: 展示方式配置；当前前端支持 summary、table、chart。
+    SavedReport:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum:
+          - project_health
+          - member_workload
+          - task_status
+        filters:
+          $ref: '#/components/schemas/SavedReportFilters'
+        chartConfig:
+          $ref: '#/components/schemas/SavedReportChartConfig'
+        createdById:
+          type: integer
+        createdBy:
+          $ref: '#/components/schemas/User'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SavedReportUpsertRequest:
+      type: object
+      required:
+      - name
+      - type
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum:
+          - project_health
+          - member_workload
+          - task_status
+        filters:
+          $ref: '#/components/schemas/SavedReportFilters'
+        chartConfig:
+          $ref: '#/components/schemas/SavedReportChartConfig'
     AutomationConditions:
       type: object
       properties:
@@ -3226,6 +3405,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectTemplate'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    SavedReportPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/SavedReport'
         total:
           type: integer
           format: int64

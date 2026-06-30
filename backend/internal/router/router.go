@@ -142,6 +142,15 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			templates.POST("/:id/create-project", middleware.RequirePermission(h.DB, "projects.create"), h.CreateProjectFromTemplate)
 		}
 
+		reports := authGroup.Group("/reports")
+		{
+			reports.GET("", middleware.RequirePermission(h.DB, "reports.read"), h.ListSavedReports)
+			reports.POST("", middleware.RequirePermission(h.DB, "reports.create"), h.CreateSavedReport)
+			reports.GET("/:id", middleware.RequirePermission(h.DB, "reports.read"), h.SavedReportDetail)
+			reports.PUT("/:id", middleware.RequirePermission(h.DB, "reports.update"), h.UpdateSavedReport)
+			reports.DELETE("/:id", middleware.RequirePermission(h.DB, "reports.delete"), h.DeleteSavedReport)
+		}
+
 		automations := authGroup.Group("/automation-rules")
 		{
 			automations.GET("", middleware.RequirePermission(h.DB, "automations.read"), h.ListAutomationRules)

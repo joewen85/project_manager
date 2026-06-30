@@ -2260,6 +2260,144 @@ func TestProjectTemplateCreateAndGenerateProjectTree(t *testing.T) {
 	}
 }
 
+func TestSavedReportsCRUDAndOwnerScope(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "report-manager",
+		"description": "report manager",
+		"permissionIds": []uint{
+			codeToID["reports.create"],
+			codeToID["reports.read"],
+			codeToID["reports.update"],
+			codeToID["reports.delete"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create report role expected 201 got %d", roleResp.StatusCode)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	userAResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "report_owner",
+		"name":          "Report Owner",
+		"email":         "report_owner@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if userAResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create report owner expected 201 got %d", userAResp.StatusCode)
+	}
+	userBResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "report_other",
+		"name":          "Report Other",
+		"email":         "report_other@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if userBResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create report other expected 201 got %d", userBResp.StatusCode)
+	}
+
+	loginStatus, loginBody := loginWithCredentials(t, ts.URL, "report_owner", "pass1234")
+	if loginStatus != http.StatusOK {
+		t.Fatalf("login report owner expected 200 got %d", loginStatus)
+	}
+	ownerToken := loginBody["token"].(string)
+	otherLoginStatus, otherLoginBody := loginWithCredentials(t, ts.URL, "report_other", "pass1234")
+	if otherLoginStatus != http.StatusOK {
+		t.Fatalf("login report other expected 200 got %d", otherLoginStatus)
+	}
+	otherToken := otherLoginBody["token"].(string)
+
+	createResp, createBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/reports", ownerToken, map[string]any{
+		"name":        "本部门风险",
+		"description": "关注项目健康红色项",
+		"type":        "project_health",
+		"filters": map[string]any{
+			"keyword":  "风险",
+			"statuses": []string{"processing", "completed", "bad-status"},
+		},
+		"chartConfig": map[string]any{"displayMode": "summary"},
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create saved report expected 201 got %d, body=%v", createResp.StatusCode, createBody)
+	}
+	reportID := int(createBody["id"].(float64))
+	filters, _ := createBody["filters"].(map[string]any)
+	statuses, _ := filters["statuses"].([]any)
+	if len(statuses) != 2 {
+		t.Fatalf("saved report should normalize valid statuses got %v", filters)
+	}
+
+	invalidResp, invalidBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/reports", ownerToken, map[string]any{
+		"name": "坏报表",
+		"type": "unknown",
+	})
+	if invalidResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid report type expected 400 got %d", invalidResp.StatusCode)
+	}
+	if invalidBody["code"] != "INVALID_REPORT_TYPE" {
+		t.Fatalf("invalid report type expected INVALID_REPORT_TYPE got %v", invalidBody["code"])
+	}
+
+	ownerListResp, ownerListBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/reports?page=1&pageSize=20", ownerToken, nil)
+	if ownerListResp.StatusCode != http.StatusOK {
+		t.Fatalf("owner report list expected 200 got %d", ownerListResp.StatusCode)
+	}
+	ownerReports, _ := ownerListBody["list"].([]any)
+	if len(ownerReports) != 1 {
+		t.Fatalf("owner should see one report got %v", ownerListBody)
+	}
+
+	otherListResp, otherListBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/reports?page=1&pageSize=20", otherToken, nil)
+	if otherListResp.StatusCode != http.StatusOK {
+		t.Fatalf("other report list expected 200 got %d", otherListResp.StatusCode)
+	}
+	otherReports, _ := otherListBody["list"].([]any)
+	if len(otherReports) != 0 {
+		t.Fatalf("other user should not see owner report got %v", otherListBody)
+	}
+
+	otherDetailResp, _ := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/reports/"+strconv.Itoa(reportID), otherToken, nil)
+	if otherDetailResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("other user report detail expected 404 got %d", otherDetailResp.StatusCode)
+	}
+
+	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/reports/"+strconv.Itoa(reportID), ownerToken, map[string]any{
+		"name":        "成员负载周报",
+		"description": "关注过载成员",
+		"type":        "member_workload",
+		"filters":     map[string]any{"keyword": "成员"},
+		"chartConfig": map[string]any{"displayMode": "table"},
+	})
+	if updateResp.StatusCode != http.StatusOK {
+		t.Fatalf("update saved report expected 200 got %d, body=%v", updateResp.StatusCode, updateBody)
+	}
+	if updateBody["type"] != "member_workload" {
+		t.Fatalf("saved report type not updated: %v", updateBody["type"])
+	}
+
+	deleteResp, _ := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/reports/"+strconv.Itoa(reportID), ownerToken, nil)
+	if deleteResp.StatusCode != http.StatusOK {
+		t.Fatalf("delete saved report expected 200 got %d", deleteResp.StatusCode)
+	}
+	emptyListResp, emptyListBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/reports?page=1&pageSize=20", ownerToken, nil)
+	if emptyListResp.StatusCode != http.StatusOK {
+		t.Fatalf("owner report list after delete expected 200 got %d", emptyListResp.StatusCode)
+	}
+	emptyReports, _ := emptyListBody["list"].([]any)
+	if len(emptyReports) != 0 {
+		t.Fatalf("owner report list should be empty after delete got %v", emptyListBody)
+	}
+}
+
 func TestAutomationRuleOverdueTaskNotification(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

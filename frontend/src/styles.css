@@ -505,6 +505,42 @@ button, input, select, textarea { max-width: 100%; font: inherit; }
   color: var(--color-text);
   font-size: 16px;
 }
+.report-preview-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.report-preview-card {
+  display: grid;
+  gap: 8px;
+}
+.report-preview-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+}
+.report-preview-title h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.report-preview-card strong {
+  font-size: 30px;
+}
+.report-preview-card span,
+.table-subtext {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.table-subtext {
+  margin: 4px 0 0;
+}
+.report-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) auto;
+  gap: 10px;
+  align-items: center;
+}
 
 .charts { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .chart-card { min-height: 320px; }
@@ -2134,6 +2170,9 @@ td .btn + .btn { margin-left: 3px; }
   .calendar-task-time {
     grid-column: 2;
     white-space: normal;
+  }
+  .report-filter-bar {
+    grid-template-columns: 1fr;
   }
   .card {
     border-radius: 16px;

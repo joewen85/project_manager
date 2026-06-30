@@ -120,6 +120,11 @@
 - 完成：新增 `GET /tasks/calendar` 与 `GET /tasks/calendar.ics`，按日期范围和任务可见范围返回个人日程并支持 iCal 导出
 - 完成：前端新增“我的日程”页面，支持月/周/日切换、今日/前后导航、任务跳转与 iCal 下载
 - 完成：补充日程 JSON/iCal/非法范围/普通用户可见范围集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
+- 完成：按 `Improvement.md` 推进 P1-3 报表中心保存配置 MVP
+- 完成：新增 `saved_reports` 模型和显式 SQL 迁移，支持保存项目健康、成员负载、任务状态报表配置
+- 完成：新增 `reports.create/read/update/delete` 权限与 `/reports` CRUD 接口，普通用户仅管理自己创建的保存报表，管理员可管理全部
+- 完成：前端新增“报表中心”页面，展示项目健康/成员负载/任务状态预览，并支持保存报表配置的新增、编辑、删除
+- 完成：补充保存报表 CRUD/非法类型/创建人范围集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

@@ -49,6 +49,10 @@
 | `templates.read` | 查看项目模板 |
 | `templates.update` | 更新项目模板 |
 | `templates.delete` | 删除项目模板 |
+| `reports.create` | 创建保存报表 |
+| `reports.read` | 查看报表中心与保存报表 |
+| `reports.update` | 更新保存报表 |
+| `reports.delete` | 删除保存报表 |
 | `automations.create` | 创建自动化规则 |
 | `automations.read` | 查看自动化规则与执行日志 |
 | `automations.update` | 更新并执行自动化规则 |
@@ -100,6 +104,11 @@
 | `PUT /project-templates/:id` | `templates.update` |
 | `DELETE /project-templates/:id` | `templates.delete` |
 | `POST /project-templates/:id/create-project` | `projects.create` + `templates.read` |
+| `GET /reports` `GET /reports/:id` | `reports.read`；普通用户仅查看自己创建的保存报表 |
+| `POST /reports` | `reports.create` |
+| `PUT /reports/:id` | `reports.update`；普通用户仅更新自己创建的保存报表 |
+| `DELETE /reports/:id` | `reports.delete`；普通用户仅删除自己创建的保存报表 |
+| 报表中心预览卡片 | 复用 `/stats/project-health`、`/stats/member-workload`、`/tasks/progress-list`，仍分别要求 `stats.read`、`tasks.read` |
 | `GET /automation-rules` `GET /automation-rules/logs` | `automations.read` |
 | `POST /automation-rules` | `automations.create` |
 | `PUT /automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |

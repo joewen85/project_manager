@@ -58,6 +58,10 @@ Base URL: `http://localhost:8080/api/v1`
 | PUT | `/project-templates/:id` | `templates.update` |
 | DELETE | `/project-templates/:id` | `templates.delete` |
 | POST | `/project-templates/:id/create-project` | `projects.create` + `templates.read` |
+| GET | `/reports` `/reports/:id` | `reports.read` |
+| POST | `/reports` | `reports.create` |
+| PUT | `/reports/:id` | `reports.update` |
+| DELETE | `/reports/:id` | `reports.delete` |
 | GET | `/automation-rules` `/automation-rules/logs` | `automations.read` |
 | POST | `/automation-rules` | `automations.create` |
 | PUT | `/automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
@@ -320,6 +324,36 @@ Base URL: `http://localhost:8080/api/v1`
 - 请求体: `{ code?, name, description?, startAt?, endAt?, userIds?, departmentIds? }`
 - 效果: 创建项目并按模板任务树生成真实任务；任务编号自动生成；父子关系、里程碑、相对排期和模板内依赖会映射为真实任务关系
 - 响应: `{ templateId, project, tasks }`
+
+## 报表中心
+
+报表中心保存配置使用 `reports.*` 权限；页面预览卡片复用 `/stats/project-health`、`/stats/member-workload`、`/tasks/progress-list`，仍分别受 `stats.read`、`tasks.read` 控制。
+
+### GET `/reports`
+- 权限: `reports.read`
+- Query: `page` `pageSize` `keyword` `type`
+- 范围: 管理员可查看全部保存报表；普通用户仅查看自己创建的报表
+- 响应: `{ list, total, page, pageSize }`
+
+### GET `/reports/:id`
+- 权限: `reports.read`
+- 范围: 同列表
+
+### POST `/reports`
+- 权限: `reports.create`
+- 请求体: `{ name, description?, type, filters?, chartConfig? }`
+- `type`: `project_health|member_workload|task_status`
+- `filters`: `{ projectId?, keyword?, statuses? }`；`projectId` 必须是当前用户可见项目
+- `chartConfig`: `{ displayMode? }`
+
+### PUT `/reports/:id`
+- 权限: `reports.update`
+- 范围: 管理员可更新全部保存报表；普通用户仅可更新自己创建的报表
+- 请求体同创建
+
+### DELETE `/reports/:id`
+- 权限: `reports.delete`
+- 范围: 同更新
 
 ## 自动化规则
 

@@ -288,6 +288,31 @@ export interface TaskCalendarResponse {
   items?: TaskCalendarItem[]
 }
 
+export type SavedReportType = 'project_health' | 'member_workload' | 'task_status'
+
+export interface SavedReportFilters {
+  projectId?: number
+  keyword?: string
+  statuses?: Status[]
+}
+
+export interface SavedReportChartConfig {
+  displayMode?: string
+}
+
+export interface SavedReport {
+  id: number
+  name: string
+  description?: string
+  type: SavedReportType
+  filters?: SavedReportFilters
+  chartConfig?: SavedReportChartConfig
+  createdById: number
+  createdBy?: User
+  createdAt?: string
+  updatedAt?: string
+}
+
 export type ProjectHealthLevel = 'green' | 'yellow' | 'red'
 
 export interface ProjectHealth {

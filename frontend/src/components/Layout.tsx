@@ -17,6 +17,7 @@ const menus = [
   { to: '/gantt', label: '甘特模块', icon: CalendarRange, permission: 'projects.read' },
   { to: '/tasks', label: '任务列表', icon: ListChecks, permission: 'tasks.read' },
   { to: '/calendar', label: '我的日程', icon: CalendarDays, permission: 'tasks.read' },
+  { to: '/reports', label: '报表中心', icon: BarChart3, permission: 'reports.read' },
   { to: '/requests', label: '请求入口', icon: ClipboardList, permission: 'requests.read' },
   { to: '/automation-rules', label: '自动化规则', icon: Workflow, permission: 'automations.read' },
   { to: '/notifications', label: '站内通知', icon: Bell, permission: 'notifications.read' },

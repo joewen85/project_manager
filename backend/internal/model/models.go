@@ -158,6 +158,35 @@ type ProjectTemplate struct {
 	TaskTree    []TemplateTask `gorm:"serializer:json" json:"taskTree"`
 }
 
+type SavedReportType string
+
+const (
+	SavedReportProjectHealth  SavedReportType = "project_health"
+	SavedReportMemberWorkload SavedReportType = "member_workload"
+	SavedReportTaskStatus     SavedReportType = "task_status"
+)
+
+type SavedReportFilters struct {
+	ProjectID uint     `json:"projectId,omitempty"`
+	Keyword   string   `json:"keyword,omitempty"`
+	Statuses  []string `json:"statuses,omitempty"`
+}
+
+type SavedReportChartConfig struct {
+	DisplayMode string `json:"displayMode,omitempty"`
+}
+
+type SavedReport struct {
+	BaseModel
+	Name        string                 `gorm:"size:150;not null;index" json:"name"`
+	Description string                 `gorm:"type:text" json:"description"`
+	Type        SavedReportType        `gorm:"size:40;not null;index" json:"type"`
+	Filters     SavedReportFilters     `gorm:"serializer:json" json:"filters"`
+	ChartConfig SavedReportChartConfig `gorm:"serializer:json" json:"chartConfig"`
+	CreatedByID uint                   `gorm:"not null;index" json:"createdById"`
+	CreatedBy   User                   `json:"createdBy,omitempty"`
+}
+
 type Task struct {
 	BaseModel
 	TaskNo         string           `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`

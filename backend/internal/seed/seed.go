@@ -59,6 +59,11 @@ var permissionCatalog = []permissionSeed{
 	{Code: "templates.update", Name: "模板-更新", Description: "更新项目模板"},
 	{Code: "templates.delete", Name: "模板-删除", Description: "删除项目模板"},
 
+	{Code: "reports.create", Name: "报表-创建", Description: "创建保存报表"},
+	{Code: "reports.read", Name: "报表-查看", Description: "查看报表中心与保存报表"},
+	{Code: "reports.update", Name: "报表-更新", Description: "更新保存报表"},
+	{Code: "reports.delete", Name: "报表-删除", Description: "删除保存报表"},
+
 	{Code: "automations.create", Name: "自动化-创建", Description: "创建自动化规则"},
 	{Code: "automations.read", Name: "自动化-查看", Description: "查看自动化规则与执行日志"},
 	{Code: "automations.update", Name: "自动化-更新", Description: "更新并执行自动化规则"},
