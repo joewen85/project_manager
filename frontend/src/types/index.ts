@@ -86,6 +86,33 @@ export interface TaskDependency {
   type?: 'FS' | 'SS' | 'FF' | 'SF'
 }
 
+export interface TaskComment {
+  id: number
+  taskId: number
+  authorId: number
+  author?: User
+  content: string
+  attachments?: UploadAttachment[]
+  mentions?: User[]
+  isDeleted?: boolean
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface TaskActivity {
+  id: number
+  taskId: number
+  actorId?: number
+  actor?: User
+  type: string
+  summary: string
+  detail?: string
+  commentId?: number
+  comment?: TaskComment
+  createdAt: string
+  updatedAt?: string
+}
+
 export interface Role {
   id: number
   name: string

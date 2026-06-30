@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -265,6 +266,53 @@ func containsUint(values []uint, target uint) bool {
 		}
 	}
 	return false
+}
+
+func formatTaskActivityTime(value *time.Time) string {
+	if value == nil {
+		return "未设置"
+	}
+	return value.Format(time.RFC3339)
+}
+
+func formatUintList(values []uint) string {
+	if len(values) == 0 {
+		return "无"
+	}
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, strconv.FormatUint(uint64(value), 10))
+	}
+	return strings.Join(parts, ",")
+}
+
+func appendTaskChange(lines []string, label string, oldValue any, newValue any) []string {
+	oldText := strings.TrimSpace(fmt.Sprint(oldValue))
+	newText := strings.TrimSpace(fmt.Sprint(newValue))
+	if oldText == newText {
+		return lines
+	}
+	return append(lines, label+"："+oldText+" -> "+newText)
+}
+
+func taskUpdateActivityDetail(oldItem model.Task, nextItem model.Task, oldAssigneeIDs, newAssigneeIDs, oldReviewerIDs, newReviewerIDs []uint, attachmentsProvided bool, dependenciesProvided bool) string {
+	lines := make([]string, 0, 8)
+	lines = appendTaskChange(lines, "状态", oldItem.Status, nextItem.Status)
+	lines = appendTaskChange(lines, "进度", oldItem.Progress, nextItem.Progress)
+	lines = appendTaskChange(lines, "执行人", formatUintList(oldAssigneeIDs), formatUintList(newAssigneeIDs))
+	lines = appendTaskChange(lines, "审核人", formatUintList(oldReviewerIDs), formatUintList(newReviewerIDs))
+	lines = appendTaskChange(lines, "开始时间", formatTaskActivityTime(oldItem.StartAt), formatTaskActivityTime(nextItem.StartAt))
+	lines = appendTaskChange(lines, "结束时间", formatTaskActivityTime(oldItem.EndAt), formatTaskActivityTime(nextItem.EndAt))
+	if attachmentsProvided {
+		lines = append(lines, "附件已更新")
+	}
+	if dependenciesProvided {
+		lines = append(lines, "依赖关系已更新")
+	}
+	if len(lines) == 0 {
+		return "任务信息已保存"
+	}
+	return strings.Join(lines, "\n")
 }
 
 type taskAssigneeOption struct {
@@ -596,6 +644,9 @@ func (h *Handler) CreateTask(c *gin.Context) {
 			First(&item, item.ID).Error; err != nil {
 			return err
 		}
+		if err := h.writeTaskActivityWithDB(tx, item.ID, creatorID, "task.created", taskActivitySummary("创建任务", item), "", nil); err != nil {
+			return err
+		}
 		return h.writeAuditWithDB(c, tx, "tasks", "create", item.ID, true, auditDetailf("创建任务(id=%d)", item.ID))
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "CREATE_TASK_FAILED", err)
@@ -685,6 +736,7 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	}
 	oldAssigneeIDs := userIDsFromUsers(oldAssignees)
 	oldReviewerIDs := userIDsFromUsers(oldReviewers)
+	oldItem := item
 	currentUserID := c.GetUint("userId")
 	isCurrentAssignee := containsUint(oldAssigneeIDs, currentUserID)
 	isCurrentReviewer := containsUint(oldReviewerIDs, currentUserID)
@@ -801,6 +853,10 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 		if err := h.preloadTaskResponse(tx, &item); err != nil {
 			return err
 		}
+		detail := taskUpdateActivityDetail(oldItem, item, oldAssigneeIDs, req.AssigneeIDs, oldReviewerIDs, req.ReviewerIDs, provided, req.Dependencies != nil)
+		if err := h.writeTaskActivityWithDB(tx, item.ID, currentUserID, "task.updated", taskActivitySummary("更新任务", item), detail, nil); err != nil {
+			return err
+		}
 		return h.writeAuditWithDB(c, tx, "tasks", "update", item.ID, true, auditDetailf("更新任务(id=%d)", item.ID))
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_FAILED", err)
@@ -879,6 +935,10 @@ func (h *Handler) UpdateTaskProgress(c *gin.Context) {
 		if err := h.preloadTaskResponse(tx, &item); err != nil {
 			return err
 		}
+		detail := fmt.Sprintf("进度：%d -> %d\n状态：%s -> %s", oldProgress, item.Progress, oldStatus, item.Status)
+		if err := h.writeTaskActivityWithDB(tx, item.ID, currentUserID, "task.progress_updated", taskActivitySummary("更新进度", item), detail, nil); err != nil {
+			return err
+		}
 		return h.writeAuditWithDB(c, tx, "tasks", "update_progress", item.ID, true, auditDetailf("更新任务进度(id=%d)", item.ID))
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_PROGRESS_FAILED", err)
@@ -908,6 +968,8 @@ func (h *Handler) CompleteTask(c *gin.Context) {
 		return
 	}
 
+	oldStatus := item.Status
+	oldProgress := item.Progress
 	item.Status = model.TaskCompleted
 	if item.Progress < 100 {
 		item.Progress = 100
@@ -920,6 +982,10 @@ func (h *Handler) CompleteTask(c *gin.Context) {
 			return err
 		}
 		if err := h.preloadTaskResponse(tx, &item); err != nil {
+			return err
+		}
+		detail := fmt.Sprintf("状态：%s -> %s\n进度：%d -> %d", oldStatus, item.Status, oldProgress, item.Progress)
+		if err := h.writeTaskActivityWithDB(tx, item.ID, currentUserID, "task.completed", taskActivitySummary("完成审核", item), detail, nil); err != nil {
 			return err
 		}
 		return h.writeAuditWithDB(c, tx, "tasks", "complete", item.ID, true, auditDetailf("完成任务审核(id=%d)", item.ID))
@@ -1082,7 +1148,7 @@ func dependencyStartAt(dependency model.TaskDependency, predecessorStartAt, pred
 	}
 }
 
-func (h *Handler) autoResolveProjectDependencies(tx *gorm.DB, projectID uint) (int, error) {
+func (h *Handler) autoResolveProjectDependencies(tx *gorm.DB, projectID uint, actorID uint) (int, error) {
 	var tasks []model.Task
 	if err := tx.Where("project_id = ?", projectID).Preload("Dependencies").Find(&tasks).Error; err != nil {
 		return 0, err
@@ -1178,6 +1244,10 @@ func (h *Handler) autoResolveProjectDependencies(tx *gorm.DB, projectID uint) (i
 			}).Error; err != nil {
 			return changed, err
 		}
+		detail := fmt.Sprintf("开始时间：%s\n结束时间：%s", formatTaskActivityTime(task.StartAt), formatTaskActivityTime(task.EndAt))
+		if err := h.writeTaskActivityWithDB(tx, task.ID, actorID, "task.schedule_auto_resolved", taskActivitySummary("自动顺延排期", *task), detail, nil); err != nil {
+			return changed, err
+		}
 		changed += 1
 	}
 
@@ -1197,7 +1267,7 @@ func (h *Handler) AutoResolveProjectDependencies(c *gin.Context) {
 
 	updatedCount := 0
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
-		nextCount, err := h.autoResolveProjectDependencies(tx, uint(parsedProjectID))
+		nextCount, err := h.autoResolveProjectDependencies(tx, uint(parsedProjectID), c.GetUint("userId"))
 		if err != nil {
 			return err
 		}
@@ -1238,7 +1308,11 @@ func (h *Handler) UpdateTaskDependencies(c *gin.Context) {
 		if err := h.syncTaskDependencies(tx, item.ID, item.ProjectID, req.Dependencies); err != nil {
 			return err
 		}
-		return tx.Preload("Dependencies").First(&item, item.ID).Error
+		if err := tx.Preload("Dependencies").First(&item, item.ID).Error; err != nil {
+			return err
+		}
+		detail := fmt.Sprintf("依赖数量：%d", len(item.Dependencies))
+		return h.writeTaskActivityWithDB(tx, item.ID, c.GetUint("userId"), "task.dependencies_updated", taskActivitySummary("更新依赖", item), detail, nil)
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_DEPENDENCIES_FAILED", err)
 		return
@@ -1283,6 +1357,8 @@ func (h *Handler) UpdateTaskSchedule(c *gin.Context) {
 
 	autoResolve := strings.TrimSpace(c.Query("autoResolve")) != "false"
 	updatedCount := 0
+	oldStartAt := item.StartAt
+	oldEndAt := item.EndAt
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		item.StartAt = startAt
 		item.EndAt = endAt
@@ -1293,13 +1369,17 @@ func (h *Handler) UpdateTaskSchedule(c *gin.Context) {
 			return err
 		}
 		if autoResolve {
-			nextCount, err := h.autoResolveProjectDependencies(tx, item.ProjectID)
+			nextCount, err := h.autoResolveProjectDependencies(tx, item.ProjectID, c.GetUint("userId"))
 			if err != nil {
 				return err
 			}
 			updatedCount = nextCount
 		}
-		return tx.Preload("Assignees").Preload("Reviewers").Preload("Dependencies").First(&item, item.ID).Error
+		if err := tx.Preload("Assignees").Preload("Reviewers").Preload("Dependencies").First(&item, item.ID).Error; err != nil {
+			return err
+		}
+		detail := fmt.Sprintf("开始时间：%s -> %s\n结束时间：%s -> %s", formatTaskActivityTime(oldStartAt), formatTaskActivityTime(item.StartAt), formatTaskActivityTime(oldEndAt), formatTaskActivityTime(item.EndAt))
+		return h.writeTaskActivityWithDB(tx, item.ID, c.GetUint("userId"), "task.schedule_updated", taskActivitySummary("更新排期", item), detail, nil)
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_SCHEDULE_FAILED", err)
 		return

@@ -78,3 +78,10 @@
 - [x] H10 页面逐模块落地：`Dashboard -> Projects -> Tasks -> Users -> Departments -> RBAC -> Audit -> MyWork`
 - [x] H11 验收与回归：视觉走查清单、主要流程冒烟、跨浏览器检查
 - [x] H12 文档沉淀：在 `README.md` 增加前端设计规范与组件使用约定
+
+## Improvement.md 路线图执行
+- [x] P0-1 任务评论、@提及与活动流首个闭环：评论模型/活动模型、权限、接口、任务详情 UI、提及通知、可见范围测试、迁移与文档
+- [ ] P0-3 项目健康度 Dashboard 2.0 MVP
+- [ ] P0-2 Kanban 视图
+- [ ] P0-4 请求入口与项目/任务模板
+- [ ] P0-5 基础自动化规则

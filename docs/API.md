@@ -47,6 +47,9 @@ Base URL: `http://localhost:8080/api/v1`
 | PATCH | `/tasks/:id/progress` `/tasks/:id/complete` | `tasks.read` + 任务执行人/审核人关系校验 |
 | PATCH | `/tasks/:id/schedule` | `tasks.update` |
 | DELETE | `/tasks/:id` | `tasks.delete` |
+| GET | `/tasks/:id/comments` `/tasks/:id/activities` | `comments.read` + 任务可见范围 |
+| POST | `/tasks/:id/comments` | `comments.create` + 任务可见范围 |
+| DELETE | `/tasks/:id/comments/:commentId` | `comments.delete` + 评论作者/管理员 |
 | GET | `/stats/dashboard` | `stats.read` |
 | GET | `/notifications` `/notifications/unread-count` | `notifications.read` |
 | PATCH | `/notifications/:id/read` `/notifications/read-all` | `notifications.update` |
@@ -198,6 +201,33 @@ Base URL: `http://localhost:8080/api/v1`
 ### PATCH `/tasks/:id/schedule`
 - 请求体: `{ startAt, endAt }`
 - Query: `autoResolve`（可选，默认 `true`）
+
+### GET `/tasks/:id/comments`
+- 权限: `comments.read`
+- 范围: 只能查看当前账号可见任务的评论
+- Query: `page` `pageSize`
+- 响应: `{ list, total, page, pageSize }`
+- 评论项: `{ id, taskId, authorId, author, content, attachments, mentions, createdAt, updatedAt }`
+
+### POST `/tasks/:id/comments`
+- 权限: `comments.create`
+- 范围: 只能在当前账号可见任务下评论
+- 请求体: `{ content, attachments?, mentionIds? }`
+- `content` 支持 `@username`，后端会解析已存在用户名并合并 `mentionIds`
+- 被提及用户会收到 `module=tasks`、`targetId=任务ID` 的站内通知
+
+### DELETE `/tasks/:id/comments/:commentId`
+- 权限: `comments.delete`
+- 规则: 评论作者或管理员可删除
+- 删除为软删除，默认评论列表不返回已删除评论
+
+### GET `/tasks/:id/activities`
+- 权限: `comments.read`
+- 范围: 只能查看当前账号可见任务的动态
+- Query: `page` `pageSize`
+- 响应: `{ list, total, page, pageSize }`
+- 动态项: `{ id, taskId, actorId, actor, type, summary, detail, commentId, comment, createdAt }`
+- 当前记录: 任务创建、更新、进度更新、审核完成、依赖/排期调整、自动顺延、评论新增/删除
 
 ### DELETE `/tasks/:id`
 

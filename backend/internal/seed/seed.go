@@ -46,6 +46,10 @@ var permissionCatalog = []permissionSeed{
 	{Code: "tasks.update", Name: "任务-更新", Description: "更新任务"},
 	{Code: "tasks.delete", Name: "任务-删除", Description: "删除任务"},
 
+	{Code: "comments.create", Name: "评论-创建", Description: "创建任务评论与提及"},
+	{Code: "comments.read", Name: "评论-查看", Description: "查看任务评论与活动流"},
+	{Code: "comments.delete", Name: "评论-删除", Description: "删除自己的任务评论"},
+
 	{Code: "tags.create", Name: "标签-创建", Description: "创建标签"},
 	{Code: "tags.read", Name: "标签-查看", Description: "查看标签"},
 	{Code: "tags.update", Name: "标签-更新", Description: "更新标签"},

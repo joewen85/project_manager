@@ -13,7 +13,7 @@ import { SearchableSelect } from '../components/SearchableSelect'
 import { TableHeaderFilter } from '../components/TableHeaderFilter'
 import { RemoteProjectSelect } from '../components/RemoteProjectSelect'
 import { formatDateTime } from '../utils/datetime'
-import { Project, Tag, Task, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
+import { Project, Tag, Task, TaskActivity, TaskComment, TaskPriority, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { AttachmentField } from '../components/AttachmentField'
 import { DateTimeQuickField } from '../components/DateTimeQuickField'
 import { usePermissions } from '../hooks/usePermissions'
@@ -129,6 +129,22 @@ const getTaskProjectName = (task: Task, projects: Project[]) => {
 
 const getTaskAssigneeNames = (task: Task) => (task.assignees || []).map((user) => user.username || user.name).filter(Boolean)
 const getTaskReviewerNames = (task: Task) => (task.reviewers || []).map((user) => user.username || user.name).filter(Boolean)
+const formatUserName = (user?: User) => {
+  if (!user) return '系统'
+  if (user.name && user.username) return `${user.name}（${user.username}）`
+  return user.name || user.username || `用户 ${user.id}`
+}
+const activityTypeLabel: Record<string, string> = {
+  'task.created': '创建',
+  'task.updated': '更新',
+  'task.progress_updated': '进度',
+  'task.completed': '审核',
+  'task.dependencies_updated': '依赖',
+  'task.schedule_updated': '排期',
+  'task.schedule_auto_resolved': '顺延',
+  'comment.created': '评论',
+  'comment.deleted': '评论'
+}
 
 const normalizeTaskFieldSettings = (raw: unknown): TaskFieldSetting[] => {
   const fallbackMap = new Map(taskDefaultFieldSettings.map((field) => [field.key, field]))
@@ -159,6 +175,9 @@ export function TasksPage() {
   const canCreateTask = hasPermission('tasks.create', permissions)
   const canUpdateTask = hasPermission('tasks.update', permissions)
   const canDeleteTask = hasPermission('tasks.delete', permissions)
+  const canReadComments = hasPermission('comments.read', permissions)
+  const canCreateComment = hasPermission('comments.create', permissions)
+  const canDeleteComment = hasPermission('comments.delete', permissions)
   const canCreateTag = hasPermission('tags.create', permissions)
   const canUploadAttachment = hasPermission('uploads.create', permissions)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -195,6 +214,14 @@ export function TasksPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailTask, setDetailTask] = useState<Task | null>(null)
+  const [taskComments, setTaskComments] = useState<TaskComment[]>([])
+  const [taskActivities, setTaskActivities] = useState<TaskActivity[]>([])
+  const [taskTimelineLoading, setTaskTimelineLoading] = useState(false)
+  const [taskTimelineError, setTaskTimelineError] = useState('')
+  const [commentContent, setCommentContent] = useState('')
+  const [commentSubmitting, setCommentSubmitting] = useState(false)
+  const [commentDeletingId, setCommentDeletingId] = useState<number | null>(null)
+  const [commentError, setCommentError] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -572,9 +599,77 @@ export function TasksPage() {
     setExpandedReviewerTaskIds((prev) => prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId])
   }
 
+  const loadTaskTimeline = async (taskId: number) => {
+    if (!canReadComments) {
+      setTaskComments([])
+      setTaskActivities([])
+      setTaskTimelineError('')
+      return
+    }
+    try {
+      setTaskTimelineLoading(true)
+      setTaskTimelineError('')
+      const [commentPage, activityPage] = await Promise.all([
+        fetchPage<TaskComment>(`/tasks/${taskId}/comments`, { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }),
+        fetchPage<TaskActivity>(`/tasks/${taskId}/activities`, { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true })
+      ])
+      setTaskComments(commentPage.list)
+      setTaskActivities(activityPage.list)
+    } catch (timelineError) {
+      setTaskComments([])
+      setTaskActivities([])
+      setTaskTimelineError(readApiError(timelineError, '动态加载失败'))
+    } finally {
+      setTaskTimelineLoading(false)
+    }
+  }
+
   const viewDetail = (item: Task) => {
     setDetailTask(item)
+    setCommentContent('')
+    setCommentError('')
+    setTaskComments([])
+    setTaskActivities([])
+    setTaskTimelineError('')
     setDetailOpen(true)
+    void loadTaskTimeline(item.id)
+  }
+
+  const submitComment = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!detailTask || !canCreateComment) return
+    const content = commentContent.trim()
+    if (!content) {
+      setCommentError('请输入评论内容')
+      return
+    }
+    try {
+      setCommentSubmitting(true)
+      setCommentError('')
+      await api.post(`/tasks/${detailTask.id}/comments`, { content })
+      setCommentContent('')
+      await loadTaskTimeline(detailTask.id)
+      window.dispatchEvent(new Event('notifications:changed'))
+    } catch (error) {
+      setCommentError(readApiError(error, '发表评论失败'))
+    } finally {
+      setCommentSubmitting(false)
+    }
+  }
+
+  const deleteComment = async (comment: TaskComment) => {
+    if (!detailTask || !canDeleteComment) return
+    if (!confirm('确认删除这条评论？')) return
+    try {
+      setCommentDeletingId(comment.id)
+      setCommentError('')
+      await api.delete(`/tasks/${detailTask.id}/comments/${comment.id}`)
+      await loadTaskTimeline(detailTask.id)
+    } catch (error) {
+      setCommentError(readApiError(error, '删除评论失败'))
+    } finally {
+      setCommentDeletingId(null)
+    }
   }
 
   const parentTaskOptions = useMemo(() => {
@@ -1074,6 +1169,75 @@ export function TasksPage() {
                   )) : '-'}
                 </div>
               </div>
+            </section>
+            <section className="detail-section task-collaboration-section">
+              <h4>动态</h4>
+              {!canReadComments && <p className="inline-tip">当前账号无评论与动态查看权限。</p>}
+              {canReadComments && (
+                <>
+                  <DataState loading={taskTimelineLoading} error={taskTimelineError} empty={!taskTimelineLoading && !taskTimelineError && taskActivities.length === 0} emptyText="暂无动态" onRetry={() => { if (detailTask) void loadTaskTimeline(detailTask.id) }} />
+                  {!taskTimelineLoading && !taskTimelineError && taskActivities.length > 0 && (
+                    <div className="task-timeline">
+                      {taskActivities.map((activity) => (
+                        <article key={activity.id} className="task-timeline-item">
+                          <div className="task-timeline-meta">
+                            <span className="task-timeline-badge">{activityTypeLabel[activity.type] || '动态'}</span>
+                            <span>{formatUserName(activity.actor)}</span>
+                            <span>{formatDateTime(activity.createdAt)}</span>
+                          </div>
+                          <strong>{activity.summary}</strong>
+                          {activity.detail && <p>{activity.detail}</p>}
+                        </article>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="task-comment-panel">
+                    <h4>评论</h4>
+                    {canCreateComment && (
+                      <form className="task-comment-form" onSubmit={submitComment}>
+                        <textarea
+                          aria-label="任务评论"
+                          rows={3}
+                          value={commentContent}
+                          onChange={(event) => setCommentContent(event.target.value)}
+                          placeholder="输入评论，可使用 @username 提及成员"
+                          disabled={commentSubmitting}
+                        />
+                        <div className="row-actions">
+                          <button type="submit" className="btn" disabled={commentSubmitting || !commentContent.trim()}>{commentSubmitting ? '发布中...' : '发表评论'}</button>
+                        </div>
+                      </form>
+                    )}
+                    {commentError && <p className="error">{commentError}</p>}
+                    <div className="task-comment-list">
+                      {taskComments.length === 0 && <p className="inline-tip">暂无评论</p>}
+                      {taskComments.map((comment) => {
+                        const canDeleteThisComment = canDeleteComment && (currentUserIsAdmin || comment.authorId === currentUserId)
+                        return (
+                          <article key={comment.id} className="task-comment-item">
+                            <div className="task-comment-meta">
+                              <strong>{formatUserName(comment.author)}</strong>
+                              <span>{formatDateTime(comment.createdAt)}</span>
+                            </div>
+                            <p>{comment.content}</p>
+                            {(comment.mentions || []).length > 0 && (
+                              <div className="task-comment-mentions">
+                                {(comment.mentions || []).map((user) => <span key={user.id}>@{user.username || user.name}</span>)}
+                              </div>
+                            )}
+                            {canDeleteThisComment && (
+                              <button type="button" className="btn danger" disabled={commentDeletingId === comment.id} onClick={() => { void deleteComment(comment) }}>
+                                {commentDeletingId === comment.id ? '删除中...' : '删除评论'}
+                              </button>
+                            )}
+                          </article>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
             </section>
           </div>
         )}

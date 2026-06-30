@@ -39,6 +39,9 @@
 | `tasks.read` | 查看任务 |
 | `tasks.update` | 更新任务（含依赖/排期） |
 | `tasks.delete` | 删除任务 |
+| `comments.create` | 创建任务评论与提及 |
+| `comments.read` | 查看任务评论与活动流 |
+| `comments.delete` | 删除自己的任务评论 |
 | `notifications.read` | 查看通知 |
 | `notifications.update` | 标记通知已读 |
 | `stats.read` | 查看统计分析 |
@@ -75,6 +78,9 @@
 | `PATCH /tasks/:id/progress` `PATCH /tasks/:id/complete` | `tasks.read` + 任务执行人/审核人关系校验 |
 | `PUT /tasks/:id` `PUT /tasks/:id/dependencies` `PATCH /tasks/:id/schedule` | `tasks.update` |
 | `DELETE /tasks/:id` | `tasks.delete` |
+| `GET /tasks/:id/comments` `GET /tasks/:id/activities` | `comments.read` + 任务可见范围 |
+| `POST /tasks/:id/comments` | `comments.create` + 任务可见范围 |
+| `DELETE /tasks/:id/comments/:commentId` | `comments.delete` + 评论作者/管理员 |
 | `GET /stats/dashboard` | `stats.read` |
 | `GET /notifications` `GET /notifications/unread-count` | `notifications.read` |
 | `PATCH /notifications/:id/read` `PATCH /notifications/read-all` | `notifications.update` |

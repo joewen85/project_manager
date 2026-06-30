@@ -747,6 +747,65 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .detail-time-line {
   grid-column: 1 / -1;
 }
+.task-collaboration-section .data-state {
+  min-height: 96px;
+}
+.task-timeline,
+.task-comment-list {
+  display: grid;
+  gap: 8px;
+}
+.task-timeline-item,
+.task-comment-item {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--color-surface) 92%, transparent);
+}
+.task-timeline-item strong,
+.task-comment-meta strong {
+  font-size: 14px;
+}
+.task-timeline-item p,
+.task-comment-item p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+}
+.task-timeline-meta,
+.task-comment-meta,
+.task-comment-mentions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.task-timeline-badge,
+.task-comment-mentions span {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+.task-comment-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.task-comment-panel h4 {
+  margin-top: 0;
+}
+.task-comment-form {
+  display: grid;
+  gap: 8px;
+}
+.task-comment-item .btn.danger {
+  margin-top: 8px;
+}
 @media (max-width: 900px) {
   .detail-columns { grid-template-columns: 1fr; }
 }

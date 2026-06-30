@@ -1683,3 +1683,184 @@ func TestDisabledUserCannotLogin(t *testing.T) {
 		t.Fatalf("disabled user login expected USER_DISABLED code got %v", loginBody["code"])
 	}
 }
+
+func TestTaskCommentsMentionsActivitiesAndScope(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "comment-collaborator",
+		"description": "comment collaborator",
+		"permissionIds": []uint{
+			codeToID["projects.read"],
+			codeToID["tasks.read"],
+			codeToID["comments.read"],
+			codeToID["comments.create"],
+			codeToID["comments.delete"],
+			codeToID["notifications.read"],
+			codeToID["notifications.update"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create comment role expected 201 got %d", roleResp.StatusCode)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	authorResp, authorBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "comment_author",
+		"name":          "Comment Author",
+		"email":         "comment_author@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if authorResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create author expected 201 got %d", authorResp.StatusCode)
+	}
+	authorID := uint(authorBody["id"].(float64))
+
+	mentionedResp, mentionedBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "comment_mentioned",
+		"name":          "Comment Mentioned",
+		"email":         "comment_mentioned@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if mentionedResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create mentioned expected 201 got %d", mentionedResp.StatusCode)
+	}
+	mentionedID := uint(mentionedBody["id"].(float64))
+
+	outsiderResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "comment_outsider",
+		"name":          "Comment Outsider",
+		"email":         "comment_outsider@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if outsiderResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create outsider expected 201 got %d", outsiderResp.StatusCode)
+	}
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "COMMENT-P1",
+		"name":        "Comment Project",
+		"description": "comment project",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Comment Task",
+		"projectId":   projectID,
+		"status":      "pending",
+		"progress":    0,
+		"assigneeIds": []uint{authorID, mentionedID},
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create task expected 201 got %d", taskResp.StatusCode)
+	}
+	taskID := int(taskBody["id"].(float64))
+
+	authorStatus, authorLogin := loginWithCredentials(t, ts.URL, "comment_author", "pass1234")
+	if authorStatus != http.StatusOK {
+		t.Fatalf("login author expected 200 got %d", authorStatus)
+	}
+	authorToken := authorLogin["token"].(string)
+
+	mentionedStatus, mentionedLogin := loginWithCredentials(t, ts.URL, "comment_mentioned", "pass1234")
+	if mentionedStatus != http.StatusOK {
+		t.Fatalf("login mentioned expected 200 got %d", mentionedStatus)
+	}
+	mentionedToken := mentionedLogin["token"].(string)
+
+	outsiderStatus, outsiderLogin := loginWithCredentials(t, ts.URL, "comment_outsider", "pass1234")
+	if outsiderStatus != http.StatusOK {
+		t.Fatalf("login outsider expected 200 got %d", outsiderStatus)
+	}
+	outsiderToken := outsiderLogin["token"].(string)
+
+	commentResp, commentBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/comments", authorToken, map[string]any{
+		"content": "请 @comment_mentioned 看一下这个风险点",
+	})
+	if commentResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create comment expected 201 got %d body=%v", commentResp.StatusCode, commentBody)
+	}
+	commentID := int(commentBody["id"].(float64))
+	mentions, _ := commentBody["mentions"].([]any)
+	if len(mentions) != 1 {
+		t.Fatalf("expected one mention in comment body got %v", commentBody["mentions"])
+	}
+
+	commentListResp, commentListBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/comments", authorToken, nil)
+	if commentListResp.StatusCode != http.StatusOK {
+		t.Fatalf("list comments expected 200 got %d", commentListResp.StatusCode)
+	}
+	commentList, _ := commentListBody["list"].([]any)
+	if len(commentList) != 1 {
+		t.Fatalf("expected one comment got %v", commentListBody)
+	}
+
+	activityResp, activityBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/activities", authorToken, nil)
+	if activityResp.StatusCode != http.StatusOK {
+		t.Fatalf("list activities expected 200 got %d", activityResp.StatusCode)
+	}
+	activities, _ := activityBody["list"].([]any)
+	foundCommentActivity := false
+	for _, raw := range activities {
+		item, _ := raw.(map[string]any)
+		if item["type"] == "comment.created" {
+			foundCommentActivity = true
+		}
+	}
+	if !foundCommentActivity {
+		t.Fatalf("expected comment.created activity got %v", activityBody)
+	}
+
+	notificationResp, notificationBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/notifications?module=tasks", mentionedToken, nil)
+	if notificationResp.StatusCode != http.StatusOK {
+		t.Fatalf("mentioned notifications expected 200 got %d", notificationResp.StatusCode)
+	}
+	notificationList, _ := notificationBody["list"].([]any)
+	foundMentionNotification := false
+	for _, raw := range notificationList {
+		item, _ := raw.(map[string]any)
+		if item["targetId"] == float64(taskID) && strings.Contains(item["title"].(string), "提及") {
+			foundMentionNotification = true
+		}
+	}
+	if !foundMentionNotification {
+		t.Fatalf("expected mention notification got %v", notificationBody)
+	}
+
+	outsiderListResp, _ := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/comments", outsiderToken, nil)
+	if outsiderListResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("outsider list comments expected 404 got %d", outsiderListResp.StatusCode)
+	}
+
+	deleteByMentionedResp, _ := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/comments/"+strconv.Itoa(commentID), mentionedToken, nil)
+	if deleteByMentionedResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("non-author delete expected 403 got %d", deleteByMentionedResp.StatusCode)
+	}
+
+	deleteByAuthorResp, _ := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/comments/"+strconv.Itoa(commentID), authorToken, nil)
+	if deleteByAuthorResp.StatusCode != http.StatusOK {
+		t.Fatalf("author delete expected 200 got %d", deleteByAuthorResp.StatusCode)
+	}
+
+	commentListAfterDeleteResp, commentListAfterDeleteBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/comments", authorToken, nil)
+	if commentListAfterDeleteResp.StatusCode != http.StatusOK {
+		t.Fatalf("list after delete expected 200 got %d", commentListAfterDeleteResp.StatusCode)
+	}
+	commentListAfterDelete, _ := commentListAfterDeleteBody["list"].([]any)
+	if len(commentListAfterDelete) != 0 {
+		t.Fatalf("deleted comment should be hidden got %v", commentListAfterDeleteBody)
+	}
+}

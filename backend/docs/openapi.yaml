@@ -872,6 +872,88 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: deleteTasksById
+  /tasks/{id}/comments:
+    get:
+      summary: 任务评论列表
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskCommentPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getTasksByIdComments
+    post:
+      summary: 创建任务评论
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCommentCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskComment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postTasksByIdComments
+  /tasks/{id}/comments/{commentId}:
+    delete:
+      summary: 删除任务评论
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      - in: path
+        name: commentId
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deleteTasksByIdCommentsByCommentId
+  /tasks/{id}/activities:
+    get:
+      summary: 任务活动流
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskActivityPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getTasksByIdActivities
   /tasks/{id}/dependencies:
     put:
       summary: 更新任务依赖
@@ -1457,6 +1539,79 @@ components:
         updatedAt:
           type: string
           format: date-time
+    TaskComment:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskId:
+          type: integer
+        authorId:
+          type: integer
+        author:
+          $ref: '#/components/schemas/UserLite'
+        content:
+          type: string
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+        mentions:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLite'
+        isDeleted:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TaskCommentCreateRequest:
+      type: object
+      required:
+      - content
+      properties:
+        content:
+          type: string
+          description: 支持 @username 提及已存在用户
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+        mentionIds:
+          type: array
+          items:
+            type: integer
+    TaskActivity:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskId:
+          type: integer
+        actorId:
+          type: integer
+        actor:
+          $ref: '#/components/schemas/UserLite'
+        type:
+          type: string
+        summary:
+          type: string
+        detail:
+          type: string
+        commentId:
+          type: integer
+          nullable: true
+        comment:
+          $ref: '#/components/schemas/TaskComment'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     Project:
       type: object
       properties:
@@ -1972,6 +2127,34 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Task'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    TaskCommentPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskComment'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    TaskActivityPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskActivity'
         total:
           type: integer
           format: int64

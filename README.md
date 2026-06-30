@@ -12,6 +12,7 @@
 - 项目列表 / 项目详情
 - 任务列表
 - 任务更新/删除
+- 任务评论 / @提及 / 活动流
 - 进度列表
 - 统计分析
 - 个人工作（我的任务 / 我的创建 / 我的参与）
@@ -239,6 +240,7 @@ make notify-test PROVIDER=feishu
 - RBAC 权限清单：`docs/RBAC_PERMISSIONS.md`
 - 前端 UI 规范：`docs/FRONTEND_UI_GUIDE.md`
 - 前端 UI 验收清单：`docs/UI_QA_CHECKLIST.md`
+- 数据库迁移：`backend/migrations/`（评论与活动流表已提供显式 SQL；本地测试仍通过 GORM AutoMigrate 初始化）
 
 ## Helm 部署
 ```bash

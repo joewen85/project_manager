@@ -117,6 +117,8 @@ type Task struct {
 	Reviewers    []User           `gorm:"many2many:task_reviewers;" json:"reviewers,omitempty"`
 	Tags         []Tag            `gorm:"many2many:task_tags;" json:"tags,omitempty"`
 	Dependencies []TaskDependency `gorm:"foreignKey:TaskID" json:"dependencies,omitempty"`
+	Comments     []TaskComment    `gorm:"foreignKey:TaskID" json:"comments,omitempty"`
+	Activities   []TaskActivity   `gorm:"foreignKey:TaskID" json:"activities,omitempty"`
 }
 
 type TaskDependency struct {
@@ -127,6 +129,31 @@ type TaskDependency struct {
 	Type            string `gorm:"size:8;default:'FS'" json:"type"`
 	Task            Task   `gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE;" json:"-"`
 	DependsOnTask   Task   `gorm:"foreignKey:DependsOnTaskID;constraint:OnDelete:CASCADE;" json:"-"`
+}
+
+type TaskComment struct {
+	BaseModel
+	TaskID      uint         `gorm:"not null;index;index:idx_task_comment_deleted_created" json:"taskId"`
+	Task        Task         `gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE;" json:"-"`
+	AuthorID    uint         `gorm:"not null;index" json:"authorId"`
+	Author      User         `json:"author,omitempty"`
+	Content     string       `gorm:"type:text;not null" json:"content"`
+	Attachments []Attachment `gorm:"serializer:json" json:"attachments"`
+	Mentions    []User       `gorm:"many2many:task_comment_mentions;" json:"mentions,omitempty"`
+	IsDeleted   bool         `gorm:"default:false;index;index:idx_task_comment_deleted_created" json:"isDeleted"`
+}
+
+type TaskActivity struct {
+	BaseModel
+	TaskID    uint         `gorm:"not null;index" json:"taskId"`
+	Task      Task         `gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE;" json:"-"`
+	ActorID   uint         `gorm:"index" json:"actorId"`
+	Actor     User         `json:"actor,omitempty"`
+	Type      string       `gorm:"size:50;not null;index" json:"type"`
+	Summary   string       `gorm:"size:255;not null" json:"summary"`
+	Detail    string       `gorm:"type:text" json:"detail"`
+	CommentID *uint        `gorm:"index" json:"commentId,omitempty"`
+	Comment   *TaskComment `json:"comment,omitempty"`
 }
 
 type AuditLog struct {
