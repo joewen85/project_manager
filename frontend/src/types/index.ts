@@ -264,6 +264,30 @@ export interface MyWorkData {
   myParticipate: Task[]
 }
 
+export interface TaskCalendarItem {
+  id: number
+  taskNo: string
+  title: string
+  status: Status
+  priority?: TaskPriority
+  isMilestone?: boolean
+  progress: number
+  startAt?: string
+  endAt?: string
+  projectId: number
+  projectCode?: string
+  projectName?: string
+  assignees?: User[]
+  reviewers?: User[]
+  tags?: Tag[]
+}
+
+export interface TaskCalendarResponse {
+  start?: string
+  end?: string
+  items?: TaskCalendarItem[]
+}
+
 export type ProjectHealthLevel = 'green' | 'yellow' | 'red'
 
 export interface ProjectHealth {

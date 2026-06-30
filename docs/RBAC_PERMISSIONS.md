@@ -84,7 +84,7 @@
 | `POST /projects` | `projects.create` |
 | `PUT /projects/:id` `POST /projects/:id/gantt/auto-resolve` | `projects.update` |
 | `DELETE /projects/:id` | `projects.delete` |
-| `GET /tasks*` | `tasks.read` |
+| `GET /tasks*` `GET /tasks/calendar` `GET /tasks/calendar.ics` | `tasks.read`；日程和 iCal 导出仅返回当前用户可见任务 |
 | `POST /tasks` | `tasks.create`；可写入估算/实际/剩余工时 |
 | `PATCH /tasks/:id/progress` `PATCH /tasks/:id/status` `PATCH /tasks/:id/complete` | `tasks.read` + 任务执行人/审核人关系校验 |
 | `PUT /tasks/:id` `PUT /tasks/:id/dependencies` `PATCH /tasks/:id/schedule` | `tasks.update`；`PUT /tasks/:id` 可更新估算/实际/剩余工时 |

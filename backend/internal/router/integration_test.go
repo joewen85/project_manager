@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1060,6 +1061,171 @@ func TestTaskWorkHoursCreateUpdateValidationAndExport(t *testing.T) {
 	exportText := string(exportRaw)
 	if !strings.Contains(exportText, "估算工时") || !strings.Contains(exportText, "工时任务更新") || !strings.Contains(exportText, "6.50") {
 		t.Fatalf("task export should contain work hour columns and values, got: %s", exportText)
+	}
+}
+
+func TestTaskCalendarAndICSUseVisibleScope(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "calendar-reader",
+		"description": "calendar reader",
+		"permissionIds": []uint{
+			codeToID["tasks.read"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create calendar role expected 201 got %d", roleResp.StatusCode)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	readerResp, readerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "calendar_reader",
+		"name":          "Calendar Reader",
+		"email":         "calendar_reader@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if readerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create calendar reader expected 201 got %d", readerResp.StatusCode)
+	}
+	readerID := uint(readerBody["id"].(float64))
+
+	hiddenResp, hiddenBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "calendar_hidden",
+		"name":          "Calendar Hidden",
+		"email":         "calendar_hidden@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{},
+		"departmentIds": []uint{},
+	})
+	if hiddenResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden calendar user expected 201 got %d", hiddenResp.StatusCode)
+	}
+	hiddenID := uint(hiddenBody["id"].(float64))
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "CAL-P1",
+		"name":        "日程项目",
+		"description": "calendar",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create calendar project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	visibleTaskResp, visibleTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Visible Calendar Task",
+		"projectId":   projectID,
+		"status":      "processing",
+		"progress":    30,
+		"startAt":     "2026-04-08T09:00:00Z",
+		"endAt":       "2026-04-08T11:00:00Z",
+		"assigneeIds": []uint{readerID},
+	})
+	if visibleTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible calendar task expected 201 got %d, body=%v", visibleTaskResp.StatusCode, visibleTaskBody)
+	}
+	visibleTaskID := int(visibleTaskBody["id"].(float64))
+
+	reviewTaskResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Review Calendar Task",
+		"projectId":   projectID,
+		"status":      "reviewing",
+		"progress":    100,
+		"endAt":       "2026-04-10T12:00:00Z",
+		"reviewerIds": []uint{readerID},
+	})
+	if reviewTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create review calendar task expected 201 got %d", reviewTaskResp.StatusCode)
+	}
+
+	_, _ = requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Hidden Calendar Task",
+		"projectId":   projectID,
+		"status":      "processing",
+		"progress":    20,
+		"startAt":     "2026-04-08T09:00:00Z",
+		"endAt":       "2026-04-08T11:00:00Z",
+		"assigneeIds": []uint{hiddenID},
+	})
+	_, _ = requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Outside Calendar Task",
+		"projectId":   projectID,
+		"status":      "processing",
+		"progress":    20,
+		"startAt":     "2026-05-08T09:00:00Z",
+		"endAt":       "2026-05-08T11:00:00Z",
+		"assigneeIds": []uint{readerID},
+	})
+
+	loginStatus, loginBody := loginWithCredentials(t, ts.URL, "calendar_reader", "pass1234")
+	if loginStatus != http.StatusOK {
+		t.Fatalf("login calendar reader expected 200 got %d", loginStatus)
+	}
+	readerToken := loginBody["token"].(string)
+
+	query := url.Values{}
+	query.Set("start", "2026-04-01T00:00:00Z")
+	query.Set("end", "2026-04-30T23:59:59Z")
+	query.Set("mine", "true")
+	calendarResp, calendarBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/calendar?"+query.Encode(), readerToken, nil)
+	if calendarResp.StatusCode != http.StatusOK {
+		t.Fatalf("calendar expected 200 got %d, body=%v", calendarResp.StatusCode, calendarBody)
+	}
+	items, _ := calendarBody["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("calendar reader should see two visible April items got %v", calendarBody)
+	}
+	foundVisible := false
+	for _, raw := range items {
+		item, _ := raw.(map[string]any)
+		if int(item["id"].(float64)) == visibleTaskID {
+			foundVisible = true
+			if item["projectName"] != "日程项目" {
+				t.Fatalf("calendar item should include project name got %v", item)
+			}
+		}
+		if item["title"] == "Hidden Calendar Task" || item["title"] == "Outside Calendar Task" {
+			t.Fatalf("calendar leaked hidden or out-of-range task: %v", item)
+		}
+	}
+	if !foundVisible {
+		t.Fatalf("calendar should include visible task id %d got %v", visibleTaskID, items)
+	}
+
+	icsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tasks/calendar.ics?"+query.Encode(), nil)
+	icsReq.Header.Set("Authorization", "Bearer "+readerToken)
+	icsResp, err := http.DefaultClient.Do(icsReq)
+	if err != nil {
+		t.Fatalf("calendar ics request failed: %v", err)
+	}
+	icsRaw, _ := io.ReadAll(icsResp.Body)
+	icsResp.Body.Close()
+	icsText := string(icsRaw)
+	if icsResp.StatusCode != http.StatusOK {
+		t.Fatalf("calendar ics expected 200 got %d: %s", icsResp.StatusCode, icsText)
+	}
+	if !strings.Contains(icsResp.Header.Get("Content-Type"), "text/calendar") {
+		t.Fatalf("calendar ics content type unexpected: %s", icsResp.Header.Get("Content-Type"))
+	}
+	if !strings.Contains(icsText, "BEGIN:VCALENDAR") || !strings.Contains(icsText, "Visible Calendar Task") || strings.Contains(icsText, "Hidden Calendar Task") {
+		t.Fatalf("calendar ics content unexpected: %s", icsText)
+	}
+
+	invalidQuery := url.Values{}
+	invalidQuery.Set("start", "2026-04-30T00:00:00Z")
+	invalidQuery.Set("end", "2026-04-01T00:00:00Z")
+	invalidResp, invalidBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/calendar?"+invalidQuery.Encode(), readerToken, nil)
+	if invalidResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid calendar range expected 400 got %d", invalidResp.StatusCode)
+	}
+	if invalidBody["code"] != "INVALID_CALENDAR_RANGE" {
+		t.Fatalf("invalid calendar range expected INVALID_CALENDAR_RANGE got %v", invalidBody["code"])
 	}
 }
 

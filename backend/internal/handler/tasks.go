@@ -364,6 +364,29 @@ type ganttItem struct {
 	Dependencies []ganttDependencyItem `json:"dependencies"`
 }
 
+type taskCalendarTag struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+}
+
+type taskCalendarItem struct {
+	ID          uint                 `json:"id"`
+	TaskNo      string               `json:"taskNo"`
+	Title       string               `json:"title"`
+	Status      string               `json:"status"`
+	Priority    string               `json:"priority"`
+	IsMilestone bool                 `json:"isMilestone"`
+	Progress    int                  `json:"progress"`
+	StartAt     *time.Time           `json:"startAt"`
+	EndAt       *time.Time           `json:"endAt"`
+	ProjectID   uint                 `json:"projectId"`
+	ProjectCode string               `json:"projectCode"`
+	ProjectName string               `json:"projectName"`
+	Assignees   []taskAssigneeOption `json:"assignees"`
+	Reviewers   []taskAssigneeOption `json:"reviewers"`
+	Tags        []taskCalendarTag    `json:"tags"`
+}
+
 type projectLite struct {
 	ID   uint
 	Code string
@@ -433,19 +456,123 @@ func (h *Handler) collectVisibleProjects(c *gin.Context, projectIDs []uint) (map
 	return projectMap, nil
 }
 
+func parseTaskCalendarRange(c *gin.Context) (time.Time, time.Time, error) {
+	now := time.Now()
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	defaultStart := monthStart.AddDate(0, 0, -7)
+	defaultEnd := monthStart.AddDate(0, 1, 7).Add(-time.Nanosecond)
+
+	startAt, err := parseRFC3339(c.Query("start"))
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	endAt, err := parseRFC3339(c.Query("end"))
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	start := defaultStart
+	if startAt != nil {
+		start = *startAt
+	}
+	end := defaultEnd
+	if endAt != nil {
+		end = *endAt
+	}
+	if end.Before(start) {
+		return time.Time{}, time.Time{}, fmt.Errorf("end must be after start")
+	}
+	return start, end, nil
+}
+
+func applyTaskCalendarRange(query *gorm.DB, start, end time.Time) *gorm.DB {
+	return query.
+		Where("tasks.start_at IS NOT NULL OR tasks.end_at IS NOT NULL").
+		Where(`(
+			(tasks.start_at IS NOT NULL AND tasks.end_at IS NOT NULL AND tasks.start_at <= ? AND tasks.end_at >= ?)
+			OR (tasks.start_at IS NULL AND tasks.end_at BETWEEN ? AND ?)
+			OR (tasks.end_at IS NULL AND tasks.start_at BETWEEN ? AND ?)
+		)`, end, start, start, end, start, end)
+}
+
+func applyTaskCalendarMineFilter(c *gin.Context, query *gorm.DB) *gorm.DB {
+	mine := strings.EqualFold(c.Query("mine"), "true") || c.Query("mine") == "1"
+	if !mine {
+		return query
+	}
+	uid := c.GetUint("userId")
+	if uid == 0 {
+		return query.Where("1 = 0")
+	}
+	return query.Where(
+		"tasks.creator_id = ? OR EXISTS (SELECT 1 FROM task_users calendar_tu WHERE calendar_tu.task_id = tasks.id AND calendar_tu.user_id = ?) OR EXISTS (SELECT 1 FROM task_reviewers calendar_tr WHERE calendar_tr.task_id = tasks.id AND calendar_tr.user_id = ?)",
+		uid,
+		uid,
+		uid,
+	)
+}
+
+func toTaskAssigneeOptions(users []model.User) []taskAssigneeOption {
+	out := make([]taskAssigneeOption, 0, len(users))
+	for _, user := range users {
+		out = append(out, taskAssigneeOption{
+			ID:       user.ID,
+			Name:     user.Name,
+			Username: user.Username,
+			Email:    user.Email,
+		})
+	}
+	return out
+}
+
+func toTaskCalendarItems(tasks []model.Task, projectMeta map[uint]projectLite) []taskCalendarItem {
+	result := make([]taskCalendarItem, 0, len(tasks))
+	for _, task := range tasks {
+		tags := make([]taskCalendarTag, 0, len(task.Tags))
+		for _, tag := range task.Tags {
+			tags = append(tags, taskCalendarTag{ID: tag.ID, Name: tag.Name})
+		}
+		meta := projectMeta[task.ProjectID]
+		result = append(result, taskCalendarItem{
+			ID:          task.ID,
+			TaskNo:      task.TaskNo,
+			Title:       task.Title,
+			Status:      string(task.Status),
+			Priority:    string(task.Priority),
+			IsMilestone: task.IsMilestone,
+			Progress:    task.Progress,
+			StartAt:     task.StartAt,
+			EndAt:       task.EndAt,
+			ProjectID:   task.ProjectID,
+			ProjectCode: meta.Code,
+			ProjectName: meta.Name,
+			Assignees:   toTaskAssigneeOptions(task.Assignees),
+			Reviewers:   toTaskAssigneeOptions(task.Reviewers),
+			Tags:        tags,
+		})
+	}
+	return result
+}
+
+func projectIDsFromTasks(tasks []model.Task) []uint {
+	seen := map[uint]struct{}{}
+	out := make([]uint, 0, len(tasks))
+	for _, task := range tasks {
+		if task.ProjectID == 0 {
+			continue
+		}
+		if _, ok := seen[task.ProjectID]; ok {
+			continue
+		}
+		seen[task.ProjectID] = struct{}{}
+		out = append(out, task.ProjectID)
+	}
+	return out
+}
+
 func toGanttItems(tasks []model.Task, projectMeta map[uint]projectLite) []ganttItem {
 	result := make([]ganttItem, 0, len(tasks))
 	for _, task := range tasks {
 		meta := projectMeta[task.ProjectID]
-		assignees := make([]taskAssigneeOption, 0, len(task.Assignees))
-		for _, assignee := range task.Assignees {
-			assignees = append(assignees, taskAssigneeOption{
-				ID:       assignee.ID,
-				Name:     assignee.Name,
-				Username: assignee.Username,
-				Email:    assignee.Email,
-			})
-		}
 		dependencies := make([]ganttDependencyItem, 0, len(task.Dependencies))
 		for _, dependency := range task.Dependencies {
 			dependencies = append(dependencies, ganttDependencyItem{
@@ -470,11 +597,90 @@ func toGanttItems(tasks []model.Task, projectMeta map[uint]projectLite) []ganttI
 			ProjectID:    task.ProjectID,
 			ProjectCode:  meta.Code,
 			ProjectName:  meta.Name,
-			Assignees:    assignees,
+			Assignees:    toTaskAssigneeOptions(task.Assignees),
 			Dependencies: dependencies,
 		})
 	}
 	return result
+}
+
+func icsEscape(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, "\r\n", "\n")
+	value = strings.ReplaceAll(value, "\r", "\n")
+	value = strings.ReplaceAll(value, "\n", `\n`)
+	value = strings.ReplaceAll(value, ";", `\;`)
+	value = strings.ReplaceAll(value, ",", `\,`)
+	return value
+}
+
+func formatICSTime(value time.Time) string {
+	return value.UTC().Format("20060102T150405Z")
+}
+
+func taskCalendarEventTime(item taskCalendarItem) (time.Time, time.Time, bool) {
+	var start time.Time
+	switch {
+	case item.StartAt != nil:
+		start = *item.StartAt
+	case item.EndAt != nil:
+		start = *item.EndAt
+	default:
+		return time.Time{}, time.Time{}, false
+	}
+	end := start.Add(time.Hour)
+	if item.EndAt != nil && item.EndAt.After(start) {
+		end = *item.EndAt
+	}
+	return start, end, true
+}
+
+func joinTaskCalendarUsers(users []taskAssigneeOption) string {
+	parts := make([]string, 0, len(users))
+	for _, user := range users {
+		if user.Name != "" {
+			parts = append(parts, user.Name)
+			continue
+		}
+		parts = append(parts, user.Username)
+	}
+	return strings.Join(parts, "，")
+}
+
+func buildTaskCalendarICS(items []taskCalendarItem) string {
+	var builder strings.Builder
+	builder.WriteString("BEGIN:VCALENDAR\r\n")
+	builder.WriteString("VERSION:2.0\r\n")
+	builder.WriteString("PRODID:-//Project Manager//Task Calendar//CN\r\n")
+	builder.WriteString("CALSCALE:GREGORIAN\r\n")
+	builder.WriteString("METHOD:PUBLISH\r\n")
+	now := formatICSTime(time.Now())
+	for _, item := range items {
+		start, end, ok := taskCalendarEventTime(item)
+		if !ok {
+			continue
+		}
+		summary := item.Title
+		if item.TaskNo != "" {
+			summary = item.TaskNo + " " + summary
+		}
+		description := strings.Join([]string{
+			"项目：" + item.ProjectName,
+			"状态：" + item.Status,
+			"执行人：" + joinTaskCalendarUsers(item.Assignees),
+			"审核人：" + joinTaskCalendarUsers(item.Reviewers),
+		}, "\n")
+		builder.WriteString("BEGIN:VEVENT\r\n")
+		builder.WriteString("UID:task-" + strconv.FormatUint(uint64(item.ID), 10) + "@project-manager\r\n")
+		builder.WriteString("DTSTAMP:" + now + "\r\n")
+		builder.WriteString("DTSTART:" + formatICSTime(start) + "\r\n")
+		builder.WriteString("DTEND:" + formatICSTime(end) + "\r\n")
+		builder.WriteString("SUMMARY:" + icsEscape(summary) + "\r\n")
+		builder.WriteString("DESCRIPTION:" + icsEscape(description) + "\r\n")
+		builder.WriteString("END:VEVENT\r\n")
+	}
+	builder.WriteString("END:VCALENDAR\r\n")
+	return builder.String()
 }
 
 func (h *Handler) ListTasks(c *gin.Context) {
@@ -522,6 +728,61 @@ func (h *Handler) ListTasks(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, pageResult[model.Task]{List: tasks, Total: total, Page: page, PageSize: pageSize})
+}
+
+func (h *Handler) loadTaskCalendarItems(c *gin.Context, start, end time.Time) ([]taskCalendarItem, error) {
+	var tasks []model.Task
+	query := h.DB.Model(&model.Task{}).
+		Preload("Assignees").
+		Preload("Reviewers").
+		Preload("Tags", func(db *gorm.DB) *gorm.DB { return db.Order("tags.name asc") })
+	query = h.scopeTasksQuery(c, query)
+	query = applyTaskCalendarMineFilter(c, query)
+	query = applyTaskCalendarRange(query, start, end)
+	if err := query.Order("COALESCE(tasks.start_at, tasks.end_at) asc").Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+	if len(tasks) == 0 {
+		return []taskCalendarItem{}, nil
+	}
+	projectMap, err := h.collectVisibleProjects(c, projectIDsFromTasks(tasks))
+	if err != nil {
+		return nil, err
+	}
+	return toTaskCalendarItems(tasks, projectMap), nil
+}
+
+func (h *Handler) TaskCalendar(c *gin.Context) {
+	start, end, err := parseTaskCalendarRange(c)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_CALENDAR_RANGE", "start/end 必须是 RFC3339 时间格式，且 end 不早于 start")
+		return
+	}
+	items, err := h.loadTaskCalendarItems(c, start, end)
+	if err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_TASK_CALENDAR_FAILED", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"start": start,
+		"end":   end,
+		"items": items,
+	})
+}
+
+func (h *Handler) ExportTaskCalendarICS(c *gin.Context) {
+	start, end, err := parseTaskCalendarRange(c)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_CALENDAR_RANGE", "start/end 必须是 RFC3339 时间格式，且 end 不早于 start")
+		return
+	}
+	items, err := h.loadTaskCalendarItems(c, start, end)
+	if err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_TASK_CALENDAR_FAILED", err)
+		return
+	}
+	c.Header("Content-Disposition", `attachment; filename="task-calendar.ics"`)
+	c.Data(http.StatusOK, "text/calendar; charset=utf-8", []byte(buildTaskCalendarICS(items)))
 }
 
 func (h *Handler) TaskAssigneeOptions(c *gin.Context) {

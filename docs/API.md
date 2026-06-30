@@ -41,7 +41,7 @@ Base URL: `http://localhost:8080/api/v1`
 | PUT | `/projects/:id` | `projects.update` |
 | POST | `/projects/:id/gantt/auto-resolve` | `projects.update` |
 | DELETE | `/projects/:id` | `projects.delete` |
-| GET | `/tasks*` | `tasks.read` |
+| GET | `/tasks*` `/tasks/calendar` `/tasks/calendar.ics` | `tasks.read` |
 | POST | `/tasks` | `tasks.create` |
 | PUT | `/tasks/:id` `/tasks/:id/dependencies` | `tasks.update` |
 | PATCH | `/tasks/:id/progress` `/tasks/:id/status` `/tasks/:id/complete` | `tasks.read` + 任务执行人/审核人关系校验 |
@@ -189,6 +189,20 @@ Base URL: `http://localhost:8080/api/v1`
 - 用途: 任务编辑弹窗执行人选项
 - Query: `keyword` `pageSize`
 - 响应: `{ users: [{ id, name, username, email }] }`
+
+### GET `/tasks/calendar`
+- 用途: 我的日程月/周/日视图
+- Query: `start` `end` `mine`
+  - `start`/`end` 为 RFC3339 时间；未传时默认返回当前月视图范围
+  - `mine=true` 时只返回当前用户创建、执行或审核相关任务；普通用户仍受任务可见范围限制
+- 口径: 返回有开始或结束时间、且与查询范围有交集的任务
+- 响应: `{ start, end, items: TaskCalendarItem[] }`
+- `TaskCalendarItem`: `{ id, taskNo, title, status, priority, isMilestone, progress, startAt, endAt, projectId, projectCode, projectName, assignees, reviewers, tags }`
+
+### GET `/tasks/calendar.ics`
+- 用途: 导出当前可见日程为 iCal
+- Query: 同 `/tasks/calendar`
+- 响应: `text/calendar`
 
 ### POST `/tasks`
 - 请求体: `{ taskNo?, title, description, customField1?, customField2?, customField3?, status, priority, isMilestone, progress, estimatedHours?, actualHours?, remainingHours?, startAt, endAt, attachments?, projectId, parentId, assigneeIds, tagIds, dependencies? }`

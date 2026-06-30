@@ -107,6 +107,8 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			tasks.GET("", middleware.RequirePermission(h.DB, "tasks.read"), h.ListTasks)
 			tasks.GET("/export", middleware.RequirePermission(h.DB, "tasks.read"), h.ExportTasksCSV)
 			tasks.GET("/assignee-options", middleware.RequirePermission(h.DB, "tasks.read"), h.TaskAssigneeOptions)
+			tasks.GET("/calendar", middleware.RequirePermission(h.DB, "tasks.read"), h.TaskCalendar)
+			tasks.GET("/calendar.ics", middleware.RequirePermission(h.DB, "tasks.read"), h.ExportTaskCalendarICS)
 			tasks.POST("", middleware.RequirePermission(h.DB, "tasks.create"), h.CreateTask)
 			tasks.GET("/:id/comments", middleware.RequirePermission(h.DB, "comments.read"), h.ListTaskComments)
 			tasks.POST("/:id/comments", middleware.RequirePermission(h.DB, "comments.create"), h.CreateTaskComment)

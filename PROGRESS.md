@@ -116,6 +116,10 @@
 - 完成：新增 `GET /stats/member-workload`，按当前用户可见任务聚合本周成员估算/实际/剩余工时与容量使用率，超过容量标记过载
 - 完成：Tasks 页面支持工时录入、列表/Kanban/详情展示，Users 页面支持周容量维护，Dashboard 增加本周成员负载与过载人数
 - 完成：补充任务工时创建/更新/导出、用户容量校验、成员负载可见范围集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
+- 完成：按 `Improvement.md` 推进 P1-2 日历视图与个人日程 MVP
+- 完成：新增 `GET /tasks/calendar` 与 `GET /tasks/calendar.ics`，按日期范围和任务可见范围返回个人日程并支持 iCal 导出
+- 完成：前端新增“我的日程”页面，支持月/周/日切换、今日/前后导航、任务跳转与 iCal 下载
+- 完成：补充日程 JSON/iCal/非法范围/普通用户可见范围集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

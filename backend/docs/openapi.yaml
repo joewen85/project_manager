@@ -834,6 +834,68 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: getTasksAssigneeOptions
+  /tasks/calendar:
+    get:
+      summary: 任务日程
+      description: 按日期范围返回当前用户可见任务，mine=true 时仅返回当前用户创建、执行或审核相关任务。
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: mine
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskCalendarResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getTasksCalendar
+  /tasks/calendar.ics:
+    get:
+      summary: 导出任务日程 iCal
+      description: 按日期范围导出当前用户可见任务日程。
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: mine
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: iCal
+          content:
+            text/calendar:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getTasksCalendarIcs
   /tasks/{id}:
     put:
       summary: 更新任务
@@ -2844,6 +2906,60 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Task'
+    TaskCalendarResponse:
+      type: object
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskCalendarItem'
+    TaskCalendarItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskNo:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+        priority:
+          type: string
+        isMilestone:
+          type: boolean
+        progress:
+          type: integer
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        projectId:
+          type: integer
+        projectCode:
+          type: string
+        projectName:
+          type: string
+        assignees:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLite'
+        reviewers:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLite'
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
     DashboardStatsResponse:
       type: object
       properties:

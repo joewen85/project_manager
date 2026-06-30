@@ -17,6 +17,7 @@ const GanttPage = lazy(async () => import('./pages/GanttPage').then((module) => 
 const RbacPage = lazy(async () => import('./pages/RbacPage').then((module) => ({ default: module.RbacPage })))
 const AuditPage = lazy(async () => import('./pages/AuditPage').then((module) => ({ default: module.AuditPage })))
 const AutomationRulesPage = lazy(async () => import('./pages/AutomationRulesPage').then((module) => ({ default: module.AutomationRulesPage })))
+const CalendarPage = lazy(async () => import('./pages/CalendarPage').then((module) => ({ default: module.CalendarPage })))
 const TasksPage = lazy(async () => import('./pages/TasksPage').then((module) => ({ default: module.TasksPage })))
 const UsersPage = lazy(async () => import('./pages/UsersPage').then((module) => ({ default: module.UsersPage })))
 
@@ -47,6 +48,7 @@ const protectedRoutes = [
   { path: '/project-templates', permission: 'templates.read' },
   { path: '/gantt', permission: 'projects.read' },
   { path: '/tasks', permission: 'tasks.read' },
+  { path: '/calendar', permission: 'tasks.read' },
   { path: '/requests', permission: 'requests.read' },
   { path: '/automation-rules', permission: 'automations.read' },
   { path: '/notifications', permission: 'notifications.read' },
@@ -142,6 +144,7 @@ export default function App() {
           <Route path="project-templates" element={<PermissionGuard permission="templates.read"><ProjectTemplatesPage /></PermissionGuard>} />
           <Route path="gantt" element={<PermissionGuard permission="projects.read"><GanttPage /></PermissionGuard>} />
           <Route path="tasks" element={<PermissionGuard permission="tasks.read"><TasksPage /></PermissionGuard>} />
+          <Route path="calendar" element={<PermissionGuard permission="tasks.read"><CalendarPage /></PermissionGuard>} />
           <Route path="requests" element={<PermissionGuard permission="requests.read"><RequestsPage /></PermissionGuard>} />
           <Route path="automation-rules" element={<PermissionGuard permission="automations.read"><AutomationRulesPage /></PermissionGuard>} />
           <Route path="notifications" element={<PermissionGuard permission="notifications.read"><NotificationsPage /></PermissionGuard>} />
