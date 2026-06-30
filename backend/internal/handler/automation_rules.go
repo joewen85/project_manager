@@ -22,10 +22,14 @@ type automationRuleRequest struct {
 }
 
 type automationConditionsRequest struct {
-	OverdueDays  *int     `json:"overdueDays"`
-	ProjectIDs   []uint   `json:"projectIds"`
-	FromStatuses []string `json:"fromStatuses"`
-	ToStatuses   []string `json:"toStatuses"`
+	OverdueDays     *int     `json:"overdueDays"`
+	ProjectIDs      []uint   `json:"projectIds"`
+	FromStatuses    []string `json:"fromStatuses"`
+	ToStatuses      []string `json:"toStatuses"`
+	FromProgressMin *int     `json:"fromProgressMin"`
+	FromProgressMax *int     `json:"fromProgressMax"`
+	ToProgressMin   *int     `json:"toProgressMin"`
+	ToProgressMax   *int     `json:"toProgressMax"`
 }
 
 type automationActionsRequest struct {
@@ -41,6 +45,8 @@ func normalizeAutomationTrigger(value string) (model.AutomationTrigger, bool) {
 		return model.AutomationTriggerTaskOverdue, true
 	case model.AutomationTriggerTaskStatusChanged:
 		return model.AutomationTriggerTaskStatusChanged, true
+	case model.AutomationTriggerTaskProgressChanged:
+		return model.AutomationTriggerTaskProgressChanged, true
 	default:
 		return model.AutomationTriggerTaskOverdue, false
 	}
@@ -66,6 +72,29 @@ func normalizeAutomationStatusList(values []string, fieldName string) ([]model.T
 	return result, nil
 }
 
+func validateAutomationProgressBound(value *int, fieldName string) error {
+	if value == nil {
+		return nil
+	}
+	if *value < 0 || *value > 100 {
+		return fmt.Errorf("%s 必须在 0 到 100 之间", fieldName)
+	}
+	return nil
+}
+
+func validateAutomationProgressRange(minValue *int, maxValue *int, label string) error {
+	if err := validateAutomationProgressBound(minValue, label+"Min"); err != nil {
+		return err
+	}
+	if err := validateAutomationProgressBound(maxValue, label+"Max"); err != nil {
+		return err
+	}
+	if minValue != nil && maxValue != nil && *minValue > *maxValue {
+		return fmt.Errorf("%sMin 不能大于 %sMax", label, label)
+	}
+	return nil
+}
+
 func normalizeAutomationConditions(req automationConditionsRequest, trigger model.AutomationTrigger) (model.AutomationConditions, error) {
 	overdueDays := 1
 	if req.OverdueDays != nil {
@@ -85,11 +114,25 @@ func normalizeAutomationConditions(req automationConditionsRequest, trigger mode
 	if trigger == model.AutomationTriggerTaskStatusChanged && len(req.FromStatuses) == 0 && len(req.ToStatuses) == 0 {
 		return model.AutomationConditions{}, fmt.Errorf("状态变更规则至少需要设置变更前或变更后状态")
 	}
+	if err := validateAutomationProgressRange(req.FromProgressMin, req.FromProgressMax, "fromProgress"); err != nil {
+		return model.AutomationConditions{}, err
+	}
+	if err := validateAutomationProgressRange(req.ToProgressMin, req.ToProgressMax, "toProgress"); err != nil {
+		return model.AutomationConditions{}, err
+	}
+	if trigger == model.AutomationTriggerTaskProgressChanged &&
+		req.FromProgressMin == nil && req.FromProgressMax == nil && req.ToProgressMin == nil && req.ToProgressMax == nil {
+		return model.AutomationConditions{}, fmt.Errorf("进度变更规则至少需要设置变更前或变更后进度条件")
+	}
 	return model.AutomationConditions{
-		OverdueDays:  overdueDays,
-		ProjectIDs:   uniqueUint(req.ProjectIDs),
-		FromStatuses: fromStatuses,
-		ToStatuses:   toStatuses,
+		OverdueDays:     overdueDays,
+		ProjectIDs:      uniqueUint(req.ProjectIDs),
+		FromStatuses:    fromStatuses,
+		ToStatuses:      toStatuses,
+		FromProgressMin: req.FromProgressMin,
+		FromProgressMax: req.FromProgressMax,
+		ToProgressMin:   req.ToProgressMin,
+		ToProgressMax:   req.ToProgressMax,
 	}, nil
 }
 
@@ -108,7 +151,7 @@ func normalizeAutomationActions(req automationActionsRequest, trigger model.Auto
 		AddComment:          boolValue(req.AddComment, false),
 		CommentContent:      strings.TrimSpace(req.CommentContent),
 	}
-	if trigger == model.AutomationTriggerTaskStatusChanged && actions.AddComment {
+	if (trigger == model.AutomationTriggerTaskStatusChanged || trigger == model.AutomationTriggerTaskProgressChanged) && actions.AddComment {
 		return actions, nil
 	}
 	if !actions.NotifyAssignees && !actions.NotifyProjectOwners {
@@ -124,7 +167,7 @@ func buildAutomationRuleFromRequest(req automationRuleRequest, actorID uint) (mo
 	}
 	trigger, ok := normalizeAutomationTrigger(req.Trigger)
 	if !ok {
-		return model.AutomationRule{}, fmt.Errorf("触发器必须是 task_overdue 或 task_status_changed")
+		return model.AutomationRule{}, fmt.Errorf("触发器必须是 task_overdue、task_status_changed 或 task_progress_changed")
 	}
 	conditions, err := normalizeAutomationConditions(req.Conditions, trigger)
 	if err != nil {
@@ -397,6 +440,32 @@ func taskStatusChangeRuleMatches(conditions model.AutomationConditions, task mod
 	return true
 }
 
+func progressBoundMatches(value int, minValue *int, maxValue *int) bool {
+	if minValue != nil && value < *minValue {
+		return false
+	}
+	if maxValue != nil && value > *maxValue {
+		return false
+	}
+	return true
+}
+
+func taskProgressChangeRuleMatches(conditions model.AutomationConditions, task model.Task, oldProgress int, newProgress int) bool {
+	if oldProgress == newProgress {
+		return false
+	}
+	if len(conditions.ProjectIDs) > 0 && !containsUint(conditions.ProjectIDs, task.ProjectID) {
+		return false
+	}
+	if !progressBoundMatches(oldProgress, conditions.FromProgressMin, conditions.FromProgressMax) {
+		return false
+	}
+	if !progressBoundMatches(newProgress, conditions.ToProgressMin, conditions.ToProgressMax) {
+		return false
+	}
+	return true
+}
+
 func renderAutomationCommentContent(template string, task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus) string {
 	content := strings.TrimSpace(template)
 	if content == "" {
@@ -411,8 +480,26 @@ func renderAutomationCommentContent(template string, task model.Task, oldStatus 
 	return replacer.Replace(content)
 }
 
+func renderAutomationProgressCommentContent(template string, task model.Task, oldProgress int, newProgress int) string {
+	content := strings.TrimSpace(template)
+	if content == "" {
+		content = "自动化：任务进度已从 {fromProgress}% 更新为 {toProgress}%"
+	}
+	replacer := strings.NewReplacer(
+		"{taskNo}", task.TaskNo,
+		"{title}", task.Title,
+		"{fromProgress}", strconv.Itoa(oldProgress),
+		"{toProgress}", strconv.Itoa(newProgress),
+	)
+	return replacer.Replace(content)
+}
+
 func taskStatusChangedNotificationContent(task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus) string {
 	return fmt.Sprintf("任务 %s - %s 状态已从 %s 更新为 %s", task.TaskNo, task.Title, oldStatus, newStatus)
+}
+
+func taskProgressChangedNotificationContent(task model.Task, oldProgress int, newProgress int) string {
+	return fmt.Sprintf("任务 %s - %s 进度已从 %d%% 更新为 %d%%", task.TaskNo, task.Title, oldProgress, newProgress)
 }
 
 func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Task, oldStatus model.TaskStatus, newStatus model.TaskStatus, actorID uint) ([]uint, error) {
@@ -483,6 +570,74 @@ func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Ta
 	return uniqueUint(notifiedIDs), nil
 }
 
+func (h *Handler) executeTaskProgressChangedRulesWithDB(tx *gorm.DB, task model.Task, oldProgress int, newProgress int, actorID uint) ([]uint, error) {
+	if oldProgress == newProgress {
+		return nil, nil
+	}
+
+	if err := tx.Preload("Assignees").Preload("Project.Users").First(&task, task.ID).Error; err != nil {
+		return nil, err
+	}
+
+	var rules []model.AutomationRule
+	if err := tx.Where("is_enabled = ? AND trigger = ?", true, model.AutomationTriggerTaskProgressChanged).Order("id asc").Find(&rules).Error; err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	notifiedIDs := make([]uint, 0)
+	for _, rule := range rules {
+		if !taskProgressChangeRuleMatches(rule.Conditions, task, oldProgress, newProgress) {
+			continue
+		}
+
+		actionCount := 0
+		recipients := automationTaskRecipients(task, rule.Actions)
+		if len(recipients) > 0 {
+			content := taskProgressChangedNotificationContent(task, oldProgress, newProgress)
+			if err := h.createNotificationsWithDB(tx, recipients, "任务进度已变更", content, "tasks", task.ID); err != nil {
+				return notifiedIDs, err
+			}
+			actionCount += len(recipients)
+			notifiedIDs = append(notifiedIDs, recipients...)
+		}
+
+		if rule.Actions.AddComment {
+			comment := model.TaskComment{
+				TaskID:   task.ID,
+				AuthorID: actorID,
+				Content:  renderAutomationProgressCommentContent(rule.Actions.CommentContent, task, oldProgress, newProgress),
+			}
+			if err := tx.Create(&comment).Error; err != nil {
+				return notifiedIDs, err
+			}
+			commentID := comment.ID
+			if err := h.writeTaskActivityWithDB(tx, task.ID, actorID, "automation.comment_created", "自动化评论", comment.Content, &commentID); err != nil {
+				return notifiedIDs, err
+			}
+			actionCount += 1
+		}
+
+		logItem := model.AutomationExecutionLog{
+			RuleID:       rule.ID,
+			Trigger:      rule.Trigger,
+			Status:       model.AutomationExecutionSuccess,
+			MatchedCount: 1,
+			ActionCount:  actionCount,
+			Message:      fmt.Sprintf("任务 %s 进度从 %d%% 更新为 %d%%，执行 %d 个动作", task.TaskNo, oldProgress, newProgress, actionCount),
+			ActorID:      actorID,
+			RunSource:    "event",
+		}
+		if err := tx.Create(&logItem).Error; err != nil {
+			return notifiedIDs, err
+		}
+		if err := tx.Model(&model.AutomationRule{}).Where("id = ?", rule.ID).Update("last_run_at", now).Error; err != nil {
+			return notifiedIDs, err
+		}
+	}
+	return uniqueUint(notifiedIDs), nil
+}
+
 func (h *Handler) recordAutomationFailure(rule model.AutomationRule, actorID uint, source string, execErr error) model.AutomationExecutionLog {
 	logItem := model.AutomationExecutionLog{
 		RuleID:    rule.ID,
@@ -526,6 +681,9 @@ func (h *Handler) executeAutomationRule(c *gin.Context, rule model.AutomationRul
 		case model.AutomationTriggerTaskStatusChanged:
 			logItem.Status = model.AutomationExecutionSkipped
 			logItem.Message = "状态变更规则仅在任务状态变更事件中执行"
+		case model.AutomationTriggerTaskProgressChanged:
+			logItem.Status = model.AutomationExecutionSkipped
+			logItem.Message = "进度变更规则仅在任务进度变更事件中执行"
 		default:
 			err = fmt.Errorf("不支持的自动化触发器：%s", rule.Trigger)
 		}

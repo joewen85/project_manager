@@ -1332,6 +1332,7 @@ paths:
           enum:
           - task_overdue
           - task_status_changed
+          - task_progress_changed
       - in: query
         name: isEnabled
         schema:
@@ -1393,6 +1394,7 @@ paths:
           enum:
           - task_overdue
           - task_status_changed
+          - task_progress_changed
       responses:
         '200':
           description: OK
@@ -2236,6 +2238,22 @@ components:
             - processing
             - reviewing
             - completed
+        fromProgressMin:
+          type: integer
+          minimum: 0
+          maximum: 100
+        fromProgressMax:
+          type: integer
+          minimum: 0
+          maximum: 100
+        toProgressMin:
+          type: integer
+          minimum: 0
+          maximum: 100
+        toProgressMax:
+          type: integer
+          minimum: 0
+          maximum: 100
     AutomationActions:
       type: object
       properties:
@@ -2259,6 +2277,7 @@ components:
           enum:
           - task_overdue
           - task_status_changed
+          - task_progress_changed
         isEnabled:
           type: boolean
         conditions:
@@ -2291,6 +2310,7 @@ components:
           enum:
           - task_overdue
           - task_status_changed
+          - task_progress_changed
         isEnabled:
           type: boolean
         conditions:
@@ -2311,6 +2331,7 @@ components:
           enum:
           - task_overdue
           - task_status_changed
+          - task_progress_changed
         status:
           type: string
           enum:

@@ -2264,6 +2264,231 @@ func TestAutomationRuleTaskStatusChangedCommentAndNotification(t *testing.T) {
 	}
 }
 
+func TestAutomationRuleTaskProgressChangedCommentAndNotification(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	collaboratorRoleResp, collaboratorRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "automation-progress-collaborator",
+		"description": "can update task progress and read notifications",
+		"permissionIds": []uint{
+			codeToID["projects.read"],
+			codeToID["tasks.read"],
+			codeToID["notifications.read"],
+			codeToID["notifications.update"],
+		},
+	})
+	if collaboratorRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation progress collaborator role expected 201 got %d", collaboratorRoleResp.StatusCode)
+	}
+	collaboratorRoleID := uint(collaboratorRoleBody["id"].(float64))
+
+	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "automation-progress-owner",
+		"description": "can read automation progress notifications",
+		"permissionIds": []uint{
+			codeToID["notifications.read"],
+			codeToID["notifications.update"],
+		},
+	})
+	if notificationRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation progress owner role expected 201 got %d", notificationRoleResp.StatusCode)
+	}
+	notificationRoleID := uint(notificationRoleBody["id"].(float64))
+
+	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "automation_progress_owner",
+		"name":          "Automation Progress Owner",
+		"email":         "automation_progress_owner@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{notificationRoleID},
+		"departmentIds": []uint{},
+	})
+	if ownerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation progress owner expected 201 got %d", ownerResp.StatusCode)
+	}
+	ownerID := uint(ownerBody["id"].(float64))
+
+	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "automation_progress_assignee",
+		"name":          "Automation Progress Assignee",
+		"email":         "automation_progress_assignee@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{collaboratorRoleID},
+		"departmentIds": []uint{},
+	})
+	if assigneeResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation progress assignee expected 201 got %d", assigneeResp.StatusCode)
+	}
+	assigneeID := uint(assigneeBody["id"].(float64))
+
+	assigneeLoginStatus, assigneeLoginBody := loginWithCredentials(t, ts.URL, "automation_progress_assignee", "pass1234")
+	if assigneeLoginStatus != http.StatusOK {
+		t.Fatalf("login automation progress assignee expected 200 got %d", assigneeLoginStatus)
+	}
+	assigneeToken := assigneeLoginBody["token"].(string)
+	ownerLoginStatus, ownerLoginBody := loginWithCredentials(t, ts.URL, "automation_progress_owner", "pass1234")
+	if ownerLoginStatus != http.StatusOK {
+		t.Fatalf("login automation progress owner expected 200 got %d", ownerLoginStatus)
+	}
+	ownerToken := ownerLoginBody["token"].(string)
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":    "AUTO-PROGRESS-P1",
+		"name":    "Automation Progress Project",
+		"userIds": []uint{ownerID},
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation progress project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	taskResp, taskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Automation progress task",
+		"projectId":   projectID,
+		"status":      "processing",
+		"progress":    10,
+		"assigneeIds": []uint{assigneeID},
+	})
+	if taskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create automation progress task expected 201 got %d %#v", taskResp.StatusCode, taskBody)
+	}
+	taskID := int(taskBody["id"].(float64))
+	taskNo := taskBody["taskNo"].(string)
+
+	invalidRuleResp, invalidRuleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":    "无效进度条件",
+		"trigger": "task_progress_changed",
+		"conditions": map[string]any{
+			"toProgressMin": 101,
+		},
+		"actions": map[string]any{
+			"addComment": true,
+		},
+	})
+	if invalidRuleResp.StatusCode != http.StatusBadRequest || invalidRuleBody["code"] != "INVALID_AUTOMATION_RULE" {
+		t.Fatalf("invalid progress condition expected 400 INVALID_AUTOMATION_RULE got %d %#v", invalidRuleResp.StatusCode, invalidRuleBody)
+	}
+
+	missingConditionResp, missingConditionBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":       "缺少进度条件",
+		"trigger":    "task_progress_changed",
+		"conditions": map[string]any{},
+		"actions": map[string]any{
+			"addComment": true,
+		},
+	})
+	if missingConditionResp.StatusCode != http.StatusBadRequest || missingConditionBody["code"] != "INVALID_AUTOMATION_RULE" {
+		t.Fatalf("missing progress condition expected 400 INVALID_AUTOMATION_RULE got %d %#v", missingConditionResp.StatusCode, missingConditionBody)
+	}
+
+	ruleResp, ruleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules", adminToken, map[string]any{
+		"name":      "进度达到 50 提醒",
+		"trigger":   "task_progress_changed",
+		"isEnabled": true,
+		"conditions": map[string]any{
+			"projectIds":      []uint{uint(projectID)},
+			"fromProgressMax": 49,
+			"toProgressMin":   50,
+		},
+		"actions": map[string]any{
+			"notifyAssignees":     true,
+			"notifyProjectOwners": true,
+			"addComment":          true,
+			"commentContent":      "进度从 {fromProgress} 到 {toProgress}: {taskNo}",
+		},
+	})
+	if ruleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create progress automation rule expected 201 got %d %#v", ruleResp.StatusCode, ruleBody)
+	}
+	ruleID := int(ruleBody["id"].(float64))
+
+	runResp, runBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/automation-rules/"+strconv.Itoa(ruleID)+"/run", adminToken, nil)
+	if runResp.StatusCode != http.StatusOK {
+		t.Fatalf("manual run progress automation expected 200 got %d %#v", runResp.StatusCode, runBody)
+	}
+	if runBody["status"] != "skipped" {
+		t.Fatalf("manual run progress automation should be skipped got %#v", runBody)
+	}
+
+	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/automation-rules?trigger=task_progress_changed&keyword=进度", adminToken, nil)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list progress automation rules expected 200 got %d", listResp.StatusCode)
+	}
+	if list, ok := listBody["list"].([]any); !ok || len(list) != 1 {
+		t.Fatalf("progress automation list should include rule got %#v", listBody)
+	}
+
+	progressResp, progressBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/progress", assigneeToken, map[string]any{
+		"progress": 55,
+	})
+	if progressResp.StatusCode != http.StatusOK {
+		t.Fatalf("patch progress expected 200 got %d %#v", progressResp.StatusCode, progressBody)
+	}
+
+	commentResp, commentBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/comments", adminToken, nil)
+	if commentResp.StatusCode != http.StatusOK {
+		t.Fatalf("list automation progress comments expected 200 got %d", commentResp.StatusCode)
+	}
+	comments, _ := commentBody["list"].([]any)
+	if len(comments) != 1 {
+		t.Fatalf("progress automation should create one comment got %#v", commentBody)
+	}
+	comment := comments[0].(map[string]any)
+	if !strings.Contains(comment["content"].(string), "进度从 10 到 55: "+taskNo) {
+		t.Fatalf("automation progress comment should render progress placeholders got %#v", comment)
+	}
+
+	logResp, logBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/automation-rules/logs?ruleId="+strconv.Itoa(ruleID)+"&trigger=task_progress_changed", adminToken, nil)
+	if logResp.StatusCode != http.StatusOK {
+		t.Fatalf("list progress automation logs expected 200 got %d", logResp.StatusCode)
+	}
+	logItems, _ := logBody["list"].([]any)
+	if len(logItems) != 2 {
+		t.Fatalf("progress automation should create one event log got %#v", logBody)
+	}
+	logItem := logItems[0].(map[string]any)
+	if logItem["status"] != "success" || logItem["runSource"] != "event" || int(logItem["matchedCount"].(float64)) != 1 || int(logItem["actionCount"].(float64)) != 3 {
+		t.Fatalf("progress automation log should record event success with 3 actions got %#v", logItem)
+	}
+
+	assigneeNotificationResp, assigneeNotificationBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/notifications?module=tasks&keyword=进度", assigneeToken, nil)
+	if assigneeNotificationResp.StatusCode != http.StatusOK {
+		t.Fatalf("assignee progress notifications expected 200 got %d", assigneeNotificationResp.StatusCode)
+	}
+	assigneeNotifications, _ := assigneeNotificationBody["list"].([]any)
+	if len(assigneeNotifications) == 0 {
+		t.Fatalf("assignee should receive progress automation notification got %#v", assigneeNotificationBody)
+	}
+
+	ownerNotificationResp, ownerNotificationBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/notifications?module=tasks&keyword=进度", ownerToken, nil)
+	if ownerNotificationResp.StatusCode != http.StatusOK {
+		t.Fatalf("owner progress notifications expected 200 got %d", ownerNotificationResp.StatusCode)
+	}
+	ownerNotifications, _ := ownerNotificationBody["list"].([]any)
+	if len(ownerNotifications) == 0 {
+		t.Fatalf("project owner should receive progress automation notification got %#v", ownerNotificationBody)
+	}
+
+	sameProgressResp, sameProgressBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/tasks/"+strconv.Itoa(taskID)+"/progress", assigneeToken, map[string]any{
+		"progress": 55,
+	})
+	if sameProgressResp.StatusCode != http.StatusOK {
+		t.Fatalf("patch same progress expected 200 got %d %#v", sameProgressResp.StatusCode, sameProgressBody)
+	}
+	duplicateLogResp, duplicateLogBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/automation-rules/logs?ruleId="+strconv.Itoa(ruleID), adminToken, nil)
+	if duplicateLogResp.StatusCode != http.StatusOK {
+		t.Fatalf("list duplicate progress automation logs expected 200 got %d", duplicateLogResp.StatusCode)
+	}
+	duplicateLogItems, _ := duplicateLogBody["list"].([]any)
+	if len(duplicateLogItems) != 2 {
+		t.Fatalf("same progress patch should not trigger automation again got %#v", duplicateLogBody)
+	}
+}
+
 func TestMyTasksReturnsEmptyArrays(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

@@ -18,6 +18,10 @@ interface AutomationRuleForm {
   projectIds: number[]
   fromStatuses: Status[]
   toStatuses: Status[]
+  fromProgressMin: string
+  fromProgressMax: string
+  toProgressMin: string
+  toProgressMax: string
   notifyAssignees: boolean
   notifyProjectOwners: boolean
   addComment: boolean
@@ -32,6 +36,10 @@ const initialForm: AutomationRuleForm = {
   projectIds: [],
   fromStatuses: [],
   toStatuses: [],
+  fromProgressMin: '',
+  fromProgressMax: '',
+  toProgressMin: '',
+  toProgressMax: '',
   notifyAssignees: true,
   notifyProjectOwners: true,
   addComment: false,
@@ -40,7 +48,8 @@ const initialForm: AutomationRuleForm = {
 
 const triggerLabel: Record<AutomationTrigger, string> = {
   task_overdue: '任务逾期',
-  task_status_changed: '任务状态变更'
+  task_status_changed: '任务状态变更',
+  task_progress_changed: '任务进度变更'
 }
 
 const taskStatusLabel: Record<Status, string> = {
@@ -67,6 +76,14 @@ const statusOptions: Status[] = ['pending', 'queued', 'processing', 'reviewing',
 const toggleNumber = (list: number[], id: number) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
 const toggleStatus = (list: Status[], status: Status) => list.includes(status) ? list.filter((item) => item !== status) : [...list, status]
 const formatStatuses = (statuses?: Status[]) => statuses?.length ? statuses.map((status) => taskStatusLabel[status]).join('，') : '任意'
+const optionalProgress = (value: string) => value.trim() === '' ? undefined : Number(value)
+const progressText = (min?: number, max?: number) => {
+  if (min === undefined && max === undefined) return '任意'
+  if (min !== undefined && max !== undefined) return `${min}% 至 ${max}%`
+  if (min !== undefined) return `不低于 ${min}%`
+  return `不高于 ${max}%`
+}
+const isEventTrigger = (trigger: AutomationTrigger) => trigger === 'task_status_changed' || trigger === 'task_progress_changed'
 
 export function AutomationRulesPage() {
   const permissions = usePermissions()
@@ -165,6 +182,10 @@ export function AutomationRulesPage() {
       projectIds: item.conditions?.projectIds || [],
       fromStatuses: item.conditions?.fromStatuses || [],
       toStatuses: item.conditions?.toStatuses || [],
+      fromProgressMin: item.conditions?.fromProgressMin === undefined ? '' : String(item.conditions.fromProgressMin),
+      fromProgressMax: item.conditions?.fromProgressMax === undefined ? '' : String(item.conditions.fromProgressMax),
+      toProgressMin: item.conditions?.toProgressMin === undefined ? '' : String(item.conditions.toProgressMin),
+      toProgressMax: item.conditions?.toProgressMax === undefined ? '' : String(item.conditions.toProgressMax),
       notifyAssignees: item.actions?.notifyAssignees ?? true,
       notifyProjectOwners: item.actions?.notifyProjectOwners ?? true,
       addComment: item.actions?.addComment ?? false,
@@ -180,7 +201,7 @@ export function AutomationRulesPage() {
     if (form.id && !canUpdateRule) return
     if (!form.id && !canCreateRule) return
     const hasNotificationAction = form.notifyAssignees || form.notifyProjectOwners
-    const hasCommentAction = form.trigger === 'task_status_changed' && form.addComment
+    const hasCommentAction = isEventTrigger(form.trigger) && form.addComment
     if (!hasNotificationAction && !hasCommentAction) {
       setFormError('至少选择一个动作')
       return
@@ -188,6 +209,28 @@ export function AutomationRulesPage() {
     if (form.trigger === 'task_status_changed' && form.fromStatuses.length === 0 && form.toStatuses.length === 0) {
       setFormError('至少选择一个状态条件')
       return
+    }
+    const progressValues = [form.fromProgressMin, form.fromProgressMax, form.toProgressMin, form.toProgressMax]
+    if (form.trigger === 'task_progress_changed' && progressValues.every((value) => value.trim() === '')) {
+      setFormError('至少填写一个进度条件')
+      return
+    }
+    if (form.trigger === 'task_progress_changed') {
+      const parsedProgressValues = progressValues
+        .filter((value) => value.trim() !== '')
+        .map(Number)
+      if (parsedProgressValues.some((value) => !Number.isFinite(value) || value < 0 || value > 100)) {
+        setFormError('进度条件必须在 0 到 100 之间')
+        return
+      }
+      const fromMin = optionalProgress(form.fromProgressMin)
+      const fromMax = optionalProgress(form.fromProgressMax)
+      const toMin = optionalProgress(form.toProgressMin)
+      const toMax = optionalProgress(form.toProgressMax)
+      if ((fromMin !== undefined && fromMax !== undefined && fromMin > fromMax) || (toMin !== undefined && toMax !== undefined && toMin > toMax)) {
+        setFormError('进度下限不能大于上限')
+        return
+      }
     }
     try {
       setSubmitting(true)
@@ -200,13 +243,17 @@ export function AutomationRulesPage() {
           overdueDays: Number(form.overdueDays || 0),
           projectIds: form.projectIds,
           fromStatuses: form.trigger === 'task_status_changed' ? form.fromStatuses : [],
-          toStatuses: form.trigger === 'task_status_changed' ? form.toStatuses : []
+          toStatuses: form.trigger === 'task_status_changed' ? form.toStatuses : [],
+          fromProgressMin: form.trigger === 'task_progress_changed' ? optionalProgress(form.fromProgressMin) : undefined,
+          fromProgressMax: form.trigger === 'task_progress_changed' ? optionalProgress(form.fromProgressMax) : undefined,
+          toProgressMin: form.trigger === 'task_progress_changed' ? optionalProgress(form.toProgressMin) : undefined,
+          toProgressMax: form.trigger === 'task_progress_changed' ? optionalProgress(form.toProgressMax) : undefined
         },
         actions: {
           notifyAssignees: form.notifyAssignees,
           notifyProjectOwners: form.notifyProjectOwners,
-          addComment: form.trigger === 'task_status_changed' ? form.addComment : false,
-          commentContent: form.trigger === 'task_status_changed' ? form.commentContent.trim() : ''
+          addComment: isEventTrigger(form.trigger) ? form.addComment : false,
+          commentContent: isEventTrigger(form.trigger) ? form.commentContent.trim() : ''
         }
       }
       if (form.id) await api.put(`/automation-rules/${form.id}`, payload)
@@ -281,6 +328,7 @@ export function AutomationRulesPage() {
           <option value="all">全部触发器</option>
           <option value="task_overdue">任务逾期</option>
           <option value="task_status_changed">任务状态变更</option>
+          <option value="task_progress_changed">任务进度变更</option>
         </select>
         <div className="row-actions">
           <button className="btn" onClick={() => { setPage(1); setKeyword(keywordInput.trim()) }}>查询</button>
@@ -302,7 +350,9 @@ export function AutomationRulesPage() {
                 <td data-label="条件">
                   {item.trigger === 'task_overdue'
                     ? `逾期 ${item.conditions?.overdueDays ?? 1} 天`
-                    : `从 ${formatStatuses(item.conditions?.fromStatuses)} 到 ${formatStatuses(item.conditions?.toStatuses)}`}
+                    : item.trigger === 'task_status_changed'
+                      ? `从 ${formatStatuses(item.conditions?.fromStatuses)} 到 ${formatStatuses(item.conditions?.toStatuses)}`
+                      : `从 ${progressText(item.conditions?.fromProgressMin, item.conditions?.fromProgressMax)} 到 ${progressText(item.conditions?.toProgressMin, item.conditions?.toProgressMax)}`}
                   {item.conditions?.projectIds?.length ? `；项目 ${item.conditions.projectIds.map((id) => projectNameById.get(id) || id).join('，')}` : ''}
                 </td>
                 <td data-label="动作">
@@ -366,12 +416,17 @@ export function AutomationRulesPage() {
               trigger: event.target.value as AutomationTrigger,
               fromStatuses: [],
               toStatuses: [],
+              fromProgressMin: '',
+              fromProgressMax: '',
+              toProgressMin: '',
+              toProgressMax: '',
               addComment: false,
               commentContent: ''
             }))}
           >
             <option value="task_overdue">任务逾期</option>
             <option value="task_status_changed">任务状态变更</option>
+            <option value="task_progress_changed">任务进度变更</option>
           </select>
           <label htmlFor="automation-enabled">启用状态</label>
           <select id="automation-enabled" value={form.isEnabled ? 'enabled' : 'disabled'} onChange={(event) => setForm((prev) => ({ ...prev, isEnabled: event.target.value === 'enabled' }))}>
@@ -406,6 +461,18 @@ export function AutomationRulesPage() {
               </div>
             </>
           )}
+          {form.trigger === 'task_progress_changed' && (
+            <>
+              <label htmlFor="automation-from-progress-min">变更前进度下限</label>
+              <input id="automation-from-progress-min" type="number" min={0} max={100} value={form.fromProgressMin} onChange={(event) => setForm((prev) => ({ ...prev, fromProgressMin: event.target.value }))} />
+              <label htmlFor="automation-from-progress-max">变更前进度上限</label>
+              <input id="automation-from-progress-max" type="number" min={0} max={100} value={form.fromProgressMax} onChange={(event) => setForm((prev) => ({ ...prev, fromProgressMax: event.target.value }))} />
+              <label htmlFor="automation-to-progress-min">变更后进度下限</label>
+              <input id="automation-to-progress-min" type="number" min={0} max={100} value={form.toProgressMin} onChange={(event) => setForm((prev) => ({ ...prev, toProgressMin: event.target.value }))} />
+              <label htmlFor="automation-to-progress-max">变更后进度上限</label>
+              <input id="automation-to-progress-max" type="number" min={0} max={100} value={form.toProgressMax} onChange={(event) => setForm((prev) => ({ ...prev, toProgressMax: event.target.value }))} />
+            </>
+          )}
           {canReadProjects && (
             <>
               <label htmlFor="automation-projects">项目范围</label>
@@ -431,7 +498,7 @@ export function AutomationRulesPage() {
               <span>项目负责人</span>
             </label>
           </div>
-          {form.trigger === 'task_status_changed' && (
+          {isEventTrigger(form.trigger) && (
             <>
               <label htmlFor="automation-comment-action">自动评论</label>
               <div id="automation-comment-action" className="multi-checklist">

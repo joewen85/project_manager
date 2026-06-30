@@ -892,7 +892,14 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 			if err != nil {
 				return err
 			}
-			automationNotifyIDs = append([]uint(nil), notifiedIDs...)
+			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+		}
+		if oldProgress != item.Progress {
+			notifiedIDs, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
+			if err != nil {
+				return err
+			}
+			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
 		}
 		return h.writeAuditWithDB(c, tx, "tasks", "update", item.ID, true, auditDetailf("更新任务(id=%d)", item.ID))
 	}); err != nil {
@@ -983,7 +990,14 @@ func (h *Handler) UpdateTaskProgress(c *gin.Context) {
 			if err != nil {
 				return err
 			}
-			automationNotifyIDs = append([]uint(nil), notifiedIDs...)
+			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+		}
+		if oldProgress != item.Progress {
+			notifiedIDs, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
+			if err != nil {
+				return err
+			}
+			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
 		}
 		return h.writeAuditWithDB(c, tx, "tasks", "update_progress", item.ID, true, auditDetailf("更新任务进度(id=%d)", item.ID))
 	}); err != nil {
@@ -1074,7 +1088,14 @@ func (h *Handler) UpdateTaskStatus(c *gin.Context) {
 		if err != nil {
 			return err
 		}
-		automationNotifyIDs = append([]uint(nil), notifiedIDs...)
+		automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+		if oldProgress != item.Progress {
+			notifiedIDs, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
+			if err != nil {
+				return err
+			}
+			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+		}
 		return h.writeAuditWithDB(c, tx, "tasks", "update_status", item.ID, true, auditDetailf("更新任务状态(id=%d)", item.ID))
 	}); err != nil {
 		respondDBError(c, http.StatusBadRequest, "UPDATE_TASK_STATUS_FAILED", err)
@@ -1128,7 +1149,14 @@ func (h *Handler) CompleteTask(c *gin.Context) {
 			if err != nil {
 				return err
 			}
-			automationNotifyIDs = append([]uint(nil), notifiedIDs...)
+			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
+		}
+		if oldProgress != item.Progress {
+			notifiedIDs, err := h.executeTaskProgressChangedRulesWithDB(tx, item, oldProgress, item.Progress, currentUserID)
+			if err != nil {
+				return err
+			}
+			automationNotifyIDs = append(automationNotifyIDs, notifiedIDs...)
 		}
 		return h.writeAuditWithDB(c, tx, "tasks", "complete", item.ID, true, auditDetailf("完成任务审核(id=%d)", item.ID))
 	}); err != nil {

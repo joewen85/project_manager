@@ -2,7 +2,7 @@ export type Status = 'pending' | 'queued' | 'processing' | 'reviewing' | 'comple
 export type TaskPriority = 'high' | 'medium' | 'low'
 export type WorkRequestType = 'project' | 'task' | 'bug' | 'change'
 export type WorkRequestStatus = 'submitted' | 'approved' | 'rejected' | 'converted'
-export type AutomationTrigger = 'task_overdue' | 'task_status_changed'
+export type AutomationTrigger = 'task_overdue' | 'task_status_changed' | 'task_progress_changed'
 export type AutomationExecutionStatus = 'success' | 'skipped' | 'failed'
 
 export interface PageResult<T> {
@@ -169,6 +169,10 @@ export interface AutomationConditions {
   projectIds?: number[]
   fromStatuses?: Status[]
   toStatuses?: Status[]
+  fromProgressMin?: number
+  fromProgressMax?: number
+  toProgressMin?: number
+  toProgressMax?: number
 }
 
 export interface AutomationActions {

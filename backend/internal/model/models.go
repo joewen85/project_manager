@@ -41,8 +41,9 @@ const (
 type AutomationTrigger string
 
 const (
-	AutomationTriggerTaskOverdue       AutomationTrigger = "task_overdue"
-	AutomationTriggerTaskStatusChanged AutomationTrigger = "task_status_changed"
+	AutomationTriggerTaskOverdue         AutomationTrigger = "task_overdue"
+	AutomationTriggerTaskStatusChanged   AutomationTrigger = "task_status_changed"
+	AutomationTriggerTaskProgressChanged AutomationTrigger = "task_progress_changed"
 )
 
 type AutomationExecutionStatus string
@@ -233,10 +234,14 @@ type WorkRequest struct {
 }
 
 type AutomationConditions struct {
-	OverdueDays  int          `json:"overdueDays"`
-	ProjectIDs   []uint       `json:"projectIds"`
-	FromStatuses []TaskStatus `json:"fromStatuses"`
-	ToStatuses   []TaskStatus `json:"toStatuses"`
+	OverdueDays     int          `json:"overdueDays"`
+	ProjectIDs      []uint       `json:"projectIds"`
+	FromStatuses    []TaskStatus `json:"fromStatuses"`
+	ToStatuses      []TaskStatus `json:"toStatuses"`
+	FromProgressMin *int         `json:"fromProgressMin,omitempty"`
+	FromProgressMax *int         `json:"fromProgressMax,omitempty"`
+	ToProgressMin   *int         `json:"toProgressMin,omitempty"`
+	ToProgressMax   *int         `json:"toProgressMax,omitempty"`
 }
 
 type AutomationActions struct {
