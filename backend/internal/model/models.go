@@ -138,6 +138,28 @@ type APIToken struct {
 	ServiceRole      Role       `gorm:"foreignKey:ServiceRoleID" json:"serviceRole,omitempty"`
 }
 
+type PortalInvite struct {
+	BaseModel
+	Name               string       `gorm:"size:150;not null;index" json:"name"`
+	Company            string       `gorm:"size:150" json:"company"`
+	ContactName        string       `gorm:"size:120" json:"contactName"`
+	ContactEmail       string       `gorm:"size:160" json:"contactEmail"`
+	ContactType        string       `gorm:"size:40;default:'customer';index" json:"contactType"`
+	TokenPrefix        string       `gorm:"size:32;not null;index" json:"tokenPrefix"`
+	TokenLastFour      string       `gorm:"size:8;not null" json:"tokenLastFour"`
+	TokenHash          string       `gorm:"size:128;uniqueIndex;not null" json:"-"`
+	IsEnabled          bool         `gorm:"default:true;index" json:"isEnabled"`
+	ExpiresAt          *time.Time   `json:"expiresAt,omitempty"`
+	RevokedAt          *time.Time   `gorm:"index" json:"revokedAt,omitempty"`
+	LastUsedAt         *time.Time   `json:"lastUsedAt,omitempty"`
+	LastUsedIP         string       `gorm:"size:50" json:"lastUsedIp"`
+	AllowedAttachments []Attachment `gorm:"serializer:json" json:"allowedAttachments"`
+	ProjectID          uint         `gorm:"not null;index" json:"projectId"`
+	Project            Project      `json:"project,omitempty"`
+	CreatedByID        uint         `gorm:"not null;index" json:"createdById"`
+	CreatedBy          User         `json:"createdBy,omitempty"`
+}
+
 type Department struct {
 	BaseModel
 	Name        string    `gorm:"size:100;uniqueIndex;not null" json:"name"`
@@ -398,36 +420,37 @@ type WebhookDelivery struct {
 
 type Task struct {
 	BaseModel
-	TaskNo         string           `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`
-	Title          string           `gorm:"size:150;not null" json:"title"`
-	Description    string           `gorm:"type:text" json:"description"`
-	CustomField1   string           `gorm:"type:text" json:"customField1"`
-	CustomField2   string           `gorm:"type:text" json:"customField2"`
-	CustomField3   string           `gorm:"type:text" json:"customField3"`
-	Status         TaskStatus       `gorm:"size:20;default:'pending';index" json:"status"`
-	Priority       TaskPriority     `gorm:"size:20;default:'high';index" json:"priority"`
-	IsMilestone    bool             `gorm:"default:false;index" json:"isMilestone"`
-	Progress       int              `gorm:"default:0" json:"progress"`
-	EstimatedHours float64          `gorm:"type:decimal(10,2);default:0" json:"estimatedHours"`
-	ActualHours    float64          `gorm:"type:decimal(10,2);default:0" json:"actualHours"`
-	RemainingHours float64          `gorm:"type:decimal(10,2);default:0" json:"remainingHours"`
-	StartAt        *time.Time       `json:"startAt"`
-	EndAt          *time.Time       `json:"endAt"`
-	Attachment     Attachment       `gorm:"embedded;embeddedPrefix:attachment_" json:"attachment,omitempty"`
-	Attachments    []Attachment     `gorm:"serializer:json" json:"attachments"`
-	CreatorID      uint             `gorm:"not null;index" json:"creatorId"`
-	Creator        User             `json:"creator,omitempty"`
-	ProjectID      uint             `gorm:"not null;index" json:"projectId"`
-	ProjectName    string           `gorm:"->;column:project_name;-:migration" json:"projectName,omitempty"`
-	Project        Project          `json:"project,omitempty"`
-	ParentID       *uint            `gorm:"index" json:"parentId"`
-	Children       []Task           `gorm:"foreignKey:ParentID" json:"children,omitempty"`
-	Assignees      []User           `gorm:"many2many:task_users;" json:"assignees,omitempty"`
-	Reviewers      []User           `gorm:"many2many:task_reviewers;" json:"reviewers,omitempty"`
-	Tags           []Tag            `gorm:"many2many:task_tags;" json:"tags,omitempty"`
-	Dependencies   []TaskDependency `gorm:"foreignKey:TaskID" json:"dependencies,omitempty"`
-	Comments       []TaskComment    `gorm:"foreignKey:TaskID" json:"comments,omitempty"`
-	Activities     []TaskActivity   `gorm:"foreignKey:TaskID" json:"activities,omitempty"`
+	TaskNo          string           `gorm:"size:64;uniqueIndex;not null" json:"taskNo"`
+	Title           string           `gorm:"size:150;not null" json:"title"`
+	Description     string           `gorm:"type:text" json:"description"`
+	CustomField1    string           `gorm:"type:text" json:"customField1"`
+	CustomField2    string           `gorm:"type:text" json:"customField2"`
+	CustomField3    string           `gorm:"type:text" json:"customField3"`
+	Status          TaskStatus       `gorm:"size:20;default:'pending';index" json:"status"`
+	Priority        TaskPriority     `gorm:"size:20;default:'high';index" json:"priority"`
+	IsMilestone     bool             `gorm:"default:false;index" json:"isMilestone"`
+	ExternalVisible bool             `gorm:"default:false;index" json:"externalVisible"`
+	Progress        int              `gorm:"default:0" json:"progress"`
+	EstimatedHours  float64          `gorm:"type:decimal(10,2);default:0" json:"estimatedHours"`
+	ActualHours     float64          `gorm:"type:decimal(10,2);default:0" json:"actualHours"`
+	RemainingHours  float64          `gorm:"type:decimal(10,2);default:0" json:"remainingHours"`
+	StartAt         *time.Time       `json:"startAt"`
+	EndAt           *time.Time       `json:"endAt"`
+	Attachment      Attachment       `gorm:"embedded;embeddedPrefix:attachment_" json:"attachment,omitempty"`
+	Attachments     []Attachment     `gorm:"serializer:json" json:"attachments"`
+	CreatorID       uint             `gorm:"not null;index" json:"creatorId"`
+	Creator         User             `json:"creator,omitempty"`
+	ProjectID       uint             `gorm:"not null;index" json:"projectId"`
+	ProjectName     string           `gorm:"->;column:project_name;-:migration" json:"projectName,omitempty"`
+	Project         Project          `json:"project,omitempty"`
+	ParentID        *uint            `gorm:"index" json:"parentId"`
+	Children        []Task           `gorm:"foreignKey:ParentID" json:"children,omitempty"`
+	Assignees       []User           `gorm:"many2many:task_users;" json:"assignees,omitempty"`
+	Reviewers       []User           `gorm:"many2many:task_reviewers;" json:"reviewers,omitempty"`
+	Tags            []Tag            `gorm:"many2many:task_tags;" json:"tags,omitempty"`
+	Dependencies    []TaskDependency `gorm:"foreignKey:TaskID" json:"dependencies,omitempty"`
+	Comments        []TaskComment    `gorm:"foreignKey:TaskID" json:"comments,omitempty"`
+	Activities      []TaskActivity   `gorm:"foreignKey:TaskID" json:"activities,omitempty"`
 }
 
 type TaskDependency struct {
@@ -442,14 +465,20 @@ type TaskDependency struct {
 
 type TaskComment struct {
 	BaseModel
-	TaskID      uint         `gorm:"not null;index;index:idx_task_comment_deleted_created" json:"taskId"`
-	Task        Task         `gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE;" json:"-"`
-	AuthorID    uint         `gorm:"not null;index" json:"authorId"`
-	Author      User         `json:"author,omitempty"`
-	Content     string       `gorm:"type:text;not null" json:"content"`
-	Attachments []Attachment `gorm:"serializer:json" json:"attachments"`
-	Mentions    []User       `gorm:"many2many:task_comment_mentions;" json:"mentions,omitempty"`
-	IsDeleted   bool         `gorm:"default:false;index;index:idx_task_comment_deleted_created" json:"isDeleted"`
+	TaskID          uint          `gorm:"not null;index;index:idx_task_comment_deleted_created" json:"taskId"`
+	Task            Task          `gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE;" json:"-"`
+	AuthorID        uint          `gorm:"not null;index" json:"authorId"`
+	Author          User          `json:"author,omitempty"`
+	Content         string        `gorm:"type:text;not null" json:"content"`
+	Attachments     []Attachment  `gorm:"serializer:json" json:"attachments"`
+	Mentions        []User        `gorm:"many2many:task_comment_mentions;" json:"mentions,omitempty"`
+	Source          string        `gorm:"size:30;not null;default:'internal';index" json:"source"`
+	PortalInviteID  *uint         `gorm:"index" json:"portalInviteId,omitempty"`
+	PortalInvite    *PortalInvite `json:"portalInvite,omitempty"`
+	ExternalName    string        `gorm:"size:120" json:"externalName,omitempty"`
+	ExternalEmail   string        `gorm:"size:160" json:"externalEmail,omitempty"`
+	ExternalCompany string        `gorm:"size:150" json:"externalCompany,omitempty"`
+	IsDeleted       bool          `gorm:"default:false;index;index:idx_task_comment_deleted_created" json:"isDeleted"`
 }
 
 type TaskActivity struct {
@@ -478,12 +507,19 @@ type WorkRequest struct {
 	Type            WorkRequestType          `gorm:"size:20;default:'task';index" json:"type"`
 	Title           string                   `gorm:"size:150;not null" json:"title"`
 	Description     string                   `gorm:"type:text" json:"description"`
+	Attachments     []Attachment             `gorm:"serializer:json" json:"attachments"`
 	Priority        TaskPriority             `gorm:"size:20;default:'medium';index" json:"priority"`
 	Status          WorkRequestStatus        `gorm:"size:20;default:'submitted';index" json:"status"`
 	ProjectID       *uint                    `gorm:"index" json:"projectId,omitempty"`
 	Project         *Project                 `json:"project,omitempty"`
 	RequesterID     uint                     `gorm:"not null;index" json:"requesterId"`
 	Requester       User                     `json:"requester,omitempty"`
+	Source          string                   `gorm:"size:30;not null;default:'internal';index" json:"source"`
+	PortalInviteID  *uint                    `gorm:"index" json:"portalInviteId,omitempty"`
+	PortalInvite    *PortalInvite            `json:"portalInvite,omitempty"`
+	ExternalName    string                   `gorm:"size:120" json:"externalName,omitempty"`
+	ExternalEmail   string                   `gorm:"size:160" json:"externalEmail,omitempty"`
+	ExternalCompany string                   `gorm:"size:150" json:"externalCompany,omitempty"`
 	ReviewerID      *uint                    `gorm:"index" json:"reviewerId,omitempty"`
 	Reviewer        *User                    `json:"reviewer,omitempty"`
 	ApprovalNote    string                   `gorm:"type:text" json:"approvalNote"`

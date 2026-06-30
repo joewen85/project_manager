@@ -74,6 +74,10 @@
 | `api_tokens.read` | 查看服务账号 API Token 与权限候选 |
 | `api_tokens.update` | 更新或禁用服务账号 API Token |
 | `api_tokens.delete` | 撤销服务账号 API Token |
+| `portal.create` | 创建客户或供应商项目门户邀请 |
+| `portal.read` | 查看外部门户邀请、访问范围与外部协作记录 |
+| `portal.update` | 更新或撤销外部门户邀请 |
+| `portal.delete` | 删除外部门户邀请 |
 | `automations.create` | 创建自动化规则 |
 | `automations.read` | 查看自动化规则与执行日志 |
 | `automations.update` | 更新并执行自动化规则 |
@@ -153,6 +157,11 @@
 | `POST /api-tokens` | `api_tokens.create`；创建时自动生成服务账号和独立角色，明文 Token 仅返回一次 |
 | `PUT /api-tokens/:id` | `api_tokens.update`；普通用户仅更新自己创建的 Token |
 | `DELETE /api-tokens/:id` | `api_tokens.delete`；普通用户仅撤销自己创建的 Token |
+| `GET /portal-invites` | `portal.read`；管理员查看全部，普通用户仅查看自己创建或当前可见项目下的邀请 |
+| `POST /portal-invites` | `portal.create`；项目必须在当前用户可见范围内，明文邀请 Token 仅返回一次 |
+| `PUT /portal-invites/:id` `PATCH /portal-invites/:id/revoke` | `portal.update`；可更新邀请范围、过期时间、附件白名单或撤销邀请 |
+| `DELETE /portal-invites/:id` | `portal.delete`；删除邀请 |
+| `GET /portal/:token` `POST /portal/:token/requests` `POST /portal/:token/tasks/:taskId/comments` `POST /portal/:token/uploads` | 公开 Token 校验；不走登录态 RBAC，只允许访问该邀请授权项目内 `externalVisible=true` 任务和邀请白名单附件 |
 | `GET /automation-rules` `GET /automation-rules/logs` | `automations.read` |
 | `POST /automation-rules` | `automations.create` |
 | `PUT /automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |

@@ -50,6 +50,7 @@ interface TaskForm {
   status: string
   priority: TaskPriority
   isMilestone: boolean
+  externalVisible: boolean
   progress: number
   estimatedHours: number
   actualHours: number
@@ -80,6 +81,7 @@ const initialForm: TaskForm = {
   status: 'pending',
   priority: 'high',
   isMilestone: false,
+  externalVisible: false,
   progress: 0,
   estimatedHours: 0,
   actualHours: 0,
@@ -96,7 +98,7 @@ const initialForm: TaskForm = {
 type TaskSortKey = 'taskNo' | 'title' | 'priority' | 'status' | 'progress' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt'
 type TaskSortOrder = 'asc' | 'desc'
 type TaskViewMode = 'list' | 'kanban'
-type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'progress' | 'hours' | 'tags' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt' | 'assignees' | 'reviewers' | 'description' | 'customField1' | 'customField2' | 'customField3'
+type TaskColumnKey = 'taskNo' | 'title' | 'projectName' | 'priority' | 'status' | 'externalVisible' | 'progress' | 'hours' | 'tags' | 'startAt' | 'endAt' | 'createdAt' | 'updatedAt' | 'assignees' | 'reviewers' | 'description' | 'customField1' | 'customField2' | 'customField3'
 interface TaskFieldSetting extends FieldSettingItem {
   key: TaskColumnKey
 }
@@ -109,6 +111,7 @@ const taskDefaultFieldSettings: TaskFieldSetting[] = [
   { key: 'projectName', label: '项目名称', visible: true, editable: true, sortable: false, searchable: true, filterable: true, custom: false },
   { key: 'priority', label: '优先级', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
   { key: 'status', label: '状态', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
+  { key: 'externalVisible', label: '外部可见', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
   { key: 'progress', label: '进度', visible: true, editable: true, sortable: true, searchable: false, filterable: false, custom: false },
   { key: 'hours', label: '工时', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
   { key: 'tags', label: '标签', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
@@ -176,7 +179,8 @@ const activityTypeLabel: Record<string, string> = {
   'task.schedule_auto_resolved': '顺延',
   'change_request.applied': '变更',
   'comment.created': '评论',
-  'comment.deleted': '评论'
+  'comment.deleted': '评论',
+  'portal.comment_created': '外部评论'
 }
 
 const normalizeTaskFieldSettings = (raw: unknown): TaskFieldSetting[] => {
@@ -556,6 +560,7 @@ export function TasksPage() {
       status: item.status,
       priority: item.priority || 'high',
       progress: item.progress,
+      externalVisible: Boolean(item.externalVisible),
       estimatedHours: item.estimatedHours ?? 0,
       actualHours: item.actualHours ?? 0,
       remainingHours: item.remainingHours ?? 0,
@@ -981,6 +986,8 @@ export function TasksPage() {
         return <td key={key} data-label="优先级">{priorityLabel[(task.priority || 'high') as TaskPriority]}</td>
       case 'status':
         return <td key={key} data-label="状态">{statusLabel[task.status]}</td>
+      case 'externalVisible':
+        return <td key={key} data-label="外部可见"><span className={`task-visibility-badge ${task.externalVisible ? 'visible' : 'internal'}`}>{task.externalVisible ? '对外可见' : '仅内部'}</span></td>
       case 'progress':
         return <td key={key} data-label="进度">{task.progress}%</td>
       case 'hours':
@@ -1074,6 +1081,9 @@ export function TasksPage() {
         <div className="kanban-task-meta">
           <span>{getTaskProjectName(task, projects)}</span>
           <span>{task.progress}%</span>
+        </div>
+        <div className="kanban-task-meta">
+          <span className={`task-visibility-badge ${task.externalVisible ? 'visible' : 'internal'}`}>{task.externalVisible ? '对外可见' : '仅内部'}</span>
         </div>
         <div className="kanban-task-meta">
           <span>估 {formatHours(task.estimatedHours)}</span>
@@ -1375,6 +1385,7 @@ export function TasksPage() {
               <div className="detail-columns">
                 <div><strong>优先级：</strong>{priorityLabel[(detailTask.priority || 'high') as TaskPriority]}</div>
                 <div><strong>里程碑：</strong>{detailTask.isMilestone ? '是' : '否'}</div>
+                <div><strong>外部可见：</strong>{detailTask.externalVisible ? '是' : '否'}</div>
                 <div><strong>状态：</strong>{statusLabel[detailTask.status] || detailTask.status || '-'}</div>
                 <div><strong>进度：</strong>{Number(detailTask.progress || 0)}%</div>
                 <div><strong>估算工时：</strong>{formatHours(detailTask.estimatedHours)}</div>
@@ -1447,9 +1458,10 @@ export function TasksPage() {
                         return (
                           <article key={comment.id} className="task-comment-item">
                             <div className="task-comment-meta">
-                              <strong>{formatUserName(comment.author)}</strong>
+                              <strong>{comment.source === 'portal' ? (comment.externalName || '外部联系人') : formatUserName(comment.author)}</strong>
                               <span>{formatDateTime(comment.createdAt)}</span>
                             </div>
+                            {comment.source === 'portal' && <div className="task-comment-mentions"><span>外部门户</span>{comment.externalCompany && <span>{comment.externalCompany}</span>}</div>}
                             <p>{comment.content}</p>
                             {(comment.mentions || []).length > 0 && (
                               <div className="task-comment-mentions">
@@ -1681,6 +1693,11 @@ export function TasksPage() {
           <select id="task-milestone" value={form.isMilestone ? '1' : '0'} onChange={(e) => setForm((prev) => ({ ...prev, isMilestone: e.target.value === '1' }))} disabled={!canEditFullTask}>
             <option value="0">否</option>
             <option value="1">是</option>
+          </select>
+          <label htmlFor="task-external-visible">外部可见</label>
+          <select id="task-external-visible" value={form.externalVisible ? '1' : '0'} onChange={(e) => setForm((prev) => ({ ...prev, externalVisible: e.target.value === '1' }))} disabled={!canEditFullTask}>
+            <option value="0">仅内部</option>
+            <option value="1">对外可见</option>
           </select>
           <label htmlFor="task-custom-field-1">自定义内容 1</label>
           <textarea id="task-custom-field-1" rows={4} value={form.customField1} onChange={(e) => setForm((prev) => ({ ...prev, customField1: e.target.value }))} disabled={!canEditTaskField('customField1')} />

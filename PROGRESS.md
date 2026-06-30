@@ -172,6 +172,13 @@
 - 完成：AI 源数据读取继续受 `projects.read`、`tasks.read`、`comments.read`、`registers.read` 和项目/任务可见范围约束，避免旁路读取无权限项目或财务敏感字段
 - 完成：前端新增“AI 助理”页面，支持项目选择、周报/风险/任务拆解生成、草稿编辑、复制和来源跳转
 - 完成：补充 AI 助理入口权限、源权限、可见范围、财务不泄漏和任务拆解不落库集成测试，并同步 README、API、OpenAPI、RBAC、PLAN
+- 完成：按 `Improvement.md` 完成 P2-5 外部客户/供应商门户 MVP
+- 完成：新增 `portal_invites` 模型和显式 SQL 迁移，门户 Token 仅保存哈希、前缀和后四位，明文仅创建时返回一次
+- 完成：任务新增 `externalVisible`，公开门户只展示授权项目基础信息、对外可见任务、门户来源评论和邀请白名单附件
+- 完成：新增 `/portal/:token` 公开状态页、公开请求、公开任务评论、公开上传接口，外部提交内容写入 `source=portal` 并保留外部身份字段
+- 完成：新增 `portal.create/read/update/delete` 权限与 `/portal-invites` 管理接口，支持邀请筛选、更新、撤销和删除
+- 完成：前端新增“外部门户”管理页与 `/portal/:token` 公开页；任务页面支持设置和展示对外可见标记
+- 完成：补充门户邀请、范围隔离、外部请求、外部评论和审计集成测试，并同步 README、API、OpenAPI、RBAC、PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

@@ -10,6 +10,8 @@ const LoginPage = lazy(async () => import('./pages/LoginPage').then((module) => 
 const MyWorkPage = lazy(async () => import('./pages/MyWorkPage').then((module) => ({ default: module.MyWorkPage })))
 const NotificationsPage = lazy(async () => import('./pages/NotificationsPage').then((module) => ({ default: module.NotificationsPage })))
 const ProjectTemplatesPage = lazy(async () => import('./pages/ProjectTemplatesPage').then((module) => ({ default: module.ProjectTemplatesPage })))
+const PortalAdminPage = lazy(async () => import('./pages/PortalAdminPage').then((module) => ({ default: module.PortalAdminPage })))
+const PortalPublicPage = lazy(async () => import('./pages/PortalPublicPage').then((module) => ({ default: module.PortalPublicPage })))
 const ReportsPage = lazy(async () => import('./pages/ReportsPage').then((module) => ({ default: module.ReportsPage })))
 const RequestsPage = lazy(async () => import('./pages/RequestsPage').then((module) => ({ default: module.RequestsPage })))
 const SprintsPage = lazy(async () => import('./pages/SprintsPage').then((module) => ({ default: module.SprintsPage })))
@@ -64,6 +66,7 @@ const protectedRoutes = [
   { path: '/automation-rules', permission: 'automations.read' },
   { path: '/webhooks', permission: 'webhooks.read' },
   { path: '/api-tokens', permission: 'api_tokens.read' },
+  { path: '/portals', permission: 'portal.read' },
   { path: '/assistant', permission: 'ai.read' },
   { path: '/notifications', permission: 'notifications.read' },
   { path: '/audit', permission: 'audit.read' },
@@ -141,6 +144,7 @@ export default function App() {
     <Suspense fallback={<div className="card">页面加载中...</div>}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/portal/:token" element={<PortalPublicPage />} />
         <Route
           path="/"
           element={
@@ -167,6 +171,7 @@ export default function App() {
           <Route path="automation-rules" element={<PermissionGuard permission="automations.read"><AutomationRulesPage /></PermissionGuard>} />
           <Route path="webhooks" element={<PermissionGuard permission="webhooks.read"><WebhooksPage /></PermissionGuard>} />
           <Route path="api-tokens" element={<PermissionGuard permission="api_tokens.read"><ApiTokensPage /></PermissionGuard>} />
+          <Route path="portals" element={<PermissionGuard permission="portal.read"><PortalAdminPage /></PermissionGuard>} />
           <Route path="assistant" element={<PermissionGuard permission="ai.read"><AssistantPage /></PermissionGuard>} />
           <Route path="notifications" element={<PermissionGuard permission="notifications.read"><NotificationsPage /></PermissionGuard>} />
           <Route path="audit" element={<PermissionGuard permission="audit.read"><AuditPage /></PermissionGuard>} />

@@ -1737,6 +1737,161 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
   font-weight: 700;
   white-space: nowrap;
 }
+.task-visibility-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid var(--color-border);
+}
+.task-visibility-badge.visible {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+.task-visibility-badge.internal {
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+}
+:root[data-theme='dark'] .task-visibility-badge.visible {
+  color: #bbf7d0;
+  background: rgba(22, 101, 52, 0.35);
+  border-color: rgba(134, 239, 172, 0.35);
+}
+.portal-created-link {
+  display: grid;
+  gap: 8px;
+}
+.portal-created-link input {
+  width: 100%;
+}
+.portal-public-shell {
+  width: min(1180px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 24px 0 40px;
+  display: grid;
+  gap: var(--space-3);
+}
+.portal-public-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+.portal-public-header h1 {
+  font-size: 28px;
+  line-height: 1.15;
+  margin-bottom: 8px;
+}
+.portal-public-header p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+.portal-health-badge {
+  min-width: 128px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+  text-align: right;
+}
+.portal-health-badge span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+.portal-health-badge strong {
+  font-size: 28px;
+}
+.portal-health-badge.green {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.portal-health-badge.yellow {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+.portal-health-badge.red {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+:root[data-theme='dark'] .portal-health-badge.green {
+  background: rgba(22, 101, 52, 0.28);
+  border-color: rgba(134, 239, 172, 0.35);
+}
+:root[data-theme='dark'] .portal-health-badge.yellow {
+  background: rgba(133, 77, 14, 0.28);
+  border-color: rgba(253, 230, 138, 0.35);
+}
+:root[data-theme='dark'] .portal-health-badge.red {
+  background: rgba(127, 29, 29, 0.3);
+  border-color: rgba(254, 202, 202, 0.35);
+}
+.portal-metric-grid {
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+}
+.portal-status-card {
+  display: grid;
+  gap: var(--space-2);
+}
+.portal-status-card h2,
+.portal-side-panel h2 {
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+.portal-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap: var(--space-3);
+  align-items: start;
+}
+.portal-task-list,
+.portal-side-panel {
+  display: grid;
+  gap: var(--space-3);
+}
+.portal-task-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: var(--space-2);
+}
+.portal-task-head,
+.portal-task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.portal-task-card h3 {
+  font-size: 18px;
+  margin: 0;
+}
+.portal-task-card p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+.portal-task-meta {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+.portal-comment-list {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 10px;
+}
+.portal-attachment-list {
+  margin-top: 8px;
+}
 .task-user-stack {
   display: grid;
   gap: 6px;
@@ -2195,6 +2350,9 @@ td .btn + .btn { margin-left: 3px; }
 }
 
 @media (max-width: 1024px) {
+  .portal-main-grid {
+    grid-template-columns: 1fr;
+  }
   .gantt-group-header {
     grid-template-columns: 1fr 1fr;
     row-gap: 6px;
@@ -2513,6 +2671,24 @@ td .btn + .btn { margin-left: 3px; }
 }
 
 @media (max-width: 640px) {
+  .portal-public-shell {
+    width: min(100%, calc(100vw - 20px));
+    padding: 12px 0 24px;
+  }
+  .portal-public-header,
+  .portal-main-grid {
+    grid-template-columns: 1fr;
+  }
+  .portal-public-header {
+    display: grid;
+  }
+  .portal-health-badge {
+    width: 100%;
+    text-align: left;
+  }
+  .portal-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .topbar {
     grid-template-columns: minmax(0, 1fr);
   }

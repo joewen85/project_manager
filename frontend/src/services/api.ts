@@ -29,6 +29,11 @@ export const api = axios.create({
   headers: token ? { Authorization: `Bearer ${token}` } : {}
 })
 
+export const publicApi = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  timeout: 15000
+})
+
 export const setToken = (value: string) => {
   localStorage.setItem('token', value)
   api.defaults.headers.Authorization = `Bearer ${value}`
@@ -170,6 +175,16 @@ export const fetchData = async <T>(
   return res.data as T
 }
 
+export const fetchPublicData = async <T>(
+  path: string,
+  params?: Record<string, QueryPrimitive>,
+  config?: AxiosRequestConfig
+) => {
+  const query = params ? buildQuery(params) : ''
+  const res = await publicApi.get(`${path}${query}`, config)
+  return res.data as T
+}
+
 export const fetchPage = async <T>(
   path: string,
   params: Record<string, QueryPrimitive>,
@@ -206,6 +221,18 @@ export const uploadAttachments = async (files: UploadSourceFile[]) => {
 export const uploadAttachment = async (file: File) => {
   const attachments = await uploadAttachments([{ file }])
   return attachments[0]
+}
+
+export const uploadPublicAttachments = async (path: string, files: UploadSourceFile[]) => {
+  if (files.length === 0) return []
+  const formData = new FormData()
+  files.forEach((entry) => {
+    const relativePath = (entry.relativePath || (entry.file as File & { webkitRelativePath?: string }).webkitRelativePath || entry.file.name).split('\\').join('/')
+    formData.append('files', entry.file)
+    formData.append('relativePaths', relativePath)
+  })
+  const res = await publicApi.post<{ attachments: UploadAttachment[] }>(path, formData)
+  return res.data.attachments || []
 }
 
 api.interceptors.response.use(

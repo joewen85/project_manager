@@ -83,6 +83,12 @@ Base URL: `http://localhost:8080/api/v1`
 | POST | `/api-tokens` | `api_tokens.create` |
 | PUT | `/api-tokens/:id` | `api_tokens.update` |
 | DELETE | `/api-tokens/:id` | `api_tokens.delete` |
+| GET | `/portal/:token` | 公开 Token 校验 |
+| POST | `/portal/:token/requests` `/portal/:token/tasks/:taskId/comments` `/portal/:token/uploads` | 公开 Token 校验 |
+| GET | `/portal-invites` | `portal.read` |
+| POST | `/portal-invites` | `portal.create` |
+| PUT | `/portal-invites/:id` `PATCH /portal-invites/:id/revoke` | `portal.update` |
+| DELETE | `/portal-invites/:id` | `portal.delete` |
 | GET | `/automation-rules` `/automation-rules/logs` | `automations.read` |
 | POST | `/automation-rules` | `automations.create` |
 | PUT | `/automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
@@ -316,12 +322,13 @@ Base URL: `http://localhost:8080/api/v1`
 - 响应: `text/calendar`
 
 ### POST `/tasks`
-- 请求体: `{ taskNo?, title, description, customField1?, customField2?, customField3?, status, priority, isMilestone, progress, estimatedHours?, actualHours?, remainingHours?, startAt, endAt, attachments?, projectId, parentId, assigneeIds, tagIds, dependencies? }`
+- 请求体: `{ taskNo?, title, description, customField1?, customField2?, customField3?, status, priority, isMilestone, externalVisible?, progress, estimatedHours?, actualHours?, remainingHours?, startAt, endAt, attachments?, projectId, parentId, assigneeIds, reviewerIds?, tagIds, dependencies? }`
 - `dependencies` 格式: `[{ dependsOnTaskId, lagDays, type }]`
 - `creatorId` 默认使用当前登录用户
 - `taskNo` 唯一（为空自动生成）
 - `status` 支持 `pending|queued|processing|reviewing|completed`
 - `priority` 支持 `high|medium|low`（默认 `high`）
+- `externalVisible=true` 的任务会进入对应项目外部门户公开进度页
 - `estimatedHours`、`actualHours`、`remainingHours` 为非负数，未传默认 `0`
 - `tagIds` 为标签 ID 数组；返回任务详情/列表时会包含 `tags`
 - `customField1~3` 为三个可选自定义长文本字段
@@ -576,6 +583,60 @@ API Token 用于外部系统以服务账号身份调用接口。请求仍使用 
 - 权限: `api_tokens.delete`
 - 范围: 管理员或 Token 创建人
 - 效果: 撤销 Token 并停用对应服务账号，保留记录用于审计
+
+## 外部客户/供应商门户
+
+门户用于给客户或供应商开放项目进度快照，不创建外部账号。邀请 Token 使用 `pmp_` 前缀，数据库只保存哈希、查找前缀和后四位；明文 Token 仅在创建邀请时返回一次。
+
+安全边界：
+- 公开门户只展示邀请授权项目的基础信息、`externalVisible=true` 的任务、门户来源评论和邀请中配置的附件白名单。
+- 不展示预算、成本、收益、合同字段、内部成员邮箱、非白名单附件、内部评论或内部活动流。
+- 外部提交的请求和评论会写入原有 `work_requests` / `task_comments` 表，标记 `source=portal` 并记录 `externalName`、`externalEmail`、`externalCompany`；内部 `requesterId` / `authorId` 使用邀请创建人兜底，以兼容现有审批、通知和审计。
+
+### GET `/portal/:token`
+- 公开接口，无需登录；校验 Token 启用、未撤销、未过期。
+- 响应: `{ inviteId, contactName, contactEmail, company, contactType, project, statusReport, tasks, comments, allowedAttachments }`
+- `tasks` 仅包含对外可见任务：`{ id, taskNo, title, description, status, priority, isMilestone, externalVisible, progress, startAt, endAt, tags }`
+- `statusReport`: `{ generatedAt, taskCount, completedTaskCount, overdueTaskCount, averageProgress, completionRate, health, summary }`
+
+### POST `/portal/:token/requests`
+- 公开接口，用于外部联系人提交项目/任务/缺陷/变更请求。
+- 请求体: `{ type, title, description?, priority?, targetTaskId?, changePayload?, externalName?, externalEmail?, attachments? }`
+- `type`: `project|task|bug|change`
+- 变更申请必须选择该门户下对外可见任务作为 `targetTaskId`。
+
+### POST `/portal/:token/tasks/:taskId/comments`
+- 公开接口，仅允许评论该门户授权项目内 `externalVisible=true` 的任务。
+- 请求体: `{ content, externalName?, externalEmail?, attachments? }`
+- 评论会进入任务动态，内部相关人员收到站内通知。
+
+### POST `/portal/:token/uploads`
+- 公开接口，`multipart/form-data` 上传附件，字段同 `/uploads`。
+- 返回: `{ attachments }`；返回的附件元数据可用于公开请求或公开评论。
+
+### GET `/portal-invites`
+- Header: `Authorization: Bearer <token>`
+- 权限: `portal.read`
+- Query: `page` `pageSize` `keyword` `projectId` `isEnabled`
+- 范围: 管理员查看全部；普通用户仅查看自己创建或当前可见项目下的邀请。
+
+### POST `/portal-invites`
+- 权限: `portal.create`
+- 请求体: `{ name, company?, contactName?, contactEmail?, contactType?, isEnabled?, expiresAt?, allowedAttachments?, projectId }`
+- `contactType`: `customer|supplier`，空值默认 `customer`
+- `projectId` 必须在当前用户可见范围内；`expiresAt` 必须晚于当前时间。
+- 响应包含一次性明文 `token`；后续列表只返回 `tokenPrefix` 和 `tokenLastFour`。
+
+### PUT `/portal-invites/:id`
+- 权限: `portal.update`
+- 请求体同创建；可更新授权项目、过期时间、启用状态和附件白名单，不会重新生成 Token。
+
+### PATCH `/portal-invites/:id/revoke`
+- 权限: `portal.update`
+- 效果: 设置 `isEnabled=false` 和 `revokedAt`，原链接立即不可用。
+
+### DELETE `/portal-invites/:id`
+- 权限: `portal.delete`
 
 ## 自动化规则
 

@@ -91,6 +91,11 @@ var permissionCatalog = []permissionSeed{
 	{Code: "api_tokens.update", Name: "API Token-更新", Description: "更新或禁用服务账号 API Token"},
 	{Code: "api_tokens.delete", Name: "API Token-删除", Description: "撤销服务账号 API Token"},
 
+	{Code: "portal.create", Name: "外部门户-创建", Description: "创建客户或供应商项目门户邀请"},
+	{Code: "portal.read", Name: "外部门户-查看", Description: "查看外部门户邀请、访问范围与外部协作记录"},
+	{Code: "portal.update", Name: "外部门户-更新", Description: "更新或撤销外部门户邀请"},
+	{Code: "portal.delete", Name: "外部门户-删除", Description: "删除外部门户邀请"},
+
 	{Code: "automations.create", Name: "自动化-创建", Description: "创建自动化规则"},
 	{Code: "automations.read", Name: "自动化-查看", Description: "查看自动化规则与执行日志"},
 	{Code: "automations.update", Name: "自动化-更新", Description: "更新并执行自动化规则"},

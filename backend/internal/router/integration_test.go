@@ -6165,3 +6165,189 @@ func TestTaskCommentsMentionsActivitiesAndScope(t *testing.T) {
 		t.Fatalf("deleted comment should be hidden got %v", commentListAfterDeleteBody)
 	}
 }
+
+func TestExternalPortalInviteScopeRequestsCommentsAndAudit(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+	for _, code := range []string{"portal.create", "portal.read", "portal.update", "portal.delete"} {
+		if codeToID[code] == 0 {
+			t.Fatalf("permission seed missing: %s", code)
+		}
+	}
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "PORTAL-P1",
+		"name":        "Portal Project",
+		"description": "portal scoped project",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create portal project expected 201 got %d, body=%v", projectResp.StatusCode, projectBody)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	visibleTaskResp, visibleTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":           "Visible Portal Task",
+		"description":     "customer can read this",
+		"projectId":       projectID,
+		"status":          "processing",
+		"progress":        45,
+		"priority":        "medium",
+		"externalVisible": true,
+		"startAt":         "2026-07-01T00:00:00Z",
+		"endAt":           "2026-07-10T00:00:00Z",
+	})
+	if visibleTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible portal task expected 201 got %d, body=%v", visibleTaskResp.StatusCode, visibleTaskBody)
+	}
+	visibleTaskID := int(visibleTaskBody["id"].(float64))
+
+	hiddenTaskResp, hiddenTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":           "Hidden Portal Task",
+		"description":     "customer must not read this",
+		"projectId":       projectID,
+		"status":          "queued",
+		"progress":        10,
+		"externalVisible": false,
+	})
+	if hiddenTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden portal task expected 201 got %d, body=%v", hiddenTaskResp.StatusCode, hiddenTaskBody)
+	}
+	hiddenTaskID := int(hiddenTaskBody["id"].(float64))
+
+	inviteResp, inviteBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/portal-invites", adminToken, map[string]any{
+		"name":         "Customer Portal",
+		"company":      "Acme Customer",
+		"contactName":  "Alice Customer",
+		"contactEmail": "alice.customer@example.com",
+		"contactType":  "customer",
+		"projectId":    projectID,
+		"allowedAttachments": []map[string]any{
+			{
+				"fileName":     "status.pdf",
+				"filePath":     "/static/uploads/customer/status.pdf",
+				"relativePath": "customer/status.pdf",
+				"fileSize":     64,
+				"mimeType":     "application/pdf",
+			},
+		},
+	})
+	if inviteResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create portal invite expected 201 got %d, body=%v", inviteResp.StatusCode, inviteBody)
+	}
+	portalToken, _ := inviteBody["token"].(string)
+	if portalToken == "" {
+		t.Fatalf("portal token should be returned once: %v", inviteBody)
+	}
+	inviteID := int(inviteBody["id"].(float64))
+
+	statusResp, statusBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/portal/"+portalToken, "", nil)
+	if statusResp.StatusCode != http.StatusOK {
+		t.Fatalf("portal status expected 200 got %d, body=%v", statusResp.StatusCode, statusBody)
+	}
+	project, _ := statusBody["project"].(map[string]any)
+	if int(project["id"].(float64)) != projectID {
+		t.Fatalf("portal should expose authorized project only: %v", statusBody)
+	}
+	if _, ok := project["budgetAmount"]; ok {
+		t.Fatalf("portal project must not expose finance fields: %v", project)
+	}
+	tasks, _ := statusBody["tasks"].([]any)
+	if len(tasks) != 1 {
+		t.Fatalf("portal should expose exactly one external task got %v", statusBody["tasks"])
+	}
+	task, _ := tasks[0].(map[string]any)
+	if int(task["id"].(float64)) != visibleTaskID || task["title"] == "Hidden Portal Task" {
+		t.Fatalf("portal task scope leaked hidden task: %v", tasks)
+	}
+	allowedAttachments, _ := statusBody["allowedAttachments"].([]any)
+	if len(allowedAttachments) != 1 {
+		t.Fatalf("portal should expose explicit allowed attachments only: %v", statusBody["allowedAttachments"])
+	}
+
+	uploadResp, uploadBody := requestMultipartFile(t, http.MethodPost, ts.URL+"/api/v1/portal/"+portalToken+"/uploads", "", "file", "external-note.txt", []byte("hello portal"))
+	if uploadResp.StatusCode != http.StatusCreated {
+		t.Fatalf("portal upload expected 201 got %d, body=%v", uploadResp.StatusCode, uploadBody)
+	}
+	uploadedAttachments, _ := uploadBody["attachments"].([]any)
+	if len(uploadedAttachments) != 1 {
+		t.Fatalf("portal upload should return one attachment: %v", uploadBody)
+	}
+
+	commentResp, commentBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/portal/"+portalToken+"/tasks/"+strconv.Itoa(visibleTaskID)+"/comments", "", map[string]any{
+		"content":       "External delivery note",
+		"externalName":  "Alice Customer",
+		"externalEmail": "alice.customer@example.com",
+		"attachments":   uploadedAttachments,
+	})
+	if commentResp.StatusCode != http.StatusCreated {
+		t.Fatalf("portal comment expected 201 got %d, body=%v", commentResp.StatusCode, commentBody)
+	}
+	if commentBody["externalName"] != "Alice Customer" {
+		t.Fatalf("portal comment response should keep external identity: %v", commentBody)
+	}
+
+	hiddenCommentResp, hiddenCommentBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/portal/"+portalToken+"/tasks/"+strconv.Itoa(hiddenTaskID)+"/comments", "", map[string]any{
+		"content": "should not be accepted",
+	})
+	if hiddenCommentResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("portal hidden task comment expected 404 got %d, body=%v", hiddenCommentResp.StatusCode, hiddenCommentBody)
+	}
+
+	requestResp, requestBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/portal/"+portalToken+"/requests", "", map[string]any{
+		"type":          "task",
+		"title":         "External onboarding request",
+		"description":   "Need an onboarding checklist",
+		"priority":      "high",
+		"externalName":  "Alice Customer",
+		"externalEmail": "alice.customer@example.com",
+		"attachments":   uploadedAttachments,
+	})
+	if requestResp.StatusCode != http.StatusCreated {
+		t.Fatalf("portal request expected 201 got %d, body=%v", requestResp.StatusCode, requestBody)
+	}
+	if requestBody["source"] != "portal" || int(requestBody["projectId"].(float64)) != projectID {
+		t.Fatalf("portal request should be marked and scoped: %v", requestBody)
+	}
+
+	internalCommentsResp, internalCommentsBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/tasks/"+strconv.Itoa(visibleTaskID)+"/comments", adminToken, nil)
+	if internalCommentsResp.StatusCode != http.StatusOK {
+		t.Fatalf("internal comments expected 200 got %d, body=%v", internalCommentsResp.StatusCode, internalCommentsBody)
+	}
+	internalComments, _ := internalCommentsBody["list"].([]any)
+	if len(internalComments) != 1 {
+		t.Fatalf("expected one portal comment internally got %v", internalCommentsBody)
+	}
+	internalComment, _ := internalComments[0].(map[string]any)
+	if internalComment["source"] != "portal" || internalComment["externalName"] != "Alice Customer" {
+		t.Fatalf("internal comment should retain portal source and external identity: %v", internalComment)
+	}
+
+	auditResp, auditBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/audit/logs?module=portal&page=1&pageSize=20", adminToken, nil)
+	if auditResp.StatusCode != http.StatusOK {
+		t.Fatalf("portal audit query expected 200 got %d, body=%v", auditResp.StatusCode, auditBody)
+	}
+	auditItems, _ := auditBody["list"].([]any)
+	foundActions := map[string]bool{}
+	for _, raw := range auditItems {
+		item, _ := raw.(map[string]any)
+		action, _ := item["action"].(string)
+		foundActions[action] = true
+	}
+	for _, action := range []string{"create_invite", "view", "upload_attachment", "create_comment", "create_request"} {
+		if !foundActions[action] {
+			t.Fatalf("expected portal audit action %s got %v", action, auditBody)
+		}
+	}
+
+	revokeResp, revokeBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/portal-invites/"+strconv.Itoa(inviteID)+"/revoke", adminToken, nil)
+	if revokeResp.StatusCode != http.StatusOK {
+		t.Fatalf("revoke portal invite expected 200 got %d, body=%v", revokeResp.StatusCode, revokeBody)
+	}
+	revokedStatusResp, revokedStatusBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/portal/"+portalToken, "", nil)
+	if revokedStatusResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("revoked portal expected 403 got %d, body=%v", revokedStatusResp.StatusCode, revokedStatusBody)
+	}
+}

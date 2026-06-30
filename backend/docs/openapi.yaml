@@ -107,6 +107,127 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postUploads
+  /portal/{token}:
+    get:
+      summary: 外部门户项目状态
+      description: 公开 Token 访问；只返回邀请授权项目的基础信息、对外可见任务、门户来源评论和邀请附件白名单。
+      security: []
+      parameters:
+      - in: path
+        name: token
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getPortalByToken
+  /portal/{token}/requests:
+    post:
+      summary: 外部门户提交请求
+      description: 外部联系人提交项目、任务、缺陷或变更请求；请求会标记 source=portal 并通知项目相关人员。
+      security: []
+      parameters:
+      - in: path
+        name: token
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalWorkRequestRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postPortalByTokenRequests
+  /portal/{token}/tasks/{taskId}/comments:
+    post:
+      summary: 外部门户提交任务评论
+      description: 仅允许评论该门户授权项目内 externalVisible=true 的任务；评论会标记 source=portal。
+      security: []
+      parameters:
+      - in: path
+        name: token
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: taskId
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalTaskCommentRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalCommentView'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postPortalByTokenTasksByTaskIdComments
+  /portal/{token}/uploads:
+    post:
+      summary: 外部门户上传附件
+      description: 公开 Token 上传附件，字段与 /uploads 一致；返回附件元数据供外部请求或评论引用。
+      security: []
+      parameters:
+      - in: path
+        name: token
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                relativePaths:
+                  type: array
+                  items:
+                    type: string
+                file:
+                  type: string
+                  format: binary
+                  deprecated: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postPortalByTokenUploads
   /rbac/permissions:
     get:
       summary: 权限列表
@@ -2203,6 +2324,113 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: deleteApiTokensById
+  /portal-invites:
+    get:
+      summary: 外部门户邀请列表
+      description: 管理员查看全部；普通用户仅查看自己创建或当前可见项目下的邀请。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: projectId
+        schema:
+          type: integer
+      - in: query
+        name: isEnabled
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalInvitePageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getPortalInvites
+    post:
+      summary: 创建外部门户邀请
+      description: 创建后返回一次性明文 Token；后续仅保留 tokenPrefix 和 tokenLastFour。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalInviteRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalInviteCreateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postPortalInvites
+  /portal-invites/{id}:
+    put:
+      summary: 更新外部门户邀请
+      description: 可更新邀请范围、过期时间、启用状态和附件白名单；不会重新生成 Token。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalInviteRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalInvite'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: putPortalInvitesById
+    delete:
+      summary: 删除外部门户邀请
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: deletePortalInvitesById
+  /portal-invites/{id}/revoke:
+    patch:
+      summary: 撤销外部门户邀请
+      description: 设置 isEnabled=false 和 revokedAt，原访问链接立即不可用。
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: patchPortalInvitesByIdRevoke
   /automation-rules:
     get:
       summary: 自动化规则列表
@@ -2900,6 +3128,9 @@ components:
           - low
         isMilestone:
           type: boolean
+        externalVisible:
+          type: boolean
+          description: 是否在外部门户公开展示
         progress:
           type: integer
         estimatedHours:
@@ -2980,6 +3211,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UserLite'
+        source:
+          type: string
+          enum:
+          - internal
+          - portal
+          description: 评论来源，portal 表示外部门户提交
+        portalInviteId:
+          type: integer
+          nullable: true
+        externalName:
+          type: string
+        externalEmail:
+          type: string
+        externalCompany:
+          type: string
         isDeleted:
           type: boolean
         createdAt:
@@ -3383,6 +3629,10 @@ components:
           type: string
         description:
           type: string
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
         priority:
           type: string
           enum:
@@ -3990,6 +4240,313 @@ components:
         expiresAt:
           type: string
           format: date-time
+    PortalInvite:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        company:
+          type: string
+        contactName:
+          type: string
+        contactEmail:
+          type: string
+        contactType:
+          type: string
+          enum:
+          - customer
+          - supplier
+        tokenPrefix:
+          type: string
+        tokenLastFour:
+          type: string
+        isEnabled:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastUsedIp:
+          type: string
+        allowedAttachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+        projectId:
+          type: integer
+        project:
+          $ref: '#/components/schemas/Project'
+        createdById:
+          type: integer
+        createdBy:
+          $ref: '#/components/schemas/User'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PortalInviteRequest:
+      type: object
+      required:
+      - projectId
+      properties:
+        name:
+          type: string
+        company:
+          type: string
+        contactName:
+          type: string
+        contactEmail:
+          type: string
+        contactType:
+          type: string
+          enum:
+          - customer
+          - supplier
+          default: customer
+        isEnabled:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        allowedAttachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+        projectId:
+          type: integer
+    PortalInviteCreateResponse:
+      allOf:
+      - $ref: '#/components/schemas/PortalInvite'
+      - type: object
+        properties:
+          token:
+            type: string
+            description: 一次性明文门户 Token，仅创建时返回
+    PortalProjectView:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        startAt:
+          type: string
+          format: date-time
+          nullable: true
+        endAt:
+          type: string
+          format: date-time
+          nullable: true
+    PortalTagView:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+    PortalTaskView:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskNo:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - queued
+          - processing
+          - reviewing
+          - completed
+        priority:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+        isMilestone:
+          type: boolean
+        externalVisible:
+          type: boolean
+        progress:
+          type: integer
+        startAt:
+          type: string
+          format: date-time
+          nullable: true
+        endAt:
+          type: string
+          format: date-time
+          nullable: true
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalTagView'
+    PortalCommentView:
+      type: object
+      properties:
+        id:
+          type: integer
+        taskId:
+          type: integer
+        content:
+          type: string
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+        externalName:
+          type: string
+        externalEmail:
+          type: string
+        externalCompany:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    PortalStatusReport:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        taskCount:
+          type: integer
+        completedTaskCount:
+          type: integer
+        overdueTaskCount:
+          type: integer
+        averageProgress:
+          type: number
+          format: double
+        completionRate:
+          type: number
+          format: double
+        health:
+          type: string
+          enum:
+          - green
+          - yellow
+          - red
+        summary:
+          type: string
+    PortalStatusResponse:
+      type: object
+      properties:
+        inviteId:
+          type: integer
+        contactName:
+          type: string
+        contactEmail:
+          type: string
+        company:
+          type: string
+        contactType:
+          type: string
+          enum:
+          - customer
+          - supplier
+        project:
+          $ref: '#/components/schemas/PortalProjectView'
+        statusReport:
+          $ref: '#/components/schemas/PortalStatusReport'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalTaskView'
+        comments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalCommentView'
+        allowedAttachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+    PortalWorkRequestRequest:
+      type: object
+      required:
+      - type
+      - title
+      properties:
+        type:
+          type: string
+          enum:
+          - project
+          - task
+          - bug
+          - change
+        title:
+          type: string
+        description:
+          type: string
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+        priority:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+        targetTaskId:
+          type: integer
+          nullable: true
+        changePayload:
+          $ref: '#/components/schemas/WorkRequestChangePayload'
+        externalName:
+          type: string
+        externalEmail:
+          type: string
+        attachment:
+          allOf:
+          - $ref: '#/components/schemas/Attachment'
+          deprecated: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+    PortalTaskCommentRequest:
+      type: object
+      required:
+      - content
+      properties:
+        content:
+          type: string
+        externalName:
+          type: string
+        externalEmail:
+          type: string
+        attachment:
+          allOf:
+          - $ref: '#/components/schemas/Attachment'
+          deprecated: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
     AutomationConditions:
       type: object
       properties:
@@ -4216,6 +4773,9 @@ components:
           - low
         isMilestone:
           type: boolean
+        externalVisible:
+          type: boolean
+          description: 是否在外部门户公开展示
         progress:
           type: integer
         estimatedHours:
@@ -4340,6 +4900,10 @@ components:
           type: string
         description:
           type: string
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
         priority:
           type: string
           enum:
@@ -4363,6 +4927,21 @@ components:
           type: integer
         requester:
           $ref: '#/components/schemas/UserLite'
+        source:
+          type: string
+          enum:
+          - internal
+          - portal
+          description: 请求来源，portal 表示外部门户提交
+        portalInviteId:
+          type: integer
+          nullable: true
+        externalName:
+          type: string
+        externalEmail:
+          type: string
+        externalCompany:
+          type: string
         reviewerId:
           type: integer
           nullable: true
@@ -4414,6 +4993,10 @@ components:
           type: string
         description:
           type: string
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
         priority:
           type: string
           enum:
@@ -5193,6 +5776,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/APIToken'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    PortalInvitePageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalInvite'
         total:
           type: integer
           format: int64

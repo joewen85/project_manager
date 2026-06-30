@@ -112,6 +112,7 @@ export interface Task {
   status: Status
   priority?: TaskPriority
   isMilestone?: boolean
+  externalVisible?: boolean
   progress: number
   estimatedHours?: number
   actualHours?: number
@@ -151,6 +152,11 @@ export interface TaskComment {
   content: string
   attachments?: UploadAttachment[]
   mentions?: User[]
+  source?: 'internal' | 'portal'
+  portalInviteId?: number
+  externalName?: string
+  externalEmail?: string
+  externalCompany?: string
   isDeleted?: boolean
   createdAt: string
   updatedAt?: string
@@ -175,12 +181,18 @@ export interface WorkRequest {
   type: WorkRequestType
   title: string
   description: string
+  attachments?: UploadAttachment[]
   priority: TaskPriority
   status: WorkRequestStatus
   projectId?: number
   project?: Project
   requesterId: number
   requester?: User
+  source?: 'internal' | 'portal'
+  portalInviteId?: number
+  externalName?: string
+  externalEmail?: string
+  externalCompany?: string
   reviewerId?: number
   reviewer?: User
   approvalNote?: string
@@ -202,6 +214,92 @@ export interface WorkRequestChangePayload {
   priority?: TaskPriority
   assigneeIds?: number[]
   scopeDescription?: string
+}
+
+export interface PortalInvite {
+  id: number
+  name: string
+  company?: string
+  contactName?: string
+  contactEmail?: string
+  contactType: 'customer' | 'supplier'
+  tokenPrefix: string
+  tokenLastFour: string
+  isEnabled: boolean
+  expiresAt?: string
+  revokedAt?: string
+  lastUsedAt?: string
+  lastUsedIp?: string
+  allowedAttachments?: UploadAttachment[]
+  projectId: number
+  project?: Project
+  createdById: number
+  createdBy?: User
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface PortalInviteCreateResponse extends PortalInvite {
+  token: string
+}
+
+export interface PortalProjectView {
+  id: number
+  code: string
+  name: string
+  description?: string
+  startAt?: string
+  endAt?: string
+}
+
+export interface PortalTaskView {
+  id: number
+  taskNo: string
+  title: string
+  description?: string
+  status: Status
+  priority?: TaskPriority
+  isMilestone?: boolean
+  externalVisible?: boolean
+  progress: number
+  startAt?: string
+  endAt?: string
+  tags?: Tag[]
+}
+
+export interface PortalCommentView {
+  id: number
+  taskId: number
+  content: string
+  attachments?: UploadAttachment[]
+  externalName?: string
+  externalEmail?: string
+  externalCompany?: string
+  createdAt: string
+}
+
+export interface PortalStatusReport {
+  generatedAt: string
+  taskCount: number
+  completedTaskCount: number
+  overdueTaskCount: number
+  averageProgress: number
+  completionRate: number
+  health: 'green' | 'yellow' | 'red'
+  summary: string
+}
+
+export interface PortalStatusResponse {
+  inviteId: number
+  contactName?: string
+  contactEmail?: string
+  company?: string
+  contactType: 'customer' | 'supplier'
+  project: PortalProjectView
+  statusReport: PortalStatusReport
+  tasks: PortalTaskView[]
+  comments: PortalCommentView[]
+  allowedAttachments?: UploadAttachment[]
 }
 
 export interface TemplateTaskDependency {

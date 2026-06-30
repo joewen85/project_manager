@@ -41,6 +41,10 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 	{
 		api.POST("/auth/login", h.Login)
 		api.GET("/notifications/ws", h.NotificationSocket)
+		api.GET("/portal/:token", h.PortalStatus)
+		api.POST("/portal/:token/requests", h.PortalCreateWorkRequest)
+		api.POST("/portal/:token/tasks/:taskId/comments", h.PortalCreateTaskComment)
+		api.POST("/portal/:token/uploads", h.PortalUploadFile)
 	}
 
 	authGroup := api.Group("")
@@ -201,6 +205,15 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			apiTokens.GET("/:id", middleware.RequirePermission(h.DB, "api_tokens.read"), h.APITokenDetail)
 			apiTokens.PUT("/:id", middleware.RequirePermission(h.DB, "api_tokens.update"), h.UpdateAPIToken)
 			apiTokens.DELETE("/:id", middleware.RequirePermission(h.DB, "api_tokens.delete"), h.DeleteAPIToken)
+		}
+
+		portalInvites := authGroup.Group("/portal-invites")
+		{
+			portalInvites.GET("", middleware.RequirePermission(h.DB, "portal.read"), h.ListPortalInvites)
+			portalInvites.POST("", middleware.RequirePermission(h.DB, "portal.create"), h.CreatePortalInvite)
+			portalInvites.PUT("/:id", middleware.RequirePermission(h.DB, "portal.update"), h.UpdatePortalInvite)
+			portalInvites.PATCH("/:id/revoke", middleware.RequirePermission(h.DB, "portal.update"), h.RevokePortalInvite)
+			portalInvites.DELETE("/:id", middleware.RequirePermission(h.DB, "portal.delete"), h.DeletePortalInvite)
 		}
 
 		automations := authGroup.Group("/automation-rules")

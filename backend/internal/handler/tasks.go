@@ -15,29 +15,30 @@ import (
 )
 
 type taskRequest struct {
-	TaskNo         string                   `json:"taskNo"`
-	Title          string                   `json:"title" binding:"required"`
-	Description    string                   `json:"description"`
-	CustomField1   string                   `json:"customField1"`
-	CustomField2   string                   `json:"customField2"`
-	CustomField3   string                   `json:"customField3"`
-	Status         string                   `json:"status"`
-	Priority       string                   `json:"priority"`
-	IsMilestone    bool                     `json:"isMilestone"`
-	Progress       int                      `json:"progress"`
-	EstimatedHours float64                  `json:"estimatedHours"`
-	ActualHours    float64                  `json:"actualHours"`
-	RemainingHours float64                  `json:"remainingHours"`
-	StartAt        string                   `json:"startAt"`
-	EndAt          string                   `json:"endAt"`
-	Attachment     *attachmentRequest       `json:"attachment"`
-	Attachments    *[]attachmentRequest     `json:"attachments"`
-	ProjectID      uint                     `json:"projectId" binding:"required"`
-	ParentID       *uint                    `json:"parentId"`
-	AssigneeIDs    []uint                   `json:"assigneeIds"`
-	ReviewerIDs    []uint                   `json:"reviewerIds"`
-	TagIDs         []uint                   `json:"tagIds"`
-	Dependencies   *[]taskDependencyRequest `json:"dependencies"`
+	TaskNo          string                   `json:"taskNo"`
+	Title           string                   `json:"title" binding:"required"`
+	Description     string                   `json:"description"`
+	CustomField1    string                   `json:"customField1"`
+	CustomField2    string                   `json:"customField2"`
+	CustomField3    string                   `json:"customField3"`
+	Status          string                   `json:"status"`
+	Priority        string                   `json:"priority"`
+	IsMilestone     bool                     `json:"isMilestone"`
+	ExternalVisible bool                     `json:"externalVisible"`
+	Progress        int                      `json:"progress"`
+	EstimatedHours  float64                  `json:"estimatedHours"`
+	ActualHours     float64                  `json:"actualHours"`
+	RemainingHours  float64                  `json:"remainingHours"`
+	StartAt         string                   `json:"startAt"`
+	EndAt           string                   `json:"endAt"`
+	Attachment      *attachmentRequest       `json:"attachment"`
+	Attachments     *[]attachmentRequest     `json:"attachments"`
+	ProjectID       uint                     `json:"projectId" binding:"required"`
+	ParentID        *uint                    `json:"parentId"`
+	AssigneeIDs     []uint                   `json:"assigneeIds"`
+	ReviewerIDs     []uint                   `json:"reviewerIds"`
+	TagIDs          []uint                   `json:"tagIds"`
+	Dependencies    *[]taskDependencyRequest `json:"dependencies"`
 }
 
 type taskProgressRequest struct {
@@ -315,6 +316,7 @@ func taskUpdateActivityDetail(oldItem model.Task, nextItem model.Task, oldAssign
 	lines := make([]string, 0, 8)
 	lines = appendTaskChange(lines, "状态", oldItem.Status, nextItem.Status)
 	lines = appendTaskChange(lines, "进度", oldItem.Progress, nextItem.Progress)
+	lines = appendTaskChange(lines, "外部可见", oldItem.ExternalVisible, nextItem.ExternalVisible)
 	lines = appendTaskChange(lines, "执行人", formatUintList(oldAssigneeIDs), formatUintList(newAssigneeIDs))
 	lines = appendTaskChange(lines, "审核人", formatUintList(oldReviewerIDs), formatUintList(newReviewerIDs))
 	lines = appendTaskChange(lines, "开始时间", formatTaskActivityTime(oldItem.StartAt), formatTaskActivityTime(nextItem.StartAt))
@@ -860,26 +862,27 @@ func (h *Handler) CreateTask(c *gin.Context) {
 	modelAttachments := toModelAttachments(attachments)
 
 	item := model.Task{
-		TaskNo:         taskNo,
-		Title:          req.Title,
-		Description:    req.Description,
-		CustomField1:   req.CustomField1,
-		CustomField2:   req.CustomField2,
-		CustomField3:   req.CustomField3,
-		Status:         normalizeStatus(req.Status),
-		Priority:       normalizePriority(req.Priority),
-		IsMilestone:    req.IsMilestone,
-		Progress:       req.Progress,
-		EstimatedHours: req.EstimatedHours,
-		ActualHours:    req.ActualHours,
-		RemainingHours: req.RemainingHours,
-		StartAt:        startAt,
-		EndAt:          endAt,
-		Attachment:     firstModelAttachment(modelAttachments),
-		Attachments:    modelAttachments,
-		CreatorID:      creatorID,
-		ProjectID:      req.ProjectID,
-		ParentID:       req.ParentID,
+		TaskNo:          taskNo,
+		Title:           req.Title,
+		Description:     req.Description,
+		CustomField1:    req.CustomField1,
+		CustomField2:    req.CustomField2,
+		CustomField3:    req.CustomField3,
+		Status:          normalizeStatus(req.Status),
+		Priority:        normalizePriority(req.Priority),
+		IsMilestone:     req.IsMilestone,
+		ExternalVisible: req.ExternalVisible,
+		Progress:        req.Progress,
+		EstimatedHours:  req.EstimatedHours,
+		ActualHours:     req.ActualHours,
+		RemainingHours:  req.RemainingHours,
+		StartAt:         startAt,
+		EndAt:           endAt,
+		Attachment:      firstModelAttachment(modelAttachments),
+		Attachments:     modelAttachments,
+		CreatorID:       creatorID,
+		ProjectID:       req.ProjectID,
+		ParentID:        req.ParentID,
 	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&item).Error; err != nil {
@@ -1089,6 +1092,7 @@ func (h *Handler) UpdateTask(c *gin.Context) {
 	item.Status = nextStatus
 	item.Priority = normalizePriority(req.Priority)
 	item.IsMilestone = req.IsMilestone
+	item.ExternalVisible = req.ExternalVisible
 	item.Progress = req.Progress
 	item.EstimatedHours = req.EstimatedHours
 	item.ActualHours = req.ActualHours
