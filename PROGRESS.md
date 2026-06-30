@@ -60,6 +60,12 @@
 - 完成：新增 `PATCH /tasks/:id/status`，支持看板拖拽轻量更新状态，完成状态仍要求审核人并自动补进度到 100
 - 完成：Kanban 按 pending/queued/processing/reviewing/completed 分列展示，处理中与待审核列内置 WIP 超限提示
 - 完成：补充状态更新 handler 单测和集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
+- 完成：按 `Improvement.md` 推进 P0-4 请求入口 MVP
+- 完成：新增 `work_requests` 模型与显式 SQL 迁移，支持项目申请、任务请求、缺陷/问题、变更申请
+- 完成：新增 `requests.create/read/update` 权限，默认 member 可提交/查看自己的请求，项目经理可审批并转任务
+- 完成：新增请求列表、提交、审批、转任务接口；转任务会创建任务、保留 `convertedTaskId` 来源关系并通知相关用户
+- 完成：新增请求入口前端页面与侧边导航，支持筛选、提交、审批、转任务和跳转已转任务
+- 完成：补充请求提交/审批/转任务/权限范围集成测试，并同步 API/OpenAPI/RBAC/README/PLAN
 - 完成：RBAC 写链路事务化（角色/权限 create/update/delete 纳入事务与审计一致性）
 - 完成：提取并复用关联同步 helper（用户/部门/项目/任务/RBAC 使用统一 Replace/Clear 与 ID 查询）
 - 完成：补充事务回滚验证能力（测试专用 failpoint，默认关闭）

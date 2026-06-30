@@ -20,6 +20,24 @@ const (
 	TaskPriorityLow    TaskPriority = "low"
 )
 
+type WorkRequestType string
+
+const (
+	WorkRequestProject WorkRequestType = "project"
+	WorkRequestTask    WorkRequestType = "task"
+	WorkRequestBug     WorkRequestType = "bug"
+	WorkRequestChange  WorkRequestType = "change"
+)
+
+type WorkRequestStatus string
+
+const (
+	WorkRequestSubmitted WorkRequestStatus = "submitted"
+	WorkRequestApproved  WorkRequestStatus = "approved"
+	WorkRequestRejected  WorkRequestStatus = "rejected"
+	WorkRequestConverted WorkRequestStatus = "converted"
+)
+
 type BaseModel struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -154,6 +172,24 @@ type TaskActivity struct {
 	Detail    string       `gorm:"type:text" json:"detail"`
 	CommentID *uint        `gorm:"index" json:"commentId,omitempty"`
 	Comment   *TaskComment `json:"comment,omitempty"`
+}
+
+type WorkRequest struct {
+	BaseModel
+	Type            WorkRequestType   `gorm:"size:20;default:'task';index" json:"type"`
+	Title           string            `gorm:"size:150;not null" json:"title"`
+	Description     string            `gorm:"type:text" json:"description"`
+	Priority        TaskPriority      `gorm:"size:20;default:'medium';index" json:"priority"`
+	Status          WorkRequestStatus `gorm:"size:20;default:'submitted';index" json:"status"`
+	ProjectID       *uint             `gorm:"index" json:"projectId,omitempty"`
+	Project         *Project          `json:"project,omitempty"`
+	RequesterID     uint              `gorm:"not null;index" json:"requesterId"`
+	Requester       User              `json:"requester,omitempty"`
+	ReviewerID      *uint             `gorm:"index" json:"reviewerId,omitempty"`
+	Reviewer        *User             `json:"reviewer,omitempty"`
+	ApprovalNote    string            `gorm:"type:text" json:"approvalNote"`
+	ConvertedTaskID *uint             `gorm:"index" json:"convertedTaskId,omitempty"`
+	ConvertedTask   *Task             `json:"convertedTask,omitempty"`
 }
 
 type AuditLog struct {

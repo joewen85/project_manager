@@ -123,6 +123,14 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			tasks.GET("/me", middleware.RequirePermission(h.DB, "tasks.read"), h.MyTasks)
 		}
 
+		requests := authGroup.Group("/requests")
+		{
+			requests.GET("", middleware.RequirePermission(h.DB, "requests.read"), h.ListWorkRequests)
+			requests.POST("", middleware.RequirePermission(h.DB, "requests.create"), h.CreateWorkRequest)
+			requests.PATCH("/:id/review", middleware.RequirePermission(h.DB, "requests.update"), h.ReviewWorkRequest)
+			requests.POST("/:id/convert-task", middleware.RequirePermission(h.DB, "requests.update"), h.ConvertWorkRequestToTask)
+		}
+
 		stats := authGroup.Group("/stats")
 		{
 			stats.GET("/dashboard", middleware.RequirePermission(h.DB, "stats.read"), h.DashboardStats)

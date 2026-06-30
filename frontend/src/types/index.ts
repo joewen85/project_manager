@@ -1,5 +1,7 @@
 export type Status = 'pending' | 'queued' | 'processing' | 'reviewing' | 'completed'
 export type TaskPriority = 'high' | 'medium' | 'low'
+export type WorkRequestType = 'project' | 'task' | 'bug' | 'change'
+export type WorkRequestStatus = 'submitted' | 'approved' | 'rejected' | 'converted'
 
 export interface PageResult<T> {
   list: T[]
@@ -109,6 +111,26 @@ export interface TaskActivity {
   detail?: string
   commentId?: number
   comment?: TaskComment
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface WorkRequest {
+  id: number
+  type: WorkRequestType
+  title: string
+  description: string
+  priority: TaskPriority
+  status: WorkRequestStatus
+  projectId?: number
+  project?: Project
+  requesterId: number
+  requester?: User
+  reviewerId?: number
+  reviewer?: User
+  approvalNote?: string
+  convertedTaskId?: number
+  convertedTask?: Task
   createdAt: string
   updatedAt?: string
 }

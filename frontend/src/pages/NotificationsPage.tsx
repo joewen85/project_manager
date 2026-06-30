@@ -100,6 +100,9 @@ export function NotificationsPage() {
       navigate(`/projects?projectId=${item.targetId}`)
       return
     }
+    if (item.module === 'requests' && item.targetId) {
+      navigate('/requests')
+    }
   }
 
   return (

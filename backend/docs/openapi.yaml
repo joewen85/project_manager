@@ -1102,6 +1102,118 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: getTasksMe
+  /requests:
+    get:
+      summary: 请求列表
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      - $ref: '#/components/parameters/Keyword'
+      - in: query
+        name: type
+        schema:
+          type: string
+          enum:
+          - project
+          - task
+          - bug
+          - change
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - submitted
+          - approved
+          - rejected
+          - converted
+      - in: query
+        name: statuses
+        schema:
+          type: string
+        description: 逗号分隔的状态列表
+      - in: query
+        name: projectId
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkRequestPageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getRequests
+    post:
+      summary: 提交请求
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkRequestCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postRequests
+  /requests/{id}/review:
+    patch:
+      summary: 审批请求
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkRequestReviewRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: patchRequestsByIdReview
+  /requests/{id}/convert-task:
+    post:
+      summary: 请求转任务
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkRequestConvertTaskRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkRequestConvertTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postRequestsByIdConvertTask
   /stats/dashboard:
     get:
       summary: 仪表盘统计
@@ -1871,6 +1983,132 @@ components:
           type: integer
         task:
           $ref: '#/components/schemas/Task'
+    WorkRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum:
+          - project
+          - task
+          - bug
+          - change
+        title:
+          type: string
+        description:
+          type: string
+        priority:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+        status:
+          type: string
+          enum:
+          - submitted
+          - approved
+          - rejected
+          - converted
+        projectId:
+          type: integer
+          nullable: true
+        project:
+          $ref: '#/components/schemas/Project'
+        requesterId:
+          type: integer
+        requester:
+          $ref: '#/components/schemas/UserLite'
+        reviewerId:
+          type: integer
+          nullable: true
+        reviewer:
+          $ref: '#/components/schemas/UserLite'
+        approvalNote:
+          type: string
+        convertedTaskId:
+          type: integer
+          nullable: true
+        convertedTask:
+          $ref: '#/components/schemas/Task'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    WorkRequestCreateRequest:
+      type: object
+      required:
+      - type
+      - title
+      properties:
+        type:
+          type: string
+          enum:
+          - project
+          - task
+          - bug
+          - change
+        title:
+          type: string
+        description:
+          type: string
+        priority:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+        projectId:
+          type: integer
+          nullable: true
+    WorkRequestReviewRequest:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - approved
+          - rejected
+        note:
+          type: string
+    WorkRequestConvertTaskRequest:
+      type: object
+      required:
+      - projectId
+      properties:
+        projectId:
+          type: integer
+        assigneeIds:
+          type: array
+          items:
+            type: integer
+        reviewerIds:
+          type: array
+          items:
+            type: integer
+        tagIds:
+          type: array
+          items:
+            type: integer
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+    WorkRequestConvertTaskResponse:
+      type: object
+      properties:
+        requestId:
+          type: integer
+        task:
+          $ref: '#/components/schemas/Task'
     TaskTreeNode:
       type: object
       properties:
@@ -2232,6 +2470,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Task'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    WorkRequestPageResult:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkRequest'
         total:
           type: integer
           format: int64

@@ -42,6 +42,9 @@
 | `comments.create` | 创建任务评论与提及 |
 | `comments.read` | 查看任务评论与活动流 |
 | `comments.delete` | 删除自己的任务评论 |
+| `requests.create` | 提交项目、任务、缺陷或变更请求 |
+| `requests.read` | 查看请求入口与审批记录 |
+| `requests.update` | 审批请求并转为任务 |
 | `notifications.read` | 查看通知 |
 | `notifications.update` | 标记通知已读 |
 | `stats.read` | 查看统计分析 |
@@ -81,6 +84,9 @@
 | `GET /tasks/:id/comments` `GET /tasks/:id/activities` | `comments.read` + 任务可见范围 |
 | `POST /tasks/:id/comments` | `comments.create` + 任务可见范围 |
 | `DELETE /tasks/:id/comments/:commentId` | `comments.delete` + 评论作者/管理员 |
+| `GET /requests` | `requests.read`；普通用户仅查看自己提交的请求 |
+| `POST /requests` | `requests.create` |
+| `PATCH /requests/:id/review` `POST /requests/:id/convert-task` | `requests.update` |
 | `GET /stats/dashboard` `GET /stats/project-health` | `stats.read`；普通用户按任务可见范围聚合 |
 | `GET /notifications` `GET /notifications/unread-count` | `notifications.read` |
 | `PATCH /notifications/:id/read` `PATCH /notifications/read-all` | `notifications.update` |
@@ -98,7 +104,7 @@
 ## 5. 默认角色策略
 
 - `admin`：全量权限（自动同步）。
-- `member`：默认具备 `notifications.read` + `notifications.update`，其余按业务分配。
+- `member`：默认具备 `notifications.read` + `notifications.update` + `requests.create` + `requests.read`，其余按业务分配。
 
 ## 6. 新功能接入规范
 

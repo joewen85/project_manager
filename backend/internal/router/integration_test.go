@@ -1478,6 +1478,199 @@ func TestPatchTaskStatusFlow(t *testing.T) {
 	}
 }
 
+func TestWorkRequestSubmitReviewAndConvertToTask(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	requesterRoleResp, requesterRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "request-submitter",
+		"description": "request submitter",
+		"permissionIds": []uint{
+			codeToID["requests.create"],
+			codeToID["requests.read"],
+			codeToID["notifications.read"],
+		},
+	})
+	if requesterRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create requester role expected 201 got %d", requesterRoleResp.StatusCode)
+	}
+	requesterRoleID := uint(requesterRoleBody["id"].(float64))
+
+	managerRoleResp, managerRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+		"name":        "request-manager",
+		"description": "request manager",
+		"permissionIds": []uint{
+			codeToID["requests.create"],
+			codeToID["requests.read"],
+			codeToID["requests.update"],
+			codeToID["projects.read"],
+			codeToID["tasks.read"],
+		},
+	})
+	if managerRoleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create manager role expected 201 got %d", managerRoleResp.StatusCode)
+	}
+	managerRoleID := uint(managerRoleBody["id"].(float64))
+
+	requesterResp, requesterBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "request_submitter_u1",
+		"name":          "Request Submitter",
+		"email":         "request_submitter_u1@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{requesterRoleID},
+		"departmentIds": []uint{},
+	})
+	if requesterResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create requester expected 201 got %d", requesterResp.StatusCode)
+	}
+	requesterID := uint(requesterBody["id"].(float64))
+
+	otherResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "request_submitter_other",
+		"name":          "Other Submitter",
+		"email":         "request_submitter_other@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{requesterRoleID},
+		"departmentIds": []uint{},
+	})
+	if otherResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create other requester expected 201 got %d", otherResp.StatusCode)
+	}
+
+	managerResp, managerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+		"username":      "request_manager_u1",
+		"name":          "Request Manager",
+		"email":         "request_manager_u1@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{managerRoleID},
+		"departmentIds": []uint{},
+	})
+	if managerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create manager expected 201 got %d", managerResp.StatusCode)
+	}
+	managerID := uint(managerBody["id"].(float64))
+
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "REQ-P1",
+		"name":        "Request Project",
+		"description": "request project",
+		"userIds":     []uint{managerID},
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create request project expected 201 got %d", projectResp.StatusCode)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	requesterLoginStatus, requesterLoginBody := loginWithCredentials(t, ts.URL, "request_submitter_u1", "pass1234")
+	if requesterLoginStatus != http.StatusOK {
+		t.Fatalf("login requester expected 200 got %d", requesterLoginStatus)
+	}
+	requesterToken := requesterLoginBody["token"].(string)
+	otherLoginStatus, otherLoginBody := loginWithCredentials(t, ts.URL, "request_submitter_other", "pass1234")
+	if otherLoginStatus != http.StatusOK {
+		t.Fatalf("login other expected 200 got %d", otherLoginStatus)
+	}
+	otherToken := otherLoginBody["token"].(string)
+	managerLoginStatus, managerLoginBody := loginWithCredentials(t, ts.URL, "request_manager_u1", "pass1234")
+	if managerLoginStatus != http.StatusOK {
+		t.Fatalf("login manager expected 200 got %d", managerLoginStatus)
+	}
+	managerToken := managerLoginBody["token"].(string)
+
+	createResp, createBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/requests", requesterToken, map[string]any{
+		"type":        "task",
+		"title":       "Need onboarding task",
+		"description": "please create an onboarding task",
+		"priority":    "high",
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create work request expected 201 got %d %#v", createResp.StatusCode, createBody)
+	}
+	requestID := int(createBody["id"].(float64))
+	if int(createBody["requesterId"].(float64)) != int(requesterID) || createBody["status"] != "submitted" {
+		t.Fatalf("unexpected created request body %#v", createBody)
+	}
+
+	otherListResp, otherListBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/requests", otherToken, nil)
+	if otherListResp.StatusCode != http.StatusOK {
+		t.Fatalf("other list requests expected 200 got %d", otherListResp.StatusCode)
+	}
+	if list, ok := otherListBody["list"].([]any); !ok || len(list) != 0 {
+		t.Fatalf("other requester should not see unrelated requests got %#v", otherListBody["list"])
+	}
+
+	forbiddenReviewResp, _ := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/requests/"+strconv.Itoa(requestID)+"/review", requesterToken, map[string]any{
+		"status": "approved",
+	})
+	if forbiddenReviewResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("requester review expected 403 got %d", forbiddenReviewResp.StatusCode)
+	}
+
+	approveResp, approveBody := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/requests/"+strconv.Itoa(requestID)+"/review", managerToken, map[string]any{
+		"status": "approved",
+		"note":   "可以转任务",
+	})
+	if approveResp.StatusCode != http.StatusOK {
+		t.Fatalf("manager approve expected 200 got %d %#v", approveResp.StatusCode, approveBody)
+	}
+	if approveBody["status"] != "approved" || int(approveBody["reviewerId"].(float64)) != int(managerID) {
+		t.Fatalf("unexpected approve body %#v", approveBody)
+	}
+
+	convertResp, convertBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/requests/"+strconv.Itoa(requestID)+"/convert-task", managerToken, map[string]any{
+		"projectId":   projectID,
+		"assigneeIds": []uint{requesterID},
+		"reviewerIds": []uint{managerID},
+	})
+	if convertResp.StatusCode != http.StatusCreated {
+		t.Fatalf("convert request expected 201 got %d %#v", convertResp.StatusCode, convertBody)
+	}
+	task, ok := convertBody["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("convert response should include task got %#v", convertBody)
+	}
+	if task["title"] != "Need onboarding task" || int(task["projectId"].(float64)) != projectID {
+		t.Fatalf("converted task should copy title and project got %#v", task)
+	}
+
+	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/requests", managerToken, nil)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("manager list requests expected 200 got %d", listResp.StatusCode)
+	}
+	items, _ := listBody["list"].([]any)
+	if len(items) == 0 {
+		t.Fatalf("manager should see converted request got %#v", listBody)
+	}
+	first, _ := items[0].(map[string]any)
+	if first["status"] != "converted" || first["convertedTaskId"] == nil {
+		t.Fatalf("request should be converted with task id got %#v", first)
+	}
+
+	rejectedResp, rejectedBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/requests", requesterToken, map[string]any{
+		"type":  "bug",
+		"title": "Rejected bug",
+	})
+	if rejectedResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create rejected request expected 201 got %d", rejectedResp.StatusCode)
+	}
+	rejectedID := int(rejectedBody["id"].(float64))
+	reviewRejectResp, _ := requestJSON(t, http.MethodPatch, ts.URL+"/api/v1/requests/"+strconv.Itoa(rejectedID)+"/review", managerToken, map[string]any{
+		"status": "rejected",
+	})
+	if reviewRejectResp.StatusCode != http.StatusOK {
+		t.Fatalf("reject request expected 200 got %d", reviewRejectResp.StatusCode)
+	}
+	convertRejectedResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/requests/"+strconv.Itoa(rejectedID)+"/convert-task", managerToken, map[string]any{
+		"projectId": projectID,
+	})
+	if convertRejectedResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("convert rejected request expected 400 got %d", convertRejectedResp.StatusCode)
+	}
+}
+
 func TestMyTasksReturnsEmptyArrays(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

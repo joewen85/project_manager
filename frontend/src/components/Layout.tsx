@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Building2, CalendarRange, FolderKanban, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, Shield, Sun, Tag, UserCircle2, Users, X } from 'lucide-react'
+import { BarChart3, Bell, Building2, CalendarRange, ClipboardList, FolderKanban, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, Shield, Sun, Tag, UserCircle2, Users, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, clearPermissions, fetchData, fetchPage, getPermissions, hasPermission, readApiError, setPermissions } from '../services/api'
@@ -15,6 +15,7 @@ const menus = [
   { to: '/projects', label: '项目列表', icon: FolderKanban, permission: 'projects.read' },
   { to: '/gantt', label: '甘特模块', icon: CalendarRange, permission: 'projects.read' },
   { to: '/tasks', label: '任务列表', icon: ListChecks, permission: 'tasks.read' },
+  { to: '/requests', label: '请求入口', icon: ClipboardList, permission: 'requests.read' },
   { to: '/notifications', label: '站内通知', icon: Bell, permission: 'notifications.read' },
   { to: '/audit', label: '审计日志', icon: NotebookTabs, permission: 'audit.read' },
   { to: '/me', label: '个人工作', icon: UserCircle2, permission: 'tasks.read' }
@@ -301,6 +302,11 @@ export function Layout() {
       setNotificationMenuOpen(false)
       return
     }
+    if (item.module === 'requests' && item.targetId) {
+      navigate('/requests')
+      setNotificationMenuOpen(false)
+      return
+    }
     navigate('/notifications')
     setNotificationMenuOpen(false)
   }
@@ -446,6 +452,7 @@ export function Layout() {
     ['/projects', '项目列表'],
     ['/gantt', '甘特图模块'],
     ['/tasks', '任务列表'],
+    ['/requests', '请求入口'],
     ['/notifications', '站内通知'],
     ['/audit', '审计日志'],
     ['/me', '个人工作']

@@ -50,6 +50,9 @@ Base URL: `http://localhost:8080/api/v1`
 | GET | `/tasks/:id/comments` `/tasks/:id/activities` | `comments.read` + 任务可见范围 |
 | POST | `/tasks/:id/comments` | `comments.create` + 任务可见范围 |
 | DELETE | `/tasks/:id/comments/:commentId` | `comments.delete` + 评论作者/管理员 |
+| GET | `/requests` | `requests.read` |
+| POST | `/requests` | `requests.create` |
+| PATCH | `/requests/:id/review` `POST /requests/:id/convert-task` | `requests.update` |
 | GET | `/stats/dashboard` `/stats/project-health` | `stats.read` |
 | GET | `/notifications` `/notifications/unread-count` | `notifications.read` |
 | PATCH | `/notifications/:id/read` `/notifications/read-all` | `notifications.update` |
@@ -237,6 +240,31 @@ Base URL: `http://localhost:8080/api/v1`
 - 当前记录: 任务创建、更新、进度更新、审核完成、依赖/排期调整、自动顺延、评论新增/删除
 
 ### DELETE `/tasks/:id`
+
+## 请求入口
+
+### GET `/requests`
+- 权限: `requests.read`
+- 范围: 管理员和具备 `requests.update` 的用户可查看全部请求；普通用户只查看自己提交的请求
+- Query: `page` `pageSize` `keyword` `type` `status` `statuses` `projectId`
+- `type`: `project|task|bug|change`
+- `status`: `submitted|approved|rejected|converted`
+
+### POST `/requests`
+- 权限: `requests.create`
+- 请求体: `{ type, title, description?, priority?, projectId? }`
+- 用途: 业务用户提交项目申请、任务请求、缺陷/问题或变更申请；不要求项目/任务创建权限
+
+### PATCH `/requests/:id/review`
+- 权限: `requests.update`
+- 请求体: `{ status: "approved|rejected", note? }`
+- 效果: 记录审批人、审批意见，并通知请求提交人
+
+### POST `/requests/:id/convert-task`
+- 权限: `requests.update`
+- 请求体: `{ projectId, assigneeIds?, reviewerIds?, tagIds?, startAt?, endAt? }`
+- 规则: 已拒绝或已转换的请求不能再次转任务
+- 效果: 创建任务，复制请求标题/描述/优先级，回填 `convertedTaskId` 并将请求状态置为 `converted`
 
 ## 统计分析
 

@@ -50,6 +50,10 @@ var permissionCatalog = []permissionSeed{
 	{Code: "comments.read", Name: "评论-查看", Description: "查看任务评论与活动流"},
 	{Code: "comments.delete", Name: "评论-删除", Description: "删除自己的任务评论"},
 
+	{Code: "requests.create", Name: "请求-创建", Description: "提交项目、任务、缺陷或变更请求"},
+	{Code: "requests.read", Name: "请求-查看", Description: "查看请求入口与审批记录"},
+	{Code: "requests.update", Name: "请求-审批", Description: "审批请求并转为任务"},
+
 	{Code: "tags.create", Name: "标签-创建", Description: "创建标签"},
 	{Code: "tags.read", Name: "标签-查看", Description: "查看标签"},
 	{Code: "tags.update", Name: "标签-更新", Description: "更新标签"},
@@ -172,7 +176,7 @@ func Run(db *gorm.DB) error {
 			return err
 		}
 		var memberDefaultPerms []model.Permission
-		if err := tx.Where("code IN ?", []string{"notifications.read", "notifications.update"}).Find(&memberDefaultPerms).Error; err != nil {
+		if err := tx.Where("code IN ?", []string{"notifications.read", "notifications.update", "requests.create", "requests.read"}).Find(&memberDefaultPerms).Error; err != nil {
 			return err
 		}
 		if len(memberDefaultPerms) > 0 {
