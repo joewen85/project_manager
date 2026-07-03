@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"project-manager/backend/internal/ai"
 	"project-manager/backend/internal/config"
 
 	"gorm.io/gorm"
@@ -11,6 +12,7 @@ type Handler struct {
 	Cfg             config.Config
 	TxFailpoint     func(point string) error
 	NotificationHub *notificationSocketHub
+	AIClient        ai.Client
 }
 
 func New(db *gorm.DB, cfg config.Config) *Handler {
@@ -18,6 +20,7 @@ func New(db *gorm.DB, cfg config.Config) *Handler {
 		DB:              db,
 		Cfg:             cfg,
 		NotificationHub: newNotificationSocketHub(),
+		AIClient:        ai.New(cfg),
 	}
 }
 

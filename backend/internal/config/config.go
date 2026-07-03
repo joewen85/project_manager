@@ -39,6 +39,10 @@ type Config struct {
 	FeishuReceiveID    string
 	FeishuReceiveType  string
 	WebhookPrivateOK   bool
+	AIBaseURL          string
+	AIAPIKey           string
+	AIModel            string
+	AITimeoutSeconds   int
 }
 
 func Load() Config {
@@ -71,8 +75,19 @@ func Load() Config {
 		FeishuReceiveID:    getEnv("FEISHU_RECEIVE_ID", ""),
 		FeishuReceiveType:  getEnv("FEISHU_RECEIVE_ID_TYPE", "email"),
 		WebhookPrivateOK:   getEnvBool("AUTOMATION_WEBHOOK_ALLOW_PRIVATE", false),
+		AIBaseURL:          strings.TrimRight(getEnv("AI_BASE_URL", ""), "/"),
+		AIAPIKey:           getEnv("AI_API_KEY", ""),
+		AIModel:            getEnv("AI_MODEL", ""),
+		AITimeoutSeconds:   getEnvInt("AI_TIMEOUT_SECONDS", 30),
 	}
 	return cfg
+}
+
+// AIEnabled reports whether the AI assistant is configured to call an external
+// LLM gateway. When any required field is missing the assistant falls back to
+// deterministic templates and never sends data off-box.
+func (c Config) AIEnabled() bool {
+	return c.AIBaseURL != "" && c.AIAPIKey != "" && c.AIModel != ""
 }
 
 func (c Config) Validate() error {
@@ -95,6 +110,18 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
 }
 
 func getEnvBool(key string, fallback bool) bool {

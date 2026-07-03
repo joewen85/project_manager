@@ -25,3 +25,4 @@ backend/bin/
 static/uploads/**
 !static/uploads/.gitkeep
 Improvement.md
+.learnings/

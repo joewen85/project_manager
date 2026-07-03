@@ -1,10 +1,18 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchArray, fetchData, fetchPage, hasAnyPermission, hasPermission, readApiError } from '../services/api'
 import { STATUS_META, STATUS_ORDER } from '../constants/status'
 import { ProjectHealth, ProjectRegister, Status } from '../types'
 import { DataState } from '../components/DataState'
-import type { DashboardProgressItem } from '../components/DashboardCharts'
+import type {
+  DashboardDeliveryItem,
+  DashboardHealthChartItem,
+  DashboardProgressItem,
+  DashboardProjectProgressItem,
+  DashboardRiskChartItem,
+  DashboardTrendItem,
+  DashboardWorkloadChartItem
+} from '../components/DashboardCharts'
 import { usePermissions } from '../hooks/usePermissions'
 
 const DashboardCharts = lazy(async () => import('../components/DashboardCharts').then((module) => ({ default: module.DashboardCharts })))
@@ -52,6 +60,12 @@ const healthLabel: Record<ProjectHealth['health'], string> = {
   red: '高风险'
 }
 
+const healthColor: Record<ProjectHealth['health'], string> = {
+  green: '#22c55e',
+  yellow: '#f59e0b',
+  red: '#ef4444'
+}
+
 const formatDate = (value?: string) => {
   if (!value) return '-'
   return new Date(value).toLocaleDateString('zh-CN')
@@ -90,27 +104,27 @@ export function DashboardPage() {
       setMemberWorkloadError('')
       setRegisterError('')
       const [statsData, raw, healthData, workloadData, highRiskData, unresolvedIssueData] = await Promise.all([
-        fetchData<DashboardStats>('/stats/dashboard'),
-        fetchArray<DashboardProgressRaw>('/tasks/progress-list', undefined, { silent: true }).catch((progressLoadError) => {
+        fetchData<DashboardStats>('/insights/stats/dashboard'),
+        fetchArray<DashboardProgressRaw>('/delivery/tasks/progress-list', undefined, { silent: true }).catch((progressLoadError) => {
           setProgressError(readApiError(progressLoadError, '任务状态分布加载失败'))
           return []
         }),
-        fetchData<ProjectHealthResponse>('/stats/project-health', undefined, { silent: true }).catch((healthError) => {
+        fetchData<ProjectHealthResponse>('/insights/stats/project-health', undefined, { silent: true }).catch((healthError) => {
           setProjectHealthError(readApiError(healthError, '项目健康度加载失败'))
           return { projects: [] }
         }),
-        fetchData<MemberWorkloadResponse>('/stats/member-workload', undefined, { silent: true }).catch((workloadError) => {
+        fetchData<MemberWorkloadResponse>('/insights/stats/member-workload', undefined, { silent: true }).catch((workloadError) => {
           setMemberWorkloadError(readApiError(workloadError, '成员负载加载失败'))
           return { members: [] } as MemberWorkloadResponse
         }),
         canReadRegisters
-          ? fetchPage<ProjectRegister>('/project-registers', { page: 1, pageSize: 1, type: 'risk', statuses: 'open,in_progress', severities: 'high,critical' }, { page: 1, pageSize: 1 }, { silent: true }).catch((registerLoadError) => {
+          ? fetchPage<ProjectRegister>('/portfolio/registers', { page: 1, pageSize: 1, type: 'risk', statuses: 'open,in_progress', severities: 'high,critical' }, { page: 1, pageSize: 1 }, { silent: true }).catch((registerLoadError) => {
             setRegisterError(readApiError(registerLoadError, '登记册摘要加载失败'))
             return { list: [] as ProjectRegister[], total: 0, page: 1, pageSize: 1 }
           })
           : Promise.resolve({ list: [] as ProjectRegister[], total: 0, page: 1, pageSize: 1 }),
         canReadRegisters
-          ? fetchPage<ProjectRegister>('/project-registers', { page: 1, pageSize: 1, type: 'issue', statuses: 'open,in_progress' }, { page: 1, pageSize: 1 }, { silent: true }).catch((registerLoadError) => {
+          ? fetchPage<ProjectRegister>('/portfolio/registers', { page: 1, pageSize: 1, type: 'issue', statuses: 'open,in_progress' }, { page: 1, pageSize: 1 }, { silent: true }).catch((registerLoadError) => {
             setRegisterError(readApiError(registerLoadError, '登记册摘要加载失败'))
             return { list: [] as ProjectRegister[], total: 0, page: 1, pageSize: 1 }
           })
@@ -159,20 +173,122 @@ export function DashboardPage() {
     void load()
   }, [canReadRegisters])
 
+  const totalTasks = stats?.tasks ?? progress.reduce((sum, item) => sum + item.count, 0)
+  const completedTasks = stats?.completedTasks ?? progress.find((item) => item.status === 'completed')?.count ?? 0
+  const completionRatePercent = Math.max(0, Math.min(100, (stats?.completionRate ?? (totalTasks > 0 ? completedTasks / totalTasks : 0)) * 100))
+  const redProjectCount = projectHealth.filter((item) => item.health === 'red').length
+  const overloadedMemberCount = (memberWorkload.members || []).filter((item) => item.overloaded).length
+  const overdueTaskCount = projectHealth.reduce((sum, item) => sum + item.overdueTasks, 0)
+  const averageProjectCompletion = projectHealth.length > 0
+    ? projectHealth.reduce((sum, item) => sum + item.completionRate, 0) / projectHealth.length * 100
+    : completionRatePercent
+
+  const healthChart = useMemo<DashboardHealthChartItem[]>(() => {
+    return (['green', 'yellow', 'red'] as ProjectHealth['health'][]).map((health) => ({
+      name: healthLabel[health],
+      value: projectHealth.filter((item) => item.health === health).length,
+      fill: healthColor[health]
+    }))
+  }, [projectHealth])
+
+  const projectProgressChart = useMemo<DashboardProjectProgressItem[]>(() => {
+    return [...projectHealth]
+      .sort((left, right) => right.completionRate - left.completionRate)
+      .slice(0, 8)
+      .map((item) => ({
+        name: item.projectCode || item.projectName,
+        completionRate: Number((item.completionRate * 100).toFixed(1)),
+        score: item.score,
+        fill: healthColor[item.health]
+      }))
+  }, [projectHealth])
+
+  const riskChart = useMemo<DashboardRiskChartItem[]>(() => [
+    { name: '风险项目', value: redProjectCount, fill: '#ef4444' },
+    { name: '关注项目', value: projectHealth.filter((item) => item.health === 'yellow').length, fill: '#f59e0b' },
+    { name: '高风险项', value: highRiskRegisterCount, fill: '#dc2626' },
+    { name: '未解决问题', value: unresolvedIssueCount, fill: '#7c3aed' },
+    { name: '逾期任务', value: overdueTaskCount, fill: '#f97316' }
+  ], [highRiskRegisterCount, overdueTaskCount, projectHealth, redProjectCount, unresolvedIssueCount])
+
+  const workloadChart = useMemo<DashboardWorkloadChartItem[]>(() => {
+    return [...(memberWorkload.members || [])]
+      .sort((left, right) => right.utilizationRate - left.utilizationRate)
+      .slice(0, 8)
+      .map((item) => ({
+        name: item.name || item.username,
+        utilization: Math.round((item.utilizationRate || 0) * 100),
+        taskCount: item.taskCount,
+        fill: item.overloaded ? '#ef4444' : '#2563eb'
+      }))
+  }, [memberWorkload.members])
+
+  const deliveryChart = useMemo<DashboardDeliveryItem[]>(() => {
+    const sum = (pick: (item: ProjectHealth) => number) => projectHealth.reduce((total, item) => total + (pick(item) || 0), 0)
+    return [
+      { name: '未排期', value: sum((item) => item.unscheduledTasks), fill: '#6366f1' },
+      { name: '待审核', value: sum((item) => item.reviewingTasks), fill: '#0ea5e9' },
+      { name: '关键逾期', value: sum((item) => item.criticalOverdueTasks || 0), fill: '#dc2626' },
+      { name: '里程碑逾期', value: sum((item) => item.milestoneOverdue), fill: '#f97316' }
+    ]
+  }, [projectHealth])
+
+  const trendChart = useMemo<DashboardTrendItem[]>(() => {
+    let cumulative = 0
+    return progress.map((item) => {
+      cumulative += item.count
+      return {
+        stage: item.statusLabel,
+        count: item.count,
+        cumulative
+      }
+    })
+  }, [progress])
+
   return (
     <section className="page-section">
       <DataState loading={loading} error={error} onRetry={() => { void load() }} />
+      {!loading && !error && (
+        <header className="dashboard-hero">
+          <div>
+            <h3>项目 Dashboard</h3>
+            <p>当前可见项目、任务推进、风险问题和成员负载的实时概览。</p>
+          </div>
+          <div className="dashboard-hero-metrics">
+            <span>平均项目完成率 <strong>{averageProjectCompletion.toFixed(1)}%</strong></span>
+            <span>逾期任务 <strong>{overdueTaskCount}</strong></span>
+            <span>过载成员 <strong>{overloadedMemberCount}</strong></span>
+          </div>
+        </header>
+      )}
       <div className="cards">
-        {canViewUsers && <article className="card metric-card"><p>用户</p><strong>{stats?.users ?? 0}</strong></article>}
-        <article className="card metric-card"><p>项目</p><strong>{stats?.projects ?? 0}</strong></article>
-        <article className="card metric-card"><p>任务</p><strong>{stats?.tasks ?? 0}</strong></article>
-        <article className="card metric-card"><p>完成率</p><strong>{((stats?.completionRate ?? 0) * 100).toFixed(1)}%</strong></article>
-        <article className="card metric-card"><p>风险项目</p><strong>{projectHealth.filter((item) => item.health === 'red').length}</strong></article>
-        <article className="card metric-card"><p>过载成员</p><strong>{(memberWorkload.members || []).filter((item) => item.overloaded).length}</strong></article>
+        {canViewUsers && <article className="card metric-card"><p>用户</p><strong>{stats?.users ?? 0}</strong><small>系统账号</small></article>}
+        <article className="card metric-card"><p>项目</p><strong>{stats?.projects ?? 0}</strong><small>可见项目</small></article>
+        <article className="card metric-card"><p>任务</p><strong>{totalTasks}</strong><small>任务总量</small></article>
+        <article className="card metric-card"><p>完成率</p><strong>{completionRatePercent.toFixed(1)}%</strong><small>{completedTasks} 项已完成</small></article>
+        <article className="card metric-card"><p>风险项目</p><strong>{redProjectCount}</strong><small>健康度红色</small></article>
+        <article className="card metric-card"><p>过载成员</p><strong>{overloadedMemberCount}</strong><small>容量超限</small></article>
         {canReadRegisters && <article className="card metric-card"><p>高风险登记项</p><strong>{highRiskRegisterCount}</strong></article>}
         {canReadRegisters && <article className="card metric-card"><p>未解决问题</p><strong>{unresolvedIssueCount}</strong></article>}
       </div>
       {!loading && !error && registerError && <p className="inline-tip">{registerError}</p>}
+      {!loading && !error && progressError && <p className="inline-tip">{progressError}</p>}
+      {!loading && !error && (
+        <Suspense fallback={<div className="card">图表加载中...</div>}>
+          <DashboardCharts
+            progress={progress}
+            completionRate={completionRatePercent}
+            completedTasks={completedTasks}
+            totalTasks={totalTasks}
+            health={healthChart}
+            projectProgress={projectProgressChart}
+            riskItems={riskChart}
+            workload={workloadChart}
+            trend={trendChart}
+            delivery={deliveryChart}
+          />
+        </Suspense>
+      )}
       {!loading && !error && (
         <section className="card dashboard-health-panel">
           <div className="dashboard-health-header">
@@ -183,7 +299,7 @@ export function DashboardPage() {
           {projectHealth.length > 0 && (
             <div className="dashboard-health-list">
               {projectHealth.map((item) => (
-                <Link key={item.projectId} className={`dashboard-health-item health-${item.health}`} to={`/tasks?projectId=${item.projectId}`}>
+                <Link key={item.projectId} className={`dashboard-health-item health-${item.health}`} to={`/delivery/tasks?projectId=${item.projectId}`}>
                   <div className="dashboard-health-main">
                     <span className="dashboard-health-badge">{healthLabel[item.health]}</span>
                     <strong>{item.projectCode} - {item.projectName}</strong>
@@ -240,12 +356,6 @@ export function DashboardPage() {
             </div>
           )}
         </section>
-      )}
-      {!loading && !error && progressError && <p className="inline-tip">{progressError}</p>}
-      {!loading && !error && (
-        <Suspense fallback={<div className="card">图表加载中...</div>}>
-          <DashboardCharts progress={progress} />
-        </Suspense>
       )}
     </section>
   )
