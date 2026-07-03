@@ -39,9 +39,9 @@ const toFormTime = (value?: string) => {
 
 export function ApiTokensPage() {
   const permissions = usePermissions()
-  const canCreateToken = hasPermission('api_tokens.create', permissions)
-  const canUpdateToken = hasPermission('api_tokens.update', permissions)
-  const canDeleteToken = hasPermission('api_tokens.delete', permissions)
+  const canCreateToken = hasPermission('system.api_tokens.create', permissions)
+  const canUpdateToken = hasPermission('system.api_tokens.update', permissions)
+  const canDeleteToken = hasPermission('system.api_tokens.delete', permissions)
   const [items, setItems] = useState<ApiToken[]>([])
   const [permissionOptions, setPermissionOptions] = useState<Permission[]>([])
   const [keywordInput, setKeywordInput] = useState('')
@@ -69,7 +69,7 @@ export function ApiTokensPage() {
     try {
       setLoading(true)
       setError('')
-      const pageData = await fetchPage<ApiToken>('/api-tokens', { page, pageSize, keyword, isEnabled: enabledFilter }, { page, pageSize })
+      const pageData = await fetchPage<ApiToken>('/system/api-tokens', { page, pageSize, keyword, isEnabled: enabledFilter }, { page, pageSize })
       setItems(pageData.list)
       setTotal(pageData.total)
     } catch (loadError) {
@@ -83,7 +83,7 @@ export function ApiTokensPage() {
 
   const loadPermissionOptions = async () => {
     try {
-      const list = await fetchArray<Permission>('/api-tokens/permission-options')
+      const list = await fetchArray<Permission>('/system/api-tokens/permission-options')
       setPermissionOptions(list)
     } catch {
       setPermissionOptions([])
@@ -145,10 +145,10 @@ export function ApiTokensPage() {
         expiresAt: toRequestTime(form.expiresAt)
       }
       if (form.id) {
-        await api.put(`/api-tokens/${form.id}`, payload)
+        await api.put(`/system/api-tokens/${form.id}`, payload)
         setModalOpen(false)
       } else {
-        const res = await api.post<ApiTokenCreateResponse>('/api-tokens', payload)
+        const res = await api.post<ApiTokenCreateResponse>('/system/api-tokens', payload)
         setCreatedToken(res.data.token)
       }
       await load()
@@ -163,7 +163,7 @@ export function ApiTokensPage() {
     if (!canDeleteToken) return
     if (!confirm(`确认撤销 API Token「${item.name}」？`)) return
     try {
-      await api.delete(`/api-tokens/${item.id}`)
+      await api.delete(`/system/api-tokens/${item.id}`)
       await load()
     } catch (deleteError) {
       setError(readApiError(deleteError, '撤销 API Token 失败'))

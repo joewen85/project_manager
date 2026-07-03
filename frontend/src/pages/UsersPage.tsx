@@ -33,9 +33,9 @@ const initialForm: UserForm = {
 
 export function UsersPage() {
   const permissions = usePermissions()
-  const canCreateUser = hasPermission('users.create', permissions)
-  const canUpdateUser = hasPermission('users.update', permissions)
-  const canDeleteUser = hasPermission('users.delete', permissions)
+  const canCreateUser = hasPermission('system.users.create', permissions)
+  const canUpdateUser = hasPermission('system.users.update', permissions)
+  const canDeleteUser = hasPermission('system.users.delete', permissions)
   const [users, setUsers] = useState<User[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -57,10 +57,10 @@ export function UsersPage() {
     try {
       setLoading(true)
       setError('')
-      const usersPage = await fetchPage<User>('/users', { page, pageSize, keyword }, { page, pageSize })
+      const usersPage = await fetchPage<User>('/system/users', { page, pageSize, keyword }, { page, pageSize })
       const [rolesList, departmentsPage] = await Promise.all([
-        fetchArray<Role>('/rbac/roles', undefined, { silent: true }).catch(() => []),
-        fetchPage<Department>('/departments', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as Department[], total: 0, page: 1, pageSize: 100 }))
+        fetchArray<Role>('/system/rbac/roles', undefined, { silent: true }).catch(() => []),
+        fetchPage<Department>('/system/departments', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as Department[], total: 0, page: 1, pageSize: 100 }))
       ])
       setUsers(usersPage.list)
       setTotal(usersPage.total)
@@ -84,7 +84,7 @@ export function UsersPage() {
       setSubmitting(true)
       setFormError('')
       if (form.id) {
-        await api.put(`/users/${form.id}`, {
+        await api.put(`/system/users/${form.id}`, {
           name: form.name,
           email: form.email,
           password: form.password,
@@ -94,7 +94,7 @@ export function UsersPage() {
           departmentIds: form.departmentIds
         })
       } else {
-        await api.post('/users', {
+        await api.post('/system/users', {
           username: form.username,
           name: form.name,
           email: form.email,
@@ -145,7 +145,7 @@ export function UsersPage() {
     if (!canDeleteUser) return
     if (!confirm('确认删除该用户？')) return
     try {
-      await api.delete(`/users/${id}`)
+      await api.delete(`/system/users/${id}`)
       await load()
     } catch (deleteError) {
       setError(readApiError(deleteError, '删除用户失败'))

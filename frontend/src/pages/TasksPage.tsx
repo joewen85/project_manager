@@ -466,8 +466,8 @@ export function TasksPage() {
     if (!modalOpen) return
     const timer = window.setTimeout(() => {
       void Promise.all([
-        fetchPage<User>('/users', { page: 1, pageSize: 200, keyword: assigneeKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 })),
-        fetchPage<User>('/users', { page: 1, pageSize: 200, keyword: reviewerKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 })),
+        fetchPage<User>('/system/users', { page: 1, pageSize: 200, keyword: assigneeKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 })),
+        fetchPage<User>('/system/users', { page: 1, pageSize: 200, keyword: reviewerKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 })),
         fetchPage<Tag>('/tags', { page: 1, pageSize: 200, keyword: tagKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 }))
       ]).then(([userPage, reviewerPage, tagPage]) => {
         setUsers(userPage.list)

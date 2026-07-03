@@ -23,7 +23,7 @@ export function AuditPage() {
       setLoading(true)
       setError('')
       const pageData = await fetchPage<AuditLog>(
-        '/audit/logs',
+        '/system/audit/logs',
         { page: targetPage, pageSize: targetPageSize, module: module.trim(), action: action.trim() },
         { page: targetPage, pageSize: targetPageSize }
       )

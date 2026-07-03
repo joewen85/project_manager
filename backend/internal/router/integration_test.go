@@ -193,7 +193,7 @@ func loginWithCredentials(t *testing.T, serverURL, username, password string) (i
 
 func permissionCodeMap(t *testing.T, serverURL, token string) map[string]uint {
 	t.Helper()
-	req, _ := http.NewRequest(http.MethodGet, serverURL+"/api/v1/rbac/permissions", nil)
+	req, _ := http.NewRequest(http.MethodGet, serverURL+"/api/v1/system/rbac/permissions", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -223,7 +223,7 @@ func TestChangeOwnPasswordFlow(t *testing.T) {
 	originalPassword := "pass1234"
 	newPassword := "pass5678"
 
-	createUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	createUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      username,
 		"name":          "Change Password User",
 		"email":         "change_pwd_user@example.com",
@@ -515,7 +515,7 @@ func TestAuthCRUDAndAuditFlow(t *testing.T) {
 
 	departmentBody := map[string]any{"name": "研发部", "description": "R&D"}
 	raw, _ := json.Marshal(departmentBody)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/departments", bytes.NewReader(raw))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/system/departments", bytes.NewReader(raw))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -527,7 +527,7 @@ func TestAuthCRUDAndAuditFlow(t *testing.T) {
 		t.Fatalf("create department status expected 201 got %d", resp.StatusCode)
 	}
 
-	logsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/audit/logs?module=departments", nil)
+	logsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/system/audit/logs?module=departments", nil)
 	logsReq.Header.Set("Authorization", "Bearer "+token)
 	logsResp, err := http.DefaultClient.Do(logsReq)
 	if err != nil {
@@ -557,7 +557,7 @@ func TestAuditLogsDefaultPageSize(t *testing.T) {
 	defer ts.Close()
 
 	token := loginAndToken(t, ts.URL)
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/audit/logs", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/system/audit/logs", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -798,7 +798,7 @@ func TestUserScopeAndExportFlow(t *testing.T) {
 
 	adminToken := loginAndToken(t, ts.URL)
 
-	permReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/rbac/permissions", nil)
+	permReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/system/rbac/permissions", nil)
 	permReq.Header.Set("Authorization", "Bearer "+adminToken)
 	permResp, err := http.DefaultClient.Do(permReq)
 	if err != nil {
@@ -823,7 +823,7 @@ func TestUserScopeAndExportFlow(t *testing.T) {
 		codeToID["stats.read"],
 	}
 
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":          "scope-reader",
 		"description":   "scope reader",
 		"permissionIds": readerPerms,
@@ -833,7 +833,7 @@ func TestUserScopeAndExportFlow(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	userAResp, userABody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userAResp, userABody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "scope_u1",
 		"name":          "Scope U1",
 		"email":         "scope_u1@example.com",
@@ -846,7 +846,7 @@ func TestUserScopeAndExportFlow(t *testing.T) {
 	}
 	userAID := uint(userABody["id"].(float64))
 
-	userBResp, userBBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userBResp, userBBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "scope_u2",
 		"name":          "Scope U2",
 		"email":         "scope_u2@example.com",
@@ -995,7 +995,7 @@ func TestProjectFinanceGovernancePermissionsExportAndNotification(t *testing.T) 
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	financeRoleResp, financeRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	financeRoleResp, financeRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "project-finance-editor",
 		"description": "project finance editor",
 		"permissionIds": []uint{
@@ -1012,7 +1012,7 @@ func TestProjectFinanceGovernancePermissionsExportAndNotification(t *testing.T) 
 	}
 	financeRoleID := uint(financeRoleBody["id"].(float64))
 
-	plainRoleResp, plainRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	plainRoleResp, plainRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "project-plain-editor",
 		"description": "project plain editor",
 		"permissionIds": []uint{
@@ -1025,7 +1025,7 @@ func TestProjectFinanceGovernancePermissionsExportAndNotification(t *testing.T) 
 	}
 	plainRoleID := uint(plainRoleBody["id"].(float64))
 
-	financeUserResp, financeUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	financeUserResp, financeUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "project_finance_user",
 		"name":          "Project Finance User",
 		"email":         "project_finance_user@example.com",
@@ -1038,7 +1038,7 @@ func TestProjectFinanceGovernancePermissionsExportAndNotification(t *testing.T) 
 	}
 	financeUserID := uint(financeUserBody["id"].(float64))
 
-	plainUserResp, plainUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	plainUserResp, plainUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "project_plain_user",
 		"name":          "Project Plain User",
 		"email":         "project_plain_user@example.com",
@@ -1216,7 +1216,7 @@ func TestAIAssistantPermissionsScopeAndReadOnlyDrafts(t *testing.T) {
 		}
 	}
 
-	noAIRoleResp, noAIRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	noAIRoleResp, noAIRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "ai-without-entry",
 		"description": "no ai entry",
 		"permissionIds": []uint{
@@ -1228,7 +1228,7 @@ func TestAIAssistantPermissionsScopeAndReadOnlyDrafts(t *testing.T) {
 	}
 	noAIRoleID := uint(noAIRoleBody["id"].(float64))
 
-	aiOnlyRoleResp, aiOnlyRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	aiOnlyRoleResp, aiOnlyRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":          "ai-only-entry",
 		"description":   "ai entry only",
 		"permissionIds": []uint{codeToID["ai.read"]},
@@ -1238,7 +1238,7 @@ func TestAIAssistantPermissionsScopeAndReadOnlyDrafts(t *testing.T) {
 	}
 	aiOnlyRoleID := uint(aiOnlyRoleBody["id"].(float64))
 
-	fullRoleResp, fullRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	fullRoleResp, fullRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "ai-project-manager",
 		"description": "ai project manager",
 		"permissionIds": []uint{
@@ -1255,7 +1255,7 @@ func TestAIAssistantPermissionsScopeAndReadOnlyDrafts(t *testing.T) {
 	}
 	fullRoleID := uint(fullRoleBody["id"].(float64))
 
-	noAIUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	noAIUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "ai_no_entry",
 		"name":          "AI No Entry",
 		"email":         "ai_no_entry@example.com",
@@ -1267,7 +1267,7 @@ func TestAIAssistantPermissionsScopeAndReadOnlyDrafts(t *testing.T) {
 		t.Fatalf("create no ai user expected 201 got %d", noAIUserResp.StatusCode)
 	}
 
-	aiOnlyUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	aiOnlyUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "ai_only_entry",
 		"name":          "AI Only Entry",
 		"email":         "ai_only_entry@example.com",
@@ -1279,7 +1279,7 @@ func TestAIAssistantPermissionsScopeAndReadOnlyDrafts(t *testing.T) {
 		t.Fatalf("create ai only user expected 201 got %d", aiOnlyUserResp.StatusCode)
 	}
 
-	fullUserResp, fullUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	fullUserResp, fullUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "ai_pm_user",
 		"name":          "AI PM User",
 		"email":         "ai_pm_user@example.com",
@@ -1531,7 +1531,7 @@ func TestTaskCalendarAndICSUseVisibleScope(t *testing.T) {
 
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "calendar-reader",
 		"description": "calendar reader",
 		"permissionIds": []uint{
@@ -1543,7 +1543,7 @@ func TestTaskCalendarAndICSUseVisibleScope(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	readerResp, readerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	readerResp, readerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "calendar_reader",
 		"name":          "Calendar Reader",
 		"email":         "calendar_reader@example.com",
@@ -1556,7 +1556,7 @@ func TestTaskCalendarAndICSUseVisibleScope(t *testing.T) {
 	}
 	readerID := uint(readerBody["id"].(float64))
 
-	hiddenResp, hiddenBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	hiddenResp, hiddenBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "calendar_hidden",
 		"name":          "Calendar Hidden",
 		"email":         "calendar_hidden@example.com",
@@ -1697,7 +1697,7 @@ func TestProjectHealthUsesVisibleTaskScope(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "health-reader",
 		"description": "health reader",
 		"permissionIds": []uint{
@@ -1711,7 +1711,7 @@ func TestProjectHealthUsesVisibleTaskScope(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "health_reader",
 		"name":          "Health Reader",
 		"email":         "health_reader@example.com",
@@ -1827,7 +1827,7 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 		}
 	}
 
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "register-scope-editor",
 		"description": "register scope editor",
 		"permissionIds": []uint{
@@ -1845,7 +1845,7 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "register_scope_u1",
 		"name":          "Register Scope User",
 		"email":         "register_scope_u1@example.com",
@@ -2191,7 +2191,7 @@ func TestMemberWorkloadUsesCapacityAndTaskScope(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "workload-reader",
 		"description": "workload reader",
 		"permissionIds": []uint{
@@ -2205,7 +2205,7 @@ func TestMemberWorkloadUsesCapacityAndTaskScope(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	visibleUserResp, visibleUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	visibleUserResp, visibleUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":            "workload_reader",
 		"name":                "Workload Reader",
 		"email":               "workload_reader@example.com",
@@ -2219,7 +2219,7 @@ func TestMemberWorkloadUsesCapacityAndTaskScope(t *testing.T) {
 	}
 	visibleUserID := uint(visibleUserBody["id"].(float64))
 
-	hiddenUserResp, hiddenUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	hiddenUserResp, hiddenUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":            "workload_hidden",
 		"name":                "Workload Hidden",
 		"email":               "workload_hidden@example.com",
@@ -2322,7 +2322,7 @@ func TestNotificationFlowOnTaskAssign(t *testing.T) {
 
 	adminToken := loginAndToken(t, ts.URL)
 
-	permReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/rbac/permissions", nil)
+	permReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/system/rbac/permissions", nil)
 	permReq.Header.Set("Authorization", "Bearer "+adminToken)
 	permResp, err := http.DefaultClient.Do(permReq)
 	if err != nil {
@@ -2338,7 +2338,7 @@ func TestNotificationFlowOnTaskAssign(t *testing.T) {
 		codeToID[code] = uint(id)
 	}
 
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "notify-reader",
 		"description": "notify reader",
 		"permissionIds": []uint{
@@ -2350,7 +2350,7 @@ func TestNotificationFlowOnTaskAssign(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "notify_u1",
 		"name":          "Notify U1",
 		"email":         "notify_u1@example.com",
@@ -2438,7 +2438,7 @@ func TestTaskReviewerProgressReviewFlow(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "task-review-flow",
 		"description": "task review flow",
 		"permissionIds": []uint{
@@ -2453,7 +2453,7 @@ func TestTaskReviewerProgressReviewFlow(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "review_flow_assignee",
 		"name":          "Review Flow Assignee",
 		"email":         "review_flow_assignee@example.com",
@@ -2466,7 +2466,7 @@ func TestTaskReviewerProgressReviewFlow(t *testing.T) {
 	}
 	assigneeID := uint(assigneeBody["id"].(float64))
 
-	reviewerResp, reviewerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	reviewerResp, reviewerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "review_flow_reviewer",
 		"name":          "Review Flow Reviewer",
 		"email":         "review_flow_reviewer@example.com",
@@ -2560,7 +2560,7 @@ func TestPatchTaskStatusFlow(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "task-status-flow",
 		"description": "task status flow",
 		"permissionIds": []uint{
@@ -2573,7 +2573,7 @@ func TestPatchTaskStatusFlow(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "status_flow_assignee",
 		"name":          "Status Flow Assignee",
 		"email":         "status_flow_assignee@example.com",
@@ -2586,7 +2586,7 @@ func TestPatchTaskStatusFlow(t *testing.T) {
 	}
 	assigneeID := uint(assigneeBody["id"].(float64))
 
-	reviewerResp, reviewerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	reviewerResp, reviewerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "status_flow_reviewer",
 		"name":          "Status Flow Reviewer",
 		"email":         "status_flow_reviewer@example.com",
@@ -2599,7 +2599,7 @@ func TestPatchTaskStatusFlow(t *testing.T) {
 	}
 	reviewerID := uint(reviewerBody["id"].(float64))
 
-	outsiderResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	outsiderResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "status_flow_outsider",
 		"name":          "Status Flow Outsider",
 		"email":         "status_flow_outsider@example.com",
@@ -2699,7 +2699,7 @@ func TestWorkRequestSubmitReviewAndConvertToTask(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	requesterRoleResp, requesterRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	requesterRoleResp, requesterRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "request-submitter",
 		"description": "request submitter",
 		"permissionIds": []uint{
@@ -2713,7 +2713,7 @@ func TestWorkRequestSubmitReviewAndConvertToTask(t *testing.T) {
 	}
 	requesterRoleID := uint(requesterRoleBody["id"].(float64))
 
-	managerRoleResp, managerRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	managerRoleResp, managerRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "request-manager",
 		"description": "request manager",
 		"permissionIds": []uint{
@@ -2729,7 +2729,7 @@ func TestWorkRequestSubmitReviewAndConvertToTask(t *testing.T) {
 	}
 	managerRoleID := uint(managerRoleBody["id"].(float64))
 
-	requesterResp, requesterBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	requesterResp, requesterBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "request_submitter_u1",
 		"name":          "Request Submitter",
 		"email":         "request_submitter_u1@example.com",
@@ -2742,7 +2742,7 @@ func TestWorkRequestSubmitReviewAndConvertToTask(t *testing.T) {
 	}
 	requesterID := uint(requesterBody["id"].(float64))
 
-	otherResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	otherResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "request_submitter_other",
 		"name":          "Other Submitter",
 		"email":         "request_submitter_other@example.com",
@@ -2754,7 +2754,7 @@ func TestWorkRequestSubmitReviewAndConvertToTask(t *testing.T) {
 		t.Fatalf("create other requester expected 201 got %d", otherResp.StatusCode)
 	}
 
-	managerResp, managerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	managerResp, managerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "request_manager_u1",
 		"name":          "Request Manager",
 		"email":         "request_manager_u1@example.com",
@@ -2892,7 +2892,7 @@ func TestWorkRequestChangeControlApplyToTask(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	requesterRoleResp, requesterRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	requesterRoleResp, requesterRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "change-requester",
 		"description": "change requester",
 		"permissionIds": []uint{
@@ -2906,7 +2906,7 @@ func TestWorkRequestChangeControlApplyToTask(t *testing.T) {
 	}
 	requesterRoleID := uint(requesterRoleBody["id"].(float64))
 
-	managerRoleResp, managerRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	managerRoleResp, managerRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "change-manager",
 		"description": "change manager",
 		"permissionIds": []uint{
@@ -2922,7 +2922,7 @@ func TestWorkRequestChangeControlApplyToTask(t *testing.T) {
 	}
 	managerRoleID := uint(managerRoleBody["id"].(float64))
 
-	requesterResp, requesterBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	requesterResp, requesterBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "change_requester",
 		"name":          "Change Requester",
 		"email":         "change_requester@example.com",
@@ -2935,7 +2935,7 @@ func TestWorkRequestChangeControlApplyToTask(t *testing.T) {
 	}
 	requesterID := uint(requesterBody["id"].(float64))
 
-	managerResp, managerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	managerResp, managerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "change_manager",
 		"name":          "Change Manager",
 		"email":         "change_manager@example.com",
@@ -2948,7 +2948,7 @@ func TestWorkRequestChangeControlApplyToTask(t *testing.T) {
 	}
 	managerID := uint(managerBody["id"].(float64))
 
-	newAssigneeResp, newAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	newAssigneeResp, newAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "change_new_assignee",
 		"name":          "Change New Assignee",
 		"email":         "change_new_assignee@example.com",
@@ -3097,7 +3097,7 @@ func TestProjectTemplateCreateAndGenerateProjectTree(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	creatorOnlyRoleResp, creatorOnlyRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	creatorOnlyRoleResp, creatorOnlyRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "template-project-creator-only",
 		"description": "can create projects but cannot read templates",
 		"permissionIds": []uint{
@@ -3109,7 +3109,7 @@ func TestProjectTemplateCreateAndGenerateProjectTree(t *testing.T) {
 	}
 	creatorOnlyRoleID := uint(creatorOnlyRoleBody["id"].(float64))
 
-	creatorResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	creatorResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "template_creator_only",
 		"name":          "Template Creator Only",
 		"email":         "template_creator_only@example.com",
@@ -3310,7 +3310,7 @@ func TestSavedReportsCRUDAndOwnerScope(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "report-manager",
 		"description": "report manager",
 		"permissionIds": []uint{
@@ -3325,7 +3325,7 @@ func TestSavedReportsCRUDAndOwnerScope(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	userAResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userAResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "report_owner",
 		"name":          "Report Owner",
 		"email":         "report_owner@example.com",
@@ -3336,7 +3336,7 @@ func TestSavedReportsCRUDAndOwnerScope(t *testing.T) {
 	if userAResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create report owner expected 201 got %d", userAResp.StatusCode)
 	}
-	userBResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userBResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "report_other",
 		"name":          "Report Other",
 		"email":         "report_other@example.com",
@@ -3448,7 +3448,7 @@ func TestSprintsCRUDTaskMembershipAndTaskFilter(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "sprint-manager",
 		"description": "sprint manager",
 		"permissionIds": []uint{
@@ -3464,7 +3464,7 @@ func TestSprintsCRUDTaskMembershipAndTaskFilter(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "sprint_manager",
 		"name":          "Sprint Manager",
 		"email":         "sprint_manager@example.com",
@@ -3749,7 +3749,7 @@ func TestWebhookSubscriptionSkipsInvisibleTaskForScopedUser(t *testing.T) {
 
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name": "webhook-scoped-user",
 		"permissionIds": []uint{
 			codeToID["webhooks.create"],
@@ -3761,7 +3761,7 @@ func TestWebhookSubscriptionSkipsInvisibleTaskForScopedUser(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	visibleUserResp, visibleUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	visibleUserResp, visibleUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "webhook_visible_user",
 		"name":          "Webhook Visible User",
 		"email":         "webhook_visible_user@example.com",
@@ -3774,7 +3774,7 @@ func TestWebhookSubscriptionSkipsInvisibleTaskForScopedUser(t *testing.T) {
 	}
 	visibleUserID := uint(visibleUserBody["id"].(float64))
 
-	hiddenUserResp, hiddenUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	hiddenUserResp, hiddenUserBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "webhook_hidden_user",
 		"name":          "Webhook Hidden User",
 		"email":         "webhook_hidden_user@example.com",
@@ -3872,13 +3872,13 @@ func TestAPITokenServiceAccountAuthAndAudit(t *testing.T) {
 
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
-	for _, code := range []string{"api_tokens.create", "api_tokens.read", "api_tokens.update", "api_tokens.delete", "projects.create", "projects.read", "audit.read"} {
+	for _, code := range []string{"system.api_tokens.create", "system.api_tokens.read", "system.api_tokens.update", "system.api_tokens.delete", "projects.create", "projects.read", "system.audit.read"} {
 		if codeToID[code] == 0 {
 			t.Fatalf("permission %s should be seeded", code)
 		}
 	}
 
-	invalidResp, invalidBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/api-tokens", adminToken, map[string]any{
+	invalidResp, invalidBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/api-tokens", adminToken, map[string]any{
 		"name":          "empty permissions",
 		"permissionIds": []uint{},
 	})
@@ -3886,7 +3886,7 @@ func TestAPITokenServiceAccountAuthAndAudit(t *testing.T) {
 		t.Fatalf("empty api token permissions expected 400 INVALID_API_TOKEN got %d %#v", invalidResp.StatusCode, invalidBody)
 	}
 
-	createResp, createBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/api-tokens", adminToken, map[string]any{
+	createResp, createBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/api-tokens", adminToken, map[string]any{
 		"name":        "Project Sync Token",
 		"description": "sync projects from external system",
 		"permissionIds": []uint{
@@ -3911,7 +3911,7 @@ func TestAPITokenServiceAccountAuthAndAudit(t *testing.T) {
 		t.Fatalf("api token should create service account got %#v", createBody)
 	}
 
-	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/api-tokens", adminToken, nil)
+	listResp, listBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/system/api-tokens", adminToken, nil)
 	if listResp.StatusCode != http.StatusOK {
 		t.Fatalf("list api tokens expected 200 got %d %#v", listResp.StatusCode, listBody)
 	}
@@ -3948,7 +3948,7 @@ func TestAPITokenServiceAccountAuthAndAudit(t *testing.T) {
 		t.Fatalf("api token without tasks.read expected 403 FORBIDDEN got %d %#v", taskListResp.StatusCode, taskListBody)
 	}
 
-	auditResp, auditBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/audit/logs?module=projects&action=create&page=1&pageSize=20", adminToken, nil)
+	auditResp, auditBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/system/audit/logs?module=projects&action=create&page=1&pageSize=20", adminToken, nil)
 	if auditResp.StatusCode != http.StatusOK {
 		t.Fatalf("list project audit expected 200 got %d %#v", auditResp.StatusCode, auditBody)
 	}
@@ -3968,7 +3968,7 @@ func TestAPITokenServiceAccountAuthAndAudit(t *testing.T) {
 		t.Fatalf("project audit should use service account id %d got %#v", serviceAccountID, auditBody)
 	}
 
-	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/api-tokens/"+strconv.Itoa(apiTokenID), adminToken, map[string]any{
+	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/system/api-tokens/"+strconv.Itoa(apiTokenID), adminToken, map[string]any{
 		"name":        "Project Sync Token",
 		"description": "disabled token",
 		"permissionIds": []uint{
@@ -3985,7 +3985,7 @@ func TestAPITokenServiceAccountAuthAndAudit(t *testing.T) {
 		t.Fatalf("disabled api token expected 401 UNAUTHORIZED got %d %#v", disabledResp.StatusCode, disabledBody)
 	}
 
-	enableResp, enableBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/api-tokens/"+strconv.Itoa(apiTokenID), adminToken, map[string]any{
+	enableResp, enableBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/system/api-tokens/"+strconv.Itoa(apiTokenID), adminToken, map[string]any{
 		"name":        "Project Sync Token",
 		"description": "enabled token",
 		"permissionIds": []uint{
@@ -4002,7 +4002,7 @@ func TestAPITokenServiceAccountAuthAndAudit(t *testing.T) {
 		t.Fatalf("enabled api token expected 200 got %d %#v", enabledResp.StatusCode, enabledBody)
 	}
 
-	deleteResp, deleteBody := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/api-tokens/"+strconv.Itoa(apiTokenID), adminToken, nil)
+	deleteResp, deleteBody := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/system/api-tokens/"+strconv.Itoa(apiTokenID), adminToken, nil)
 	if deleteResp.StatusCode != http.StatusOK {
 		t.Fatalf("delete api token expected 200 got %d %#v", deleteResp.StatusCode, deleteBody)
 	}
@@ -4019,7 +4019,7 @@ func TestAutomationRuleOverdueTaskNotification(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "automation-notification-reader",
 		"description": "can receive notifications",
 		"permissionIds": []uint{
@@ -4032,7 +4032,7 @@ func TestAutomationRuleOverdueTaskNotification(t *testing.T) {
 	}
 	notificationRoleID := uint(notificationRoleBody["id"].(float64))
 
-	readOnlyRoleResp, readOnlyRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	readOnlyRoleResp, readOnlyRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "automation-read-only",
 		"description": "can read automation only",
 		"permissionIds": []uint{
@@ -4044,7 +4044,7 @@ func TestAutomationRuleOverdueTaskNotification(t *testing.T) {
 	}
 	readOnlyRoleID := uint(readOnlyRoleBody["id"].(float64))
 
-	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_owner",
 		"name":          "Automation Owner",
 		"email":         "automation_owner@example.com",
@@ -4057,7 +4057,7 @@ func TestAutomationRuleOverdueTaskNotification(t *testing.T) {
 	}
 	ownerID := uint(ownerBody["id"].(float64))
 
-	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_assignee",
 		"name":          "Automation Assignee",
 		"email":         "automation_assignee@example.com",
@@ -4070,7 +4070,7 @@ func TestAutomationRuleOverdueTaskNotification(t *testing.T) {
 	}
 	assigneeID := uint(assigneeBody["id"].(float64))
 
-	readOnlyUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	readOnlyUserResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_read_only",
 		"name":          "Automation Read Only",
 		"email":         "automation_read_only@example.com",
@@ -4193,7 +4193,7 @@ func TestAutomationRuleTaskStatusChangedCommentAndNotification(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	collaboratorRoleResp, collaboratorRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	collaboratorRoleResp, collaboratorRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "automation-status-collaborator",
 		"description": "can update task status and read notifications",
 		"permissionIds": []uint{
@@ -4208,7 +4208,7 @@ func TestAutomationRuleTaskStatusChangedCommentAndNotification(t *testing.T) {
 	}
 	collaboratorRoleID := uint(collaboratorRoleBody["id"].(float64))
 
-	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "automation-status-owner",
 		"description": "can read automation status notifications",
 		"permissionIds": []uint{
@@ -4221,7 +4221,7 @@ func TestAutomationRuleTaskStatusChangedCommentAndNotification(t *testing.T) {
 	}
 	notificationRoleID := uint(notificationRoleBody["id"].(float64))
 
-	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_status_owner",
 		"name":          "Automation Status Owner",
 		"email":         "automation_status_owner@example.com",
@@ -4234,7 +4234,7 @@ func TestAutomationRuleTaskStatusChangedCommentAndNotification(t *testing.T) {
 	}
 	ownerID := uint(ownerBody["id"].(float64))
 
-	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_status_assignee",
 		"name":          "Automation Status Assignee",
 		"email":         "automation_status_assignee@example.com",
@@ -4399,7 +4399,7 @@ func TestAutomationRuleTaskProgressChangedCommentAndNotification(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	collaboratorRoleResp, collaboratorRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	collaboratorRoleResp, collaboratorRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "automation-progress-collaborator",
 		"description": "can update task progress and read notifications",
 		"permissionIds": []uint{
@@ -4414,7 +4414,7 @@ func TestAutomationRuleTaskProgressChangedCommentAndNotification(t *testing.T) {
 	}
 	collaboratorRoleID := uint(collaboratorRoleBody["id"].(float64))
 
-	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "automation-progress-owner",
 		"description": "can read automation progress notifications",
 		"permissionIds": []uint{
@@ -4427,7 +4427,7 @@ func TestAutomationRuleTaskProgressChangedCommentAndNotification(t *testing.T) {
 	}
 	notificationRoleID := uint(notificationRoleBody["id"].(float64))
 
-	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_progress_owner",
 		"name":          "Automation Progress Owner",
 		"email":         "automation_progress_owner@example.com",
@@ -4440,7 +4440,7 @@ func TestAutomationRuleTaskProgressChangedCommentAndNotification(t *testing.T) {
 	}
 	ownerID := uint(ownerBody["id"].(float64))
 
-	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	assigneeResp, assigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_progress_assignee",
 		"name":          "Automation Progress Assignee",
 		"email":         "automation_progress_assignee@example.com",
@@ -4624,7 +4624,7 @@ func TestAutomationRuleTaskAssigneeChangedCommentAndNotification(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "automation-assignee-notification-reader",
 		"description": "can read automation assignee notifications",
 		"permissionIds": []uint{
@@ -4637,7 +4637,7 @@ func TestAutomationRuleTaskAssigneeChangedCommentAndNotification(t *testing.T) {
 	}
 	notificationRoleID := uint(notificationRoleBody["id"].(float64))
 
-	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_assignee_owner",
 		"name":          "Automation Assignee Owner",
 		"email":         "automation_assignee_owner@example.com",
@@ -4650,7 +4650,7 @@ func TestAutomationRuleTaskAssigneeChangedCommentAndNotification(t *testing.T) {
 	}
 	ownerID := uint(ownerBody["id"].(float64))
 
-	oldAssigneeResp, oldAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	oldAssigneeResp, oldAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_assignee_old",
 		"name":          "Automation Assignee Old",
 		"email":         "automation_assignee_old@example.com",
@@ -4663,7 +4663,7 @@ func TestAutomationRuleTaskAssigneeChangedCommentAndNotification(t *testing.T) {
 	}
 	oldAssigneeID := uint(oldAssigneeBody["id"].(float64))
 
-	newAssigneeResp, newAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	newAssigneeResp, newAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_assignee_new",
 		"name":          "Automation Assignee New",
 		"email":         "automation_assignee_new@example.com",
@@ -5017,7 +5017,7 @@ func TestAutomationRuleAssignAssigneesAction(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	notificationRoleResp, notificationRoleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "automation-assign-notification-reader",
 		"description": "can read automation assign notifications",
 		"permissionIds": []uint{
@@ -5030,7 +5030,7 @@ func TestAutomationRuleAssignAssigneesAction(t *testing.T) {
 	}
 	notificationRoleID := uint(notificationRoleBody["id"].(float64))
 
-	overdueAssigneeResp, overdueAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	overdueAssigneeResp, overdueAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_assign_overdue",
 		"name":          "Automation Assign Overdue",
 		"email":         "automation_assign_overdue@example.com",
@@ -5043,7 +5043,7 @@ func TestAutomationRuleAssignAssigneesAction(t *testing.T) {
 	}
 	overdueAssigneeID := uint(overdueAssigneeBody["id"].(float64))
 
-	statusAssigneeResp, statusAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	statusAssigneeResp, statusAssigneeBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "automation_assign_status",
 		"name":          "Automation Assign Status",
 		"email":         "automation_assign_status@example.com",
@@ -5465,7 +5465,7 @@ func TestMyTasksWithParticipatedTask(t *testing.T) {
 
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name": "mytasks-reader",
 		"permissionIds": []uint{
 			codeToID["tasks.read"],
@@ -5477,7 +5477,7 @@ func TestMyTasksWithParticipatedTask(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "mytasks_u1",
 		"name":          "MyTasks User",
 		"email":         "mytasks_u1@example.com",
@@ -5632,7 +5632,7 @@ func TestRbacCreateRoleRollbackOnFailpoint(t *testing.T) {
 	token := loginAndToken(t, ts.URL)
 
 	roleName := "rollback-role"
-	createResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", token, map[string]any{
+	createResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", token, map[string]any{
 		"name":          roleName,
 		"description":   "rollback test",
 		"permissionIds": []uint{1},
@@ -5640,7 +5640,7 @@ func TestRbacCreateRoleRollbackOnFailpoint(t *testing.T) {
 	if createResp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("create role with failpoint expected 400 got %d", createResp.StatusCode)
 	}
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/rbac/roles", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/system/rbac/roles", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rawResp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -5670,7 +5670,7 @@ func TestRbacCreatePermissionRollbackOnFailpoint(t *testing.T) {
 
 	token := loginAndToken(t, ts.URL)
 	code := "rollback.permission"
-	createResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/permissions", token, map[string]any{
+	createResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/permissions", token, map[string]any{
 		"code": code,
 		"name": "Rollback Permission",
 	})
@@ -5678,7 +5678,7 @@ func TestRbacCreatePermissionRollbackOnFailpoint(t *testing.T) {
 		t.Fatalf("create permission with failpoint expected 400 got %d", createResp.StatusCode)
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/rbac/permissions", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/system/rbac/permissions", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -5705,7 +5705,7 @@ func TestScopedUserCannotMutateInvisibleProjectAndTask(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "scope-editor",
 		"description": "scope editor",
 		"permissionIds": []uint{
@@ -5723,7 +5723,7 @@ func TestScopedUserCannotMutateInvisibleProjectAndTask(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "scope_editor_u1",
 		"name":          "Scope Editor",
 		"email":         "scope_editor_u1@example.com",
@@ -5867,7 +5867,7 @@ func TestUserWeeklyCapacityCreateUpdateValidation(t *testing.T) {
 	defer ts.Close()
 
 	adminToken := loginAndToken(t, ts.URL)
-	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":            "capacity_u1",
 		"name":                "Capacity User",
 		"email":               "capacity_u1@example.com",
@@ -5884,7 +5884,7 @@ func TestUserWeeklyCapacityCreateUpdateValidation(t *testing.T) {
 		t.Fatalf("weekly capacity not saved on create: %v", userBody["weeklyCapacityHours"])
 	}
 
-	zeroCapacityResp, zeroCapacityBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	zeroCapacityResp, zeroCapacityBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":            "capacity_zero",
 		"name":                "Capacity Zero",
 		"email":               "capacity_zero@example.com",
@@ -5900,7 +5900,7 @@ func TestUserWeeklyCapacityCreateUpdateValidation(t *testing.T) {
 		t.Fatalf("zero weekly capacity should be saved as 0 got %v", zeroCapacityBody["weeklyCapacityHours"])
 	}
 
-	invalidCreateResp, invalidCreateBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	invalidCreateResp, invalidCreateBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":            "capacity_invalid",
 		"name":                "Capacity Invalid",
 		"email":               "capacity_invalid@example.com",
@@ -5916,7 +5916,7 @@ func TestUserWeeklyCapacityCreateUpdateValidation(t *testing.T) {
 		t.Fatalf("invalid create capacity expected INVALID_WEEKLY_CAPACITY got %v", invalidCreateBody["code"])
 	}
 
-	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/users/"+strconv.Itoa(userID), adminToken, map[string]any{
+	updateResp, updateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/system/users/"+strconv.Itoa(userID), adminToken, map[string]any{
 		"name":                "Capacity User Updated",
 		"email":               "capacity_u1@example.com",
 		"weeklyCapacityHours": 28.5,
@@ -5931,7 +5931,7 @@ func TestUserWeeklyCapacityCreateUpdateValidation(t *testing.T) {
 		t.Fatalf("weekly capacity not saved on update: %v", updateBody["weeklyCapacityHours"])
 	}
 
-	invalidUpdateResp, invalidUpdateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/users/"+strconv.Itoa(userID), adminToken, map[string]any{
+	invalidUpdateResp, invalidUpdateBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/system/users/"+strconv.Itoa(userID), adminToken, map[string]any{
 		"name":                "Capacity User Updated",
 		"email":               "capacity_u1@example.com",
 		"weeklyCapacityHours": -0.5,
@@ -5952,7 +5952,7 @@ func TestDisabledUserCannotLogin(t *testing.T) {
 	defer ts.Close()
 
 	adminToken := loginAndToken(t, ts.URL)
-	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "disabled_login_u1",
 		"name":          "Disabled Login",
 		"email":         "disabled_login_u1@example.com",
@@ -5965,7 +5965,7 @@ func TestDisabledUserCannotLogin(t *testing.T) {
 	}
 	userID := int(userBody["id"].(float64))
 
-	disableResp, _ := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/users/"+strconv.Itoa(userID), adminToken, map[string]any{
+	disableResp, _ := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/system/users/"+strconv.Itoa(userID), adminToken, map[string]any{
 		"name":          "Disabled Login",
 		"email":         "disabled_login_u1@example.com",
 		"isActive":      false,
@@ -5992,7 +5992,7 @@ func TestTaskCommentsMentionsActivitiesAndScope(t *testing.T) {
 	adminToken := loginAndToken(t, ts.URL)
 	codeToID := permissionCodeMap(t, ts.URL, adminToken)
 
-	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/rbac/roles", adminToken, map[string]any{
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
 		"name":        "comment-collaborator",
 		"description": "comment collaborator",
 		"permissionIds": []uint{
@@ -6010,7 +6010,7 @@ func TestTaskCommentsMentionsActivitiesAndScope(t *testing.T) {
 	}
 	roleID := uint(roleBody["id"].(float64))
 
-	authorResp, authorBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	authorResp, authorBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "comment_author",
 		"name":          "Comment Author",
 		"email":         "comment_author@example.com",
@@ -6023,7 +6023,7 @@ func TestTaskCommentsMentionsActivitiesAndScope(t *testing.T) {
 	}
 	authorID := uint(authorBody["id"].(float64))
 
-	mentionedResp, mentionedBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	mentionedResp, mentionedBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "comment_mentioned",
 		"name":          "Comment Mentioned",
 		"email":         "comment_mentioned@example.com",
@@ -6036,7 +6036,7 @@ func TestTaskCommentsMentionsActivitiesAndScope(t *testing.T) {
 	}
 	mentionedID := uint(mentionedBody["id"].(float64))
 
-	outsiderResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/users", adminToken, map[string]any{
+	outsiderResp, _ := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
 		"username":      "comment_outsider",
 		"name":          "Comment Outsider",
 		"email":         "comment_outsider@example.com",
@@ -6325,7 +6325,7 @@ func TestExternalPortalInviteScopeRequestsCommentsAndAudit(t *testing.T) {
 		t.Fatalf("internal comment should retain portal source and external identity: %v", internalComment)
 	}
 
-	auditResp, auditBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/audit/logs?module=portal&page=1&pageSize=20", adminToken, nil)
+	auditResp, auditBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/system/audit/logs?module=portal&page=1&pageSize=20", adminToken, nil)
 	if auditResp.StatusCode != http.StatusOK {
 		t.Fatalf("portal audit query expected 200 got %d, body=%v", auditResp.StatusCode, auditBody)
 	}

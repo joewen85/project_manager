@@ -228,7 +228,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postPortalByTokenUploads
-  /rbac/permissions:
+  /system/rbac/permissions:
     get:
       summary: 权限列表
       security:
@@ -261,7 +261,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postRbacPermissions
-  /rbac/permissions/{id}:
+  /system/rbac/permissions/{id}:
     put:
       summary: 更新权限
       security:
@@ -292,7 +292,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: deleteRbacPermissionsById
-  /rbac/roles:
+  /system/rbac/roles:
     get:
       summary: 角色列表
       security:
@@ -325,7 +325,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postRbacRoles
-  /rbac/roles/{id}:
+  /system/rbac/roles/{id}:
     put:
       summary: 更新角色
       security:
@@ -356,7 +356,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: deleteRbacRolesById
-  /users:
+  /system/users:
     get:
       summary: 用户列表
       security:
@@ -391,7 +391,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postUsers
-  /users/{id}:
+  /system/users/{id}:
     put:
       summary: 更新用户
       security:
@@ -422,7 +422,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: deleteUsersById
-  /departments:
+  /system/departments:
     get:
       summary: 部门列表
       security:
@@ -457,7 +457,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postDepartments
-  /departments/{id}:
+  /system/departments/{id}:
     put:
       summary: 更新部门
       security:
@@ -2205,7 +2205,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postWebhooksDeliveriesByIdRetry
-  /api-tokens:
+  /system/api-tokens:
     get:
       summary: API Token 列表
       description: 普通用户仅返回自己创建的 Token；管理员可查看全部。
@@ -2250,7 +2250,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postApiTokens
-  /api-tokens/permission-options:
+  /system/api-tokens/permission-options:
     get:
       summary: API Token 权限候选
       security:
@@ -2267,7 +2267,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: getApiTokensPermissionOptions
-  /api-tokens/{id}:
+  /system/api-tokens/{id}:
     get:
       summary: API Token 详情
       security:
@@ -2766,7 +2766,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: patchNotificationsReadAll
-  /audit/logs:
+  /system/audit/logs:
     get:
       summary: 审计日志列表
       security:

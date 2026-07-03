@@ -15,18 +15,18 @@
 
 | 权限码 | 说明 |
 |---|---|
-| `rbac.create` | 创建角色/权限 |
-| `rbac.read` | 查看角色/权限 |
-| `rbac.update` | 更新角色/权限 |
-| `rbac.delete` | 删除角色/权限 |
-| `users.create` | 创建用户 |
-| `users.read` | 查看用户 |
-| `users.update` | 更新用户 |
-| `users.delete` | 删除用户 |
-| `departments.create` | 创建部门 |
-| `departments.read` | 查看部门 |
-| `departments.update` | 更新部门 |
-| `departments.delete` | 删除部门 |
+| `system.rbac.create` | 创建角色/权限 |
+| `system.rbac.read` | 查看角色/权限 |
+| `system.rbac.update` | 更新角色/权限 |
+| `system.rbac.delete` | 删除角色/权限 |
+| `system.users.create` | 创建用户 |
+| `system.users.read` | 查看用户 |
+| `system.users.update` | 更新用户 |
+| `system.users.delete` | 删除用户 |
+| `system.departments.create` | 创建部门 |
+| `system.departments.read` | 查看部门 |
+| `system.departments.update` | 更新部门 |
+| `system.departments.delete` | 删除部门 |
 | `tags.create` | 创建标签 |
 | `tags.read` | 查看标签 |
 | `tags.update` | 更新标签 |
@@ -70,10 +70,10 @@
 | `webhooks.read` | 查看 Webhook 订阅与投递日志；普通用户仅查看自己的订阅与投递日志 |
 | `webhooks.update` | 更新 Webhook 订阅并重试投递 |
 | `webhooks.delete` | 删除 Webhook 订阅 |
-| `api_tokens.create` | 创建服务账号 API Token |
-| `api_tokens.read` | 查看服务账号 API Token 与权限候选 |
-| `api_tokens.update` | 更新或禁用服务账号 API Token |
-| `api_tokens.delete` | 撤销服务账号 API Token |
+| `system.api_tokens.create` | 创建服务账号 API Token |
+| `system.api_tokens.read` | 查看服务账号 API Token 与权限候选 |
+| `system.api_tokens.update` | 更新或禁用服务账号 API Token |
+| `system.api_tokens.delete` | 撤销服务账号 API Token |
 | `portal.create` | 创建客户或供应商项目门户邀请 |
 | `portal.read` | 查看外部门户邀请、访问范围与外部协作记录 |
 | `portal.update` | 更新或撤销外部门户邀请 |
@@ -86,7 +86,7 @@
 | `notifications.read` | 查看通知 |
 | `notifications.update` | 标记通知已读 |
 | `stats.read` | 查看统计分析、项目健康度与成员负载 |
-| `audit.read` | 查看审计日志 |
+| `system.audit.read` | 查看审计日志 |
 | `uploads.create` | 上传附件 |
 
 ## 3. 接口权限映射（后端已生效）
@@ -94,18 +94,18 @@
 | 接口 | 权限 |
 |---|---|
 | `POST /uploads` | `uploads.create` |
-| `GET /rbac/permissions` `GET /rbac/roles` | `rbac.read` |
-| `POST /rbac/permissions` `POST /rbac/roles` | `rbac.create` |
-| `PUT /rbac/permissions/:id` `PUT /rbac/roles/:id` | `rbac.update` |
-| `DELETE /rbac/permissions/:id` `DELETE /rbac/roles/:id` | `rbac.delete` |
-| `GET /users` | `users.read` |
-| `POST /users` | `users.create`；可设置默认周容量 |
-| `PUT /users/:id` | `users.update`；可更新默认周容量 |
-| `DELETE /users/:id` | `users.delete` |
-| `GET /departments` | `departments.read` |
-| `POST /departments` | `departments.create` |
-| `PUT /departments/:id` | `departments.update` |
-| `DELETE /departments/:id` | `departments.delete` |
+| `GET /system/rbac/permissions` `GET /system/rbac/roles` | `system.rbac.read` |
+| `POST /system/rbac/permissions` `POST /system/rbac/roles` | `system.rbac.create` |
+| `PUT /system/rbac/permissions/:id` `PUT /system/rbac/roles/:id` | `system.rbac.update` |
+| `DELETE /system/rbac/permissions/:id` `DELETE /system/rbac/roles/:id` | `system.rbac.delete` |
+| `GET /system/users` | `system.users.read` |
+| `POST /system/users` | `system.users.create`；可设置默认周容量 |
+| `PUT /system/users/:id` | `system.users.update`；可更新默认周容量 |
+| `DELETE /system/users/:id` | `system.users.delete` |
+| `GET /system/departments` | `system.departments.read` |
+| `POST /system/departments` | `system.departments.create` |
+| `PUT /system/departments/:id` | `system.departments.update` |
+| `DELETE /system/departments/:id` | `system.departments.delete` |
 | `GET /tags` `GET /tags/:id` | `tags.read` |
 | `POST /tags` | `tags.create` |
 | `PUT /tags/:id` | `tags.update` |
@@ -153,10 +153,10 @@
 | `PUT /webhooks/:id` `POST /webhooks/deliveries/:id/retry` | `webhooks.update`；普通用户仅更新自己创建的订阅并重试其投递 |
 | `DELETE /webhooks/:id` | `webhooks.delete`；普通用户仅删除自己创建的订阅 |
 | Webhook 订阅任务状态事件投递 | `webhooks.create/update` 控制订阅配置；管理员订阅接收全量事件，普通用户订阅仅接收订阅创建人可见任务事件 |
-| `GET /api-tokens` `GET /api-tokens/:id` `GET /api-tokens/permission-options` | `api_tokens.read`；普通用户仅查看自己创建的 Token |
-| `POST /api-tokens` | `api_tokens.create`；创建时自动生成服务账号和独立角色，明文 Token 仅返回一次 |
-| `PUT /api-tokens/:id` | `api_tokens.update`；普通用户仅更新自己创建的 Token |
-| `DELETE /api-tokens/:id` | `api_tokens.delete`；普通用户仅撤销自己创建的 Token |
+| `GET /system/api-tokens` `GET /system/api-tokens/:id` `GET /system/api-tokens/permission-options` | `system.api_tokens.read`；普通用户仅查看自己创建的 Token |
+| `POST /system/api-tokens` | `system.api_tokens.create`；创建时自动生成服务账号和独立角色，明文 Token 仅返回一次 |
+| `PUT /system/api-tokens/:id` | `system.api_tokens.update`；普通用户仅更新自己创建的 Token |
+| `DELETE /system/api-tokens/:id` | `system.api_tokens.delete`；普通用户仅撤销自己创建的 Token |
 | `GET /portal-invites` | `portal.read`；管理员查看全部，普通用户仅查看自己创建或当前可见项目下的邀请 |
 | `POST /portal-invites` | `portal.create`；项目必须在当前用户可见范围内，明文邀请 Token 仅返回一次 |
 | `PUT /portal-invites/:id` `PATCH /portal-invites/:id/revoke` | `portal.update`；可更新邀请范围、过期时间、附件白名单或撤销邀请 |
@@ -171,7 +171,7 @@
 | `GET /stats/dashboard` `GET /stats/project-health` `GET /stats/member-workload` | `stats.read`；普通用户按任务和项目可见范围聚合，成员负载按执行人周容量标记过载，关键路径逾期、未关闭高风险登记项和未解决问题会影响项目健康度 |
 | `GET /notifications` `GET /notifications/unread-count` | `notifications.read` |
 | `PATCH /notifications/:id/read` `PATCH /notifications/read-all` | `notifications.update` |
-| `GET /audit/logs` | `audit.read` |
+| `GET /system/audit/logs` | `system.audit.read` |
 
 ## 4. 初始化与升级策略
 
@@ -179,7 +179,8 @@
 - 管理员角色 `admin` 每次初始化都会被覆盖为“拥有全部权限”。
 - 旧权限会自动迁移后清理：
   - `*.write` => 对应模块的 `create/read/update/delete`
-  - `rbac.manage` => `rbac.create/read/update/delete`
+  - `rbac.manage` => `system.rbac.create/read/update/delete`
+  - `rbac.*`、`users.*`、`departments.*`、`api_tokens.*`、`audit.read` => 对应 `system.*` 权限
   - `notifications.write` => `notifications.read/update`
 
 ## 5. 默认角色策略

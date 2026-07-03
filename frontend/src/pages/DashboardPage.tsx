@@ -78,7 +78,7 @@ export function DashboardPage() {
   const [registerError, setRegisterError] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const canViewUsers = hasAnyPermission(['users.read', 'users.create', 'users.update', 'users.delete', 'users.write', 'rbac.manage'], permissions)
+  const canViewUsers = hasAnyPermission(['system.users.read', 'system.users.create', 'system.users.update', 'system.users.delete', 'users.read', 'users.write', 'rbac.manage'], permissions)
   const canReadRegisters = hasPermission('registers.read', permissions)
 
   const load = async () => {

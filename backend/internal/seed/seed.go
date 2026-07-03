@@ -1,12 +1,11 @@
 package seed
 
 import (
-	"errors"
-
 	"project-manager/backend/internal/model"
 	"project-manager/backend/internal/util"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type permissionSeed struct {
@@ -21,20 +20,20 @@ type legacyPermissionMapping struct {
 }
 
 var permissionCatalog = []permissionSeed{
-	{Code: "rbac.create", Name: "RBAC-创建", Description: "创建角色与权限"},
-	{Code: "rbac.read", Name: "RBAC-查看", Description: "查看角色与权限"},
-	{Code: "rbac.update", Name: "RBAC-更新", Description: "更新角色与权限"},
-	{Code: "rbac.delete", Name: "RBAC-删除", Description: "删除角色与权限"},
+	{Code: "system.rbac.create", Name: "系统管理-RBAC-创建", Description: "创建角色与权限"},
+	{Code: "system.rbac.read", Name: "系统管理-RBAC-查看", Description: "查看角色与权限"},
+	{Code: "system.rbac.update", Name: "系统管理-RBAC-更新", Description: "更新角色与权限"},
+	{Code: "system.rbac.delete", Name: "系统管理-RBAC-删除", Description: "删除角色与权限"},
 
-	{Code: "users.create", Name: "用户-创建", Description: "创建用户"},
-	{Code: "users.read", Name: "用户-查看", Description: "查看用户"},
-	{Code: "users.update", Name: "用户-更新", Description: "更新用户"},
-	{Code: "users.delete", Name: "用户-删除", Description: "删除用户"},
+	{Code: "system.users.create", Name: "系统管理-用户-创建", Description: "创建用户"},
+	{Code: "system.users.read", Name: "系统管理-用户-查看", Description: "查看用户"},
+	{Code: "system.users.update", Name: "系统管理-用户-更新", Description: "更新用户"},
+	{Code: "system.users.delete", Name: "系统管理-用户-删除", Description: "删除用户"},
 
-	{Code: "departments.create", Name: "部门-创建", Description: "创建部门"},
-	{Code: "departments.read", Name: "部门-查看", Description: "查看部门"},
-	{Code: "departments.update", Name: "部门-更新", Description: "更新部门"},
-	{Code: "departments.delete", Name: "部门-删除", Description: "删除部门"},
+	{Code: "system.departments.create", Name: "系统管理-部门-创建", Description: "创建部门"},
+	{Code: "system.departments.read", Name: "系统管理-部门-查看", Description: "查看部门"},
+	{Code: "system.departments.update", Name: "系统管理-部门-更新", Description: "更新部门"},
+	{Code: "system.departments.delete", Name: "系统管理-部门-删除", Description: "删除部门"},
 
 	{Code: "projects.create", Name: "项目-创建", Description: "创建项目"},
 	{Code: "projects.read", Name: "项目-查看", Description: "查看项目"},
@@ -86,10 +85,10 @@ var permissionCatalog = []permissionSeed{
 	{Code: "webhooks.update", Name: "Webhook-更新", Description: "更新 Webhook 订阅并重试投递"},
 	{Code: "webhooks.delete", Name: "Webhook-删除", Description: "删除 Webhook 订阅"},
 
-	{Code: "api_tokens.create", Name: "API Token-创建", Description: "创建服务账号 API Token"},
-	{Code: "api_tokens.read", Name: "API Token-查看", Description: "查看服务账号 API Token"},
-	{Code: "api_tokens.update", Name: "API Token-更新", Description: "更新或禁用服务账号 API Token"},
-	{Code: "api_tokens.delete", Name: "API Token-删除", Description: "撤销服务账号 API Token"},
+	{Code: "system.api_tokens.create", Name: "系统管理-API Token-创建", Description: "创建服务账号 API Token"},
+	{Code: "system.api_tokens.read", Name: "系统管理-API Token-查看", Description: "查看服务账号 API Token"},
+	{Code: "system.api_tokens.update", Name: "系统管理-API Token-更新", Description: "更新或禁用服务账号 API Token"},
+	{Code: "system.api_tokens.delete", Name: "系统管理-API Token-删除", Description: "撤销服务账号 API Token"},
 
 	{Code: "portal.create", Name: "外部门户-创建", Description: "创建客户或供应商项目门户邀请"},
 	{Code: "portal.read", Name: "外部门户-查看", Description: "查看外部门户邀请、访问范围与外部协作记录"},
@@ -112,14 +111,31 @@ var permissionCatalog = []permissionSeed{
 	{Code: "notifications.update", Name: "通知-更新", Description: "标记通知已读"},
 
 	{Code: "stats.read", Name: "统计-查看", Description: "查看统计分析"},
-	{Code: "audit.read", Name: "审计-查看", Description: "查看审计日志"},
+	{Code: "system.audit.read", Name: "系统管理-审计-查看", Description: "查看审计日志"},
 	{Code: "uploads.create", Name: "上传-创建", Description: "上传附件"},
 }
 
 var legacyPermissionMappings = []legacyPermissionMapping{
-	{LegacyCode: "rbac.manage", TargetCodes: []string{"rbac.create", "rbac.read", "rbac.update", "rbac.delete"}},
-	{LegacyCode: "users.write", TargetCodes: []string{"users.create", "users.read", "users.update", "users.delete"}},
-	{LegacyCode: "departments.write", TargetCodes: []string{"departments.create", "departments.read", "departments.update", "departments.delete"}},
+	{LegacyCode: "rbac.manage", TargetCodes: []string{"system.rbac.create", "system.rbac.read", "system.rbac.update", "system.rbac.delete"}},
+	{LegacyCode: "rbac.create", TargetCodes: []string{"system.rbac.create"}},
+	{LegacyCode: "rbac.read", TargetCodes: []string{"system.rbac.read"}},
+	{LegacyCode: "rbac.update", TargetCodes: []string{"system.rbac.update"}},
+	{LegacyCode: "rbac.delete", TargetCodes: []string{"system.rbac.delete"}},
+	{LegacyCode: "users.write", TargetCodes: []string{"system.users.create", "system.users.read", "system.users.update", "system.users.delete"}},
+	{LegacyCode: "users.create", TargetCodes: []string{"system.users.create"}},
+	{LegacyCode: "users.read", TargetCodes: []string{"system.users.read"}},
+	{LegacyCode: "users.update", TargetCodes: []string{"system.users.update"}},
+	{LegacyCode: "users.delete", TargetCodes: []string{"system.users.delete"}},
+	{LegacyCode: "departments.write", TargetCodes: []string{"system.departments.create", "system.departments.read", "system.departments.update", "system.departments.delete"}},
+	{LegacyCode: "departments.create", TargetCodes: []string{"system.departments.create"}},
+	{LegacyCode: "departments.read", TargetCodes: []string{"system.departments.read"}},
+	{LegacyCode: "departments.update", TargetCodes: []string{"system.departments.update"}},
+	{LegacyCode: "departments.delete", TargetCodes: []string{"system.departments.delete"}},
+	{LegacyCode: "api_tokens.create", TargetCodes: []string{"system.api_tokens.create"}},
+	{LegacyCode: "api_tokens.read", TargetCodes: []string{"system.api_tokens.read"}},
+	{LegacyCode: "api_tokens.update", TargetCodes: []string{"system.api_tokens.update"}},
+	{LegacyCode: "api_tokens.delete", TargetCodes: []string{"system.api_tokens.delete"}},
+	{LegacyCode: "audit.read", TargetCodes: []string{"system.audit.read"}},
 	{LegacyCode: "projects.write", TargetCodes: []string{"projects.create", "projects.read", "projects.update", "projects.delete"}},
 	{LegacyCode: "tasks.write", TargetCodes: []string{"tasks.create", "tasks.read", "tasks.update", "tasks.delete"}},
 	{LegacyCode: "tags.write", TargetCodes: []string{"tags.create", "tags.read", "tags.update", "tags.delete"}},
@@ -128,27 +144,16 @@ var legacyPermissionMappings = []legacyPermissionMapping{
 
 func upsertPermissionCatalog(tx *gorm.DB) error {
 	for _, entry := range permissionCatalog {
-		perm := model.Permission{}
-		err := tx.Where("code = ?", entry.Code).First(&perm).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			perm = model.Permission{
-				Code:        entry.Code,
-				Name:        entry.Name,
-				Description: entry.Description,
-			}
-			if createErr := tx.Create(&perm).Error; createErr != nil {
-				return createErr
-			}
-			continue
+		perm := model.Permission{
+			Code:        entry.Code,
+			Name:        entry.Name,
+			Description: entry.Description,
 		}
-		if err != nil {
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "code"}},
+			DoUpdates: clause.AssignmentColumns([]string{"name", "description"}),
+		}).Create(&perm).Error; err != nil {
 			return err
-		}
-		if updateErr := tx.Model(&perm).Updates(map[string]any{
-			"name":        entry.Name,
-			"description": entry.Description,
-		}).Error; updateErr != nil {
-			return updateErr
 		}
 	}
 	return nil
@@ -157,12 +162,12 @@ func upsertPermissionCatalog(tx *gorm.DB) error {
 func migrateLegacyPermissionBindings(tx *gorm.DB) error {
 	for _, mapping := range legacyPermissionMappings {
 		legacyPerm := model.Permission{}
-		err := tx.Where("code = ?", mapping.LegacyCode).First(&legacyPerm).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			continue
+		result := tx.Where("code = ?", mapping.LegacyCode).Find(&legacyPerm)
+		if result.Error != nil {
+			return result.Error
 		}
-		if err != nil {
-			return err
+		if result.RowsAffected == 0 {
+			continue
 		}
 
 		targetPerms := make([]model.Permission, 0, len(mapping.TargetCodes))
@@ -198,9 +203,56 @@ func migrateLegacyPermissionBindings(tx *gorm.DB) error {
 	return nil
 }
 
+func remapLegacyPermissionCodes(codes []string) ([]string, bool) {
+	mappingByCode := make(map[string][]string, len(legacyPermissionMappings))
+	for _, mapping := range legacyPermissionMappings {
+		mappingByCode[mapping.LegacyCode] = mapping.TargetCodes
+	}
+	seen := map[string]struct{}{}
+	remapped := make([]string, 0, len(codes))
+	changed := false
+	for _, code := range codes {
+		targetCodes, ok := mappingByCode[code]
+		if !ok {
+			targetCodes = []string{code}
+		} else {
+			changed = true
+		}
+		for _, targetCode := range targetCodes {
+			if _, exists := seen[targetCode]; exists {
+				continue
+			}
+			seen[targetCode] = struct{}{}
+			remapped = append(remapped, targetCode)
+		}
+	}
+	return remapped, changed
+}
+
+func migrateAPITokenPermissionCodes(tx *gorm.DB) error {
+	var tokens []model.APIToken
+	if err := tx.Find(&tokens).Error; err != nil {
+		return err
+	}
+	for _, token := range tokens {
+		nextCodes, changed := remapLegacyPermissionCodes(token.PermissionCodes)
+		if !changed {
+			continue
+		}
+		token.PermissionCodes = nextCodes
+		if err := tx.Model(&token).Select("PermissionCodes").Updates(&token).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func Run(db *gorm.DB) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		if err := upsertPermissionCatalog(tx); err != nil {
+			return err
+		}
+		if err := migrateAPITokenPermissionCodes(tx); err != nil {
 			return err
 		}
 		if err := migrateLegacyPermissionBindings(tx); err != nil {

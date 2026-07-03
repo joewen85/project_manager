@@ -105,7 +105,7 @@ export function RequestsPage() {
   const canUpdateRequest = hasPermission('requests.update', permissions)
   const canReadProjects = hasPermission('projects.read', permissions)
   const canReadTasks = hasPermission('tasks.read', permissions)
-  const canReadUsers = hasPermission('users.read', permissions)
+  const canReadUsers = hasPermission('system.users.read', permissions)
   const [items, setItems] = useState<WorkRequest[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -193,7 +193,7 @@ export function RequestsPage() {
     }
     void Promise.all([
       shouldLoadUsers
-        ? fetchPage<User>('/users', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as User[], total: 0, page: 1, pageSize: 100 }))
+        ? fetchPage<User>('/system/users', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as User[], total: 0, page: 1, pageSize: 100 }))
         : Promise.resolve({ list: [] as User[], total: 0, page: 1, pageSize: 100 }),
       canUpdateRequest
         ? fetchPage<Tag>('/tags', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as Tag[], total: 0, page: 1, pageSize: 100 }))

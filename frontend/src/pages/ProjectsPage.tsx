@@ -258,8 +258,8 @@ export function ProjectsPage() {
     if (!modalOpen) return
     const timer = window.setTimeout(() => {
       void Promise.all([
-        fetchPage<User>('/users', { page: 1, pageSize: 200, keyword: ownerKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 })),
-        fetchPage<Department>('/departments', { page: 1, pageSize: 200, keyword: departmentKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 }))
+        fetchPage<User>('/system/users', { page: 1, pageSize: 200, keyword: ownerKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 })),
+        fetchPage<Department>('/system/departments', { page: 1, pageSize: 200, keyword: departmentKeyword.trim() }, { page: 1, pageSize: 200 }, { silent: true }).catch(() => ({ list: [], total: 0, page: 1, pageSize: 200 }))
       ]).then(([userPage, departmentPage]) => {
         setUsers(userPage.list)
         setDepartments(departmentPage.list)

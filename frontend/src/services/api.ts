@@ -39,7 +39,30 @@ export const setToken = (value: string) => {
   api.defaults.headers.Authorization = `Bearer ${value}`
 }
 
-const normalizePermissionCodes = (values: string[]) => {
+const legacyPermissionAliases: Record<string, string[]> = {
+  'rbac.manage': ['system.rbac.create', 'system.rbac.read', 'system.rbac.update', 'system.rbac.delete'],
+  'rbac.create': ['system.rbac.create'],
+  'rbac.read': ['system.rbac.read'],
+  'rbac.update': ['system.rbac.update'],
+  'rbac.delete': ['system.rbac.delete'],
+  'users.write': ['system.users.create', 'system.users.read', 'system.users.update', 'system.users.delete'],
+  'users.create': ['system.users.create'],
+  'users.read': ['system.users.read'],
+  'users.update': ['system.users.update'],
+  'users.delete': ['system.users.delete'],
+  'departments.write': ['system.departments.create', 'system.departments.read', 'system.departments.update', 'system.departments.delete'],
+  'departments.create': ['system.departments.create'],
+  'departments.read': ['system.departments.read'],
+  'departments.update': ['system.departments.update'],
+  'departments.delete': ['system.departments.delete'],
+  'api_tokens.create': ['system.api_tokens.create'],
+  'api_tokens.read': ['system.api_tokens.read'],
+  'api_tokens.update': ['system.api_tokens.update'],
+  'api_tokens.delete': ['system.api_tokens.delete'],
+  'audit.read': ['system.audit.read']
+}
+
+export const normalizePermissionCodes = (values: string[]) => {
   const next = new Set(values.map((item) => String(item || '').trim()).filter(Boolean))
   for (const code of Array.from(next)) {
     if (code.endsWith('.write')) {
@@ -57,6 +80,10 @@ const normalizePermissionCodes = (values: string[]) => {
     }
     if (code === 'notifications.write') {
       next.add('notifications.update')
+    }
+    const aliases = legacyPermissionAliases[code]
+    if (aliases) {
+      aliases.forEach((alias) => next.add(alias))
     }
   }
   return Array.from(next).sort()

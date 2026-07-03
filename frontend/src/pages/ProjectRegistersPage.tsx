@@ -136,7 +136,7 @@ export function ProjectRegistersPage() {
   const canCreate = hasPermission('registers.create', permissions)
   const canUpdate = hasPermission('registers.update', permissions)
   const canDelete = hasPermission('registers.delete', permissions)
-  const canReadUsers = hasPermission('users.read', permissions)
+  const canReadUsers = hasPermission('system.users.read', permissions)
   const [items, setItems] = useState<ProjectRegister[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [keywordInput, setKeywordInput] = useState(searchParams.get('keyword') || '')
@@ -209,7 +209,7 @@ export function ProjectRegistersPage() {
       setUsers([])
       return
     }
-    void fetchPage<User>('/users', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true })
+    void fetchPage<User>('/system/users', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true })
       .then((data) => setUsers(data.list))
       .catch(() => setUsers([]))
   }, [canReadUsers])

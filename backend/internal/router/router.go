@@ -54,32 +54,34 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		authGroup.POST("/auth/change-password", h.ChangePassword)
 		authGroup.POST("/uploads", middleware.RequirePermission(h.DB, "uploads.create"), h.UploadFile)
 
-		rbac := authGroup.Group("/rbac")
+		system := authGroup.Group("/system")
+
+		rbac := system.Group("/rbac")
 		{
-			rbac.GET("/permissions", middleware.RequirePermission(h.DB, "rbac.read"), h.ListPermissions)
-			rbac.POST("/permissions", middleware.RequirePermission(h.DB, "rbac.create"), h.CreatePermission)
-			rbac.PUT("/permissions/:id", middleware.RequirePermission(h.DB, "rbac.update"), h.UpdatePermission)
-			rbac.DELETE("/permissions/:id", middleware.RequirePermission(h.DB, "rbac.delete"), h.DeletePermission)
-			rbac.GET("/roles", middleware.RequirePermission(h.DB, "rbac.read"), h.ListRoles)
-			rbac.POST("/roles", middleware.RequirePermission(h.DB, "rbac.create"), h.CreateRole)
-			rbac.PUT("/roles/:id", middleware.RequirePermission(h.DB, "rbac.update"), h.UpdateRole)
-			rbac.DELETE("/roles/:id", middleware.RequirePermission(h.DB, "rbac.delete"), h.DeleteRole)
+			rbac.GET("/permissions", middleware.RequirePermission(h.DB, "system.rbac.read"), h.ListPermissions)
+			rbac.POST("/permissions", middleware.RequirePermission(h.DB, "system.rbac.create"), h.CreatePermission)
+			rbac.PUT("/permissions/:id", middleware.RequirePermission(h.DB, "system.rbac.update"), h.UpdatePermission)
+			rbac.DELETE("/permissions/:id", middleware.RequirePermission(h.DB, "system.rbac.delete"), h.DeletePermission)
+			rbac.GET("/roles", middleware.RequirePermission(h.DB, "system.rbac.read"), h.ListRoles)
+			rbac.POST("/roles", middleware.RequirePermission(h.DB, "system.rbac.create"), h.CreateRole)
+			rbac.PUT("/roles/:id", middleware.RequirePermission(h.DB, "system.rbac.update"), h.UpdateRole)
+			rbac.DELETE("/roles/:id", middleware.RequirePermission(h.DB, "system.rbac.delete"), h.DeleteRole)
 		}
 
-		users := authGroup.Group("/users")
+		users := system.Group("/users")
 		{
-			users.GET("", middleware.RequirePermission(h.DB, "users.read"), h.ListUsers)
-			users.POST("", middleware.RequirePermission(h.DB, "users.create"), h.CreateUser)
-			users.PUT("/:id", middleware.RequirePermission(h.DB, "users.update"), h.UpdateUser)
-			users.DELETE("/:id", middleware.RequirePermission(h.DB, "users.delete"), h.DeleteUser)
+			users.GET("", middleware.RequirePermission(h.DB, "system.users.read"), h.ListUsers)
+			users.POST("", middleware.RequirePermission(h.DB, "system.users.create"), h.CreateUser)
+			users.PUT("/:id", middleware.RequirePermission(h.DB, "system.users.update"), h.UpdateUser)
+			users.DELETE("/:id", middleware.RequirePermission(h.DB, "system.users.delete"), h.DeleteUser)
 		}
 
-		departments := authGroup.Group("/departments")
+		departments := system.Group("/departments")
 		{
-			departments.GET("", middleware.RequirePermission(h.DB, "departments.read"), h.ListDepartments)
-			departments.POST("", middleware.RequirePermission(h.DB, "departments.create"), h.CreateDepartment)
-			departments.PUT("/:id", middleware.RequirePermission(h.DB, "departments.update"), h.UpdateDepartment)
-			departments.DELETE("/:id", middleware.RequirePermission(h.DB, "departments.delete"), h.DeleteDepartment)
+			departments.GET("", middleware.RequirePermission(h.DB, "system.departments.read"), h.ListDepartments)
+			departments.POST("", middleware.RequirePermission(h.DB, "system.departments.create"), h.CreateDepartment)
+			departments.PUT("/:id", middleware.RequirePermission(h.DB, "system.departments.update"), h.UpdateDepartment)
+			departments.DELETE("/:id", middleware.RequirePermission(h.DB, "system.departments.delete"), h.DeleteDepartment)
 		}
 
 		tags := authGroup.Group("/tags")
@@ -197,14 +199,14 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			webhooks.DELETE("/:id", middleware.RequirePermission(h.DB, "webhooks.delete"), h.DeleteWebhookSubscription)
 		}
 
-		apiTokens := authGroup.Group("/api-tokens")
+		apiTokens := system.Group("/api-tokens")
 		{
-			apiTokens.GET("", middleware.RequirePermission(h.DB, "api_tokens.read"), h.ListAPITokens)
-			apiTokens.POST("", middleware.RequirePermission(h.DB, "api_tokens.create"), h.CreateAPIToken)
-			apiTokens.GET("/permission-options", middleware.RequirePermission(h.DB, "api_tokens.read"), h.ListAPITokenPermissionOptions)
-			apiTokens.GET("/:id", middleware.RequirePermission(h.DB, "api_tokens.read"), h.APITokenDetail)
-			apiTokens.PUT("/:id", middleware.RequirePermission(h.DB, "api_tokens.update"), h.UpdateAPIToken)
-			apiTokens.DELETE("/:id", middleware.RequirePermission(h.DB, "api_tokens.delete"), h.DeleteAPIToken)
+			apiTokens.GET("", middleware.RequirePermission(h.DB, "system.api_tokens.read"), h.ListAPITokens)
+			apiTokens.POST("", middleware.RequirePermission(h.DB, "system.api_tokens.create"), h.CreateAPIToken)
+			apiTokens.GET("/permission-options", middleware.RequirePermission(h.DB, "system.api_tokens.read"), h.ListAPITokenPermissionOptions)
+			apiTokens.GET("/:id", middleware.RequirePermission(h.DB, "system.api_tokens.read"), h.APITokenDetail)
+			apiTokens.PUT("/:id", middleware.RequirePermission(h.DB, "system.api_tokens.update"), h.UpdateAPIToken)
+			apiTokens.DELETE("/:id", middleware.RequirePermission(h.DB, "system.api_tokens.delete"), h.DeleteAPIToken)
 		}
 
 		portalInvites := authGroup.Group("/portal-invites")
@@ -248,9 +250,9 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			notifications.PATCH("/read-all", middleware.RequirePermission(h.DB, "notifications.update"), h.MarkAllNotificationsRead)
 		}
 
-		audit := authGroup.Group("/audit")
+		audit := system.Group("/audit")
 		{
-			audit.GET("/logs", middleware.RequirePermission(h.DB, "audit.read"), h.ListAuditLogs)
+			audit.GET("/logs", middleware.RequirePermission(h.DB, "system.audit.read"), h.ListAuditLogs)
 		}
 	}
 

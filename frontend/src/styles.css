@@ -165,6 +165,43 @@ button, input, select, textarea { max-width: 100%; font: inherit; }
 .nav-item:hover, .nav-item:focus-visible { background: var(--color-sidebar-hover); outline: none; }
 .nav-item:active { transform: translateY(1px); }
 .nav-item.active { background: var(--color-primary); color: #fff; }
+.nav-group { display: grid; gap: 4px; }
+.nav-group-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-sidebar-text);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+.nav-group-trigger:hover,
+.nav-group-trigger:focus-visible { background: var(--color-sidebar-hover); outline: none; }
+.nav-group-trigger.active { color: #fff; background: color-mix(in oklab, var(--color-primary) 72%, var(--color-sidebar)); }
+.nav-group-trigger span { min-width: 0; flex: 1 1 auto; font-weight: 700; }
+.nav-group-chevron { flex: 0 0 auto; transition: transform var(--duration-fast) var(--ease-standard); }
+.nav-group-chevron.expanded { transform: rotate(180deg); }
+.nav-submenu {
+  display: grid;
+  gap: 4px;
+  margin-left: 18px;
+  padding-left: 16px;
+  border-left: 1px solid color-mix(in oklab, var(--color-sidebar-text) 26%, transparent);
+}
+.nav-subitem {
+  min-height: 40px;
+  padding: 9px 10px 9px 14px;
+  font-size: 14px;
+  color: color-mix(in oklab, var(--color-sidebar-text) 86%, transparent);
+}
+.nav-subitem svg { opacity: 0.78; }
+.nav-subitem.active svg { opacity: 1; }
 .nav-badge {
   margin-left: auto;
   min-width: 20px;

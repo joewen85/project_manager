@@ -12,7 +12,7 @@ import { usePermissions } from '../hooks/usePermissions'
 export function NotificationsPage() {
   const navigate = useNavigate()
   const permissions = usePermissions()
-  const canManageRBAC = hasPermission('rbac.update', permissions) || hasPermission('rbac.manage', permissions)
+  const canManageRBAC = hasPermission('system.rbac.update', permissions) || hasPermission('rbac.manage', permissions)
   const canUpdateNotifications = hasPermission('notifications.update', permissions) || hasPermission('notifications.write', permissions)
   const [items, setItems] = useState<Notification[]>([])
   const [loading, setLoading] = useState(false)
@@ -140,7 +140,7 @@ export function NotificationsPage() {
         <DataState loading={loading} error={error} empty={!loading && !error && items.length === 0} emptyText="暂无通知" onRetry={() => { void load() }} />
         {forbidden && canManageRBAC && (
           <p className="inline-link-tip">
-            你可直接前往 <a href="/rbac">RBAC 权限页</a> 为角色分配 `notifications.read`。
+            你可直接前往 <a href="/system/rbac">RBAC 权限页</a> 为角色分配 `notifications.read`。
           </p>
         )}
         {!loading && !error && items.length > 0 && (

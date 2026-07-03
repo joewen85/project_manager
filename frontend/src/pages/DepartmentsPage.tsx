@@ -19,9 +19,9 @@ const initialForm: DepartmentForm = { name: '', description: '', userIds: [] }
 
 export function DepartmentsPage() {
   const permissions = usePermissions()
-  const canCreateDepartment = hasPermission('departments.create', permissions)
-  const canUpdateDepartment = hasPermission('departments.update', permissions)
-  const canDeleteDepartment = hasPermission('departments.delete', permissions)
+  const canCreateDepartment = hasPermission('system.departments.create', permissions)
+  const canUpdateDepartment = hasPermission('system.departments.update', permissions)
+  const canDeleteDepartment = hasPermission('system.departments.delete', permissions)
   const [items, setItems] = useState<Department[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [keywordInput, setKeywordInput] = useState('')
@@ -43,8 +43,8 @@ export function DepartmentsPage() {
       setLoading(true)
       setError('')
       const [departmentsPage, usersPage] = await Promise.all([
-        fetchPage<Department>('/departments', { page, pageSize, keyword }, { page, pageSize }),
-        fetchPage<User>('/users', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as User[], total: 0, page: 1, pageSize: 100 }))
+        fetchPage<Department>('/system/departments', { page, pageSize, keyword }, { page, pageSize }),
+        fetchPage<User>('/system/users', { page: 1, pageSize: 100 }, { page: 1, pageSize: 100 }, { silent: true }).catch(() => ({ list: [] as User[], total: 0, page: 1, pageSize: 100 }))
       ])
       setItems(departmentsPage.list)
       setTotal(departmentsPage.total)
@@ -67,9 +67,9 @@ export function DepartmentsPage() {
       setSubmitting(true)
       setFormError('')
       if (form.id) {
-        await api.put(`/departments/${form.id}`, form)
+        await api.put(`/system/departments/${form.id}`, form)
       } else {
-        await api.post('/departments', form)
+        await api.post('/system/departments', form)
       }
       setFormSuccess('保存成功')
       setModalOpen(false)
@@ -107,7 +107,7 @@ export function DepartmentsPage() {
     if (!canDeleteDepartment) return
     if (!confirm('确认删除该部门？')) return
     try {
-      await api.delete(`/departments/${id}`)
+      await api.delete(`/system/departments/${id}`)
       await load()
     } catch (deleteError) {
       setError(readApiError(deleteError, '删除部门失败'))

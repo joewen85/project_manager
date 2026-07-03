@@ -49,9 +49,11 @@ function Guard({ children }: { children: ReactElement }) {
 
 const protectedRoutes = [
   { path: '/', permission: 'stats.read' },
-  { path: '/rbac', permission: 'rbac.read' },
-  { path: '/users', permission: 'users.read' },
-  { path: '/departments', permission: 'departments.read' },
+  { path: '/system/rbac', permission: 'system.rbac.read' },
+  { path: '/system/users', permission: 'system.users.read' },
+  { path: '/system/departments', permission: 'system.departments.read' },
+  { path: '/system/audit', permission: 'system.audit.read' },
+  { path: '/system/api-tokens', permission: 'system.api_tokens.read' },
   { path: '/tags', permission: 'tags.read' },
   { path: '/projects', permission: 'projects.read' },
   { path: '/project-templates', permission: 'templates.read' },
@@ -65,11 +67,9 @@ const protectedRoutes = [
   { path: '/requests', permission: 'requests.read' },
   { path: '/automation-rules', permission: 'automations.read' },
   { path: '/webhooks', permission: 'webhooks.read' },
-  { path: '/api-tokens', permission: 'api_tokens.read' },
   { path: '/portals', permission: 'portal.read' },
   { path: '/assistant', permission: 'ai.read' },
   { path: '/notifications', permission: 'notifications.read' },
-  { path: '/audit', permission: 'audit.read' },
   { path: '/me', permission: 'tasks.read' }
 ]
 
@@ -154,9 +154,16 @@ export default function App() {
           }
         >
           <Route index element={<PermissionGuard permission="stats.read"><DashboardPage /></PermissionGuard>} />
-          <Route path="rbac" element={<PermissionGuard permission="rbac.read"><RbacPage /></PermissionGuard>} />
-          <Route path="users" element={<PermissionGuard permission="users.read"><UsersPage /></PermissionGuard>} />
-          <Route path="departments" element={<PermissionGuard permission="departments.read"><DepartmentsPage /></PermissionGuard>} />
+          <Route path="rbac" element={<Navigate to="/system/rbac" replace />} />
+          <Route path="users" element={<Navigate to="/system/users" replace />} />
+          <Route path="departments" element={<Navigate to="/system/departments" replace />} />
+          <Route path="api-tokens" element={<Navigate to="/system/api-tokens" replace />} />
+          <Route path="audit" element={<Navigate to="/system/audit" replace />} />
+          <Route path="system/rbac" element={<PermissionGuard permission="system.rbac.read"><RbacPage /></PermissionGuard>} />
+          <Route path="system/users" element={<PermissionGuard permission="system.users.read"><UsersPage /></PermissionGuard>} />
+          <Route path="system/departments" element={<PermissionGuard permission="system.departments.read"><DepartmentsPage /></PermissionGuard>} />
+          <Route path="system/api-tokens" element={<PermissionGuard permission="system.api_tokens.read"><ApiTokensPage /></PermissionGuard>} />
+          <Route path="system/audit" element={<PermissionGuard permission="system.audit.read"><AuditPage /></PermissionGuard>} />
           <Route path="tags" element={<PermissionGuard permission="tags.read"><TagsPage /></PermissionGuard>} />
           <Route path="projects" element={<PermissionGuard permission="projects.read"><ProjectsPage /></PermissionGuard>} />
           <Route path="project-templates" element={<PermissionGuard permission="templates.read"><ProjectTemplatesPage /></PermissionGuard>} />
@@ -170,11 +177,9 @@ export default function App() {
           <Route path="requests" element={<PermissionGuard permission="requests.read"><RequestsPage /></PermissionGuard>} />
           <Route path="automation-rules" element={<PermissionGuard permission="automations.read"><AutomationRulesPage /></PermissionGuard>} />
           <Route path="webhooks" element={<PermissionGuard permission="webhooks.read"><WebhooksPage /></PermissionGuard>} />
-          <Route path="api-tokens" element={<PermissionGuard permission="api_tokens.read"><ApiTokensPage /></PermissionGuard>} />
           <Route path="portals" element={<PermissionGuard permission="portal.read"><PortalAdminPage /></PermissionGuard>} />
           <Route path="assistant" element={<PermissionGuard permission="ai.read"><AssistantPage /></PermissionGuard>} />
           <Route path="notifications" element={<PermissionGuard permission="notifications.read"><NotificationsPage /></PermissionGuard>} />
-          <Route path="audit" element={<PermissionGuard permission="audit.read"><AuditPage /></PermissionGuard>} />
           <Route path="me" element={<PermissionGuard permission="tasks.read"><MyWorkPage /></PermissionGuard>} />
         </Route>
       </Routes>

@@ -1,16 +1,39 @@
-import { AlertTriangle, BarChart3, Bell, Building2, CalendarDays, CalendarRange, ClipboardList, FolderKanban, GitBranch, Globe2, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, RefreshCcw, Shield, Sparkles, Sun, Tag, UserCircle2, Users, Webhook, Workflow, X } from 'lucide-react'
+import { AlertTriangle, BarChart3, Bell, Building2, CalendarDays, CalendarRange, ChevronDown, ClipboardList, FolderKanban, GitBranch, Globe2, KeyRound, ListChecks, LogOut, Menu, Moon, NotebookTabs, RefreshCcw, Settings, Shield, Sparkles, Sun, Tag, UserCircle2, Users, Webhook, Workflow, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, clearPermissions, fetchData, fetchPage, getPermissions, hasPermission, readApiError, setPermissions } from '../services/api'
+import { api, clearPermissions, fetchData, fetchPage, getPermissions, hasPermission, normalizePermissionCodes, readApiError, setPermissions } from '../services/api'
 import { subscribeNotificationSocket } from '../services/notificationsSocket'
 import { Modal } from './Modal'
 import { Notification, Role } from '../types'
 
-const menus = [
+type NavIcon = typeof BarChart3
+
+interface MenuItem {
+  to: string
+  label: string
+  icon: NavIcon
+  permission: string
+}
+
+interface MenuGroup {
+  label: string
+  icon: NavIcon
+  children: MenuItem[]
+}
+
+type MenuEntry = MenuItem | MenuGroup
+
+const systemMenus: MenuItem[] = [
+  { to: '/system/rbac', label: 'RBAC权限', icon: Shield, permission: 'system.rbac.read' },
+  { to: '/system/users', label: '用户管理', icon: Users, permission: 'system.users.read' },
+  { to: '/system/departments', label: '部门管理', icon: Building2, permission: 'system.departments.read' },
+  { to: '/system/audit', label: '审计日志', icon: NotebookTabs, permission: 'system.audit.read' },
+  { to: '/system/api-tokens', label: 'API Token', icon: KeyRound, permission: 'system.api_tokens.read' }
+]
+
+const menus: MenuEntry[] = [
   { to: '/', label: '统计分析', icon: BarChart3, permission: 'stats.read' },
-  { to: '/rbac', label: 'RBAC权限', icon: Shield, permission: 'rbac.read' },
-  { to: '/users', label: '用户管理', icon: Users, permission: 'users.read' },
-  { to: '/departments', label: '部门管理', icon: Building2, permission: 'departments.read' },
+  { label: '系统管理', icon: Settings, children: systemMenus },
   { to: '/tags', label: '标签管理', icon: Tag, permission: 'tags.read' },
   { to: '/projects', label: '项目列表', icon: FolderKanban, permission: 'projects.read' },
   { to: '/project-templates', label: '模板管理', icon: FolderKanban, permission: 'templates.read' },
@@ -25,12 +48,12 @@ const menus = [
   { to: '/automation-rules', label: '自动化规则', icon: Workflow, permission: 'automations.read' },
   { to: '/assistant', label: 'AI 助理', icon: Sparkles, permission: 'ai.read' },
   { to: '/webhooks', label: 'Webhook订阅', icon: Webhook, permission: 'webhooks.read' },
-  { to: '/api-tokens', label: 'API Token', icon: KeyRound, permission: 'api_tokens.read' },
   { to: '/portals', label: '外部门户', icon: Globe2, permission: 'portal.read' },
   { to: '/notifications', label: '站内通知', icon: Bell, permission: 'notifications.read' },
-  { to: '/audit', label: '审计日志', icon: NotebookTabs, permission: 'audit.read' },
   { to: '/me', label: '个人工作', icon: UserCircle2, permission: 'tasks.read' }
 ]
+
+const isMenuGroup = (entry: MenuEntry): entry is MenuGroup => 'children' in entry
 
 interface ProfileResponse {
   name?: string
@@ -107,6 +130,7 @@ export function Layout() {
   const [changePasswordSuccess, setChangePasswordSuccess] = useState('')
   const [changePasswordForm, setChangePasswordForm] = useState<ChangePasswordForm>(createEmptyChangePasswordForm)
   const [navOpen, setNavOpen] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ '系统管理': true })
   const [isMobileNav, setIsMobileNav] = useState(() => window.matchMedia('(max-width: 1024px)').matches)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('theme')
@@ -118,10 +142,16 @@ export function Layout() {
   const canAccess = useCallback((permission: string, permissionList: string[]) => {
     return hasPermission(permission, permissionList)
   }, [])
-  const visibleMenus = menus.filter((item) => canAccess(item.permission, permissions))
+  const visibleMenus = menus
+    .map((item) => {
+      if (!isMenuGroup(item)) return canAccess(item.permission, permissions) ? item : null
+      const children = item.children.filter((child) => canAccess(child.permission, permissions))
+      return children.length > 0 ? { ...item, children } : null
+    })
+    .filter((item): item is MenuEntry => Boolean(item))
   const hasNotificationAccess = canAccess('notifications.read', permissions)
   const canUpdateNotifications = canAccess('notifications.update', permissions)
-  const canManageRBAC = canAccess('rbac.update', permissions)
+  const canManageRBAC = canAccess('system.rbac.update', permissions)
   const notifyAnchorRef = useRef<HTMLDivElement | null>(null)
   const notifyButtonRef = useRef<HTMLButtonElement | null>(null)
   const notifyMenuRef = useRef<HTMLDivElement | null>(null)
@@ -233,7 +263,7 @@ export function Layout() {
       const rolePermissions = (profileData?.roles || []).flatMap((role) =>
         (role.permissions || []).map((permission) => String(permission.code))
       )
-      const merged = normalizePermissions(rolePermissions)
+      const merged = normalizePermissions(normalizePermissionCodes(rolePermissions))
       const current = normalizePermissions(permissionsRef.current)
       if (!isSamePermissions(current, merged)) {
         permissionsRef.current = merged
@@ -461,9 +491,11 @@ export function Layout() {
   const initials = (profile.name || profile.username || 'U').slice(0, 2).toUpperCase()
   const titleEntries: Array<[string, string]> = [
     ['/', '统计分析'],
-    ['/rbac', 'RBAC 权限管理'],
-    ['/users', '用户管理'],
-    ['/departments', '部门管理'],
+    ['/system/rbac', 'RBAC 权限管理'],
+    ['/system/users', '用户管理'],
+    ['/system/departments', '部门管理'],
+    ['/system/audit', '审计日志'],
+    ['/system/api-tokens', 'API Token'],
     ['/tags', '标签管理'],
     ['/projects', '项目列表'],
     ['/project-baselines', '基线关键路径'],
@@ -473,9 +505,7 @@ export function Layout() {
     ['/requests', '请求入口'],
     ['/portals', '外部门户'],
     ['/assistant', 'AI 助理'],
-    ['/api-tokens', 'API Token'],
     ['/notifications', '站内通知'],
-    ['/audit', '审计日志'],
     ['/me', '个人工作']
   ]
   const currentTitle = titleEntries.find(([path]) => path === '/' ? location.pathname === '/' : location.pathname.startsWith(path))?.[1] || '项目管理系统'
@@ -508,6 +538,45 @@ export function Layout() {
         </div>
         <nav className="sidebar-nav" aria-label="主导航">
           {visibleMenus.map((menu) => {
+            if (isMenuGroup(menu)) {
+              const Icon = menu.icon
+              const isExpanded = expandedGroups[menu.label] ?? true
+              const isActive = menu.children.some((child) => location.pathname === child.to || location.pathname.startsWith(`${child.to}/`))
+              return (
+                <div className={`nav-group${isActive ? ' active' : ''}`} key={menu.label}>
+                  <button
+                    type="button"
+                    className={`nav-group-trigger${isActive ? ' active' : ''}`}
+                    aria-expanded={isExpanded}
+                    onClick={() => setExpandedGroups((prev) => ({ ...prev, [menu.label]: !(prev[menu.label] ?? true) }))}
+                  >
+                    <Icon size={18} />
+                    <span>{menu.label}</span>
+                    <ChevronDown className={`nav-group-chevron${isExpanded ? ' expanded' : ''}`} size={16} aria-hidden="true" />
+                  </button>
+                  {isExpanded && (
+                    <div className="nav-submenu" role="group" aria-label={menu.label}>
+                      {menu.children.map((child) => {
+                        const ChildIcon = child.icon
+                        return (
+                          <NavLink
+                            className={({ isActive: childActive }) => `nav-item nav-subitem${childActive ? ' active' : ''}`}
+                            to={child.to}
+                            key={child.to}
+                            onClick={() => {
+                              if (isMobileNav) setNavOpen(false)
+                            }}
+                          >
+                            <ChildIcon size={16} />
+                            <span>{child.label}</span>
+                          </NavLink>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            }
             const Icon = menu.icon
             const isNotification = menu.to === '/notifications'
             return (
@@ -598,7 +667,7 @@ export function Layout() {
               </div>
             )}
             {!hasNotificationAccess && canManageRBAC && (
-              <NavLink className="permission-hint link" to="/rbac" title="当前角色未分配 notifications.read 权限，点击前往 RBAC 授权">
+              <NavLink className="permission-hint link" to="/system/rbac" title="当前角色未分配 notifications.read 权限，点击前往 RBAC 授权">
                 通知未授权
               </NavLink>
             )}

@@ -24,9 +24,9 @@ const initialPermissionForm: PermissionForm = { code: '', name: '', description:
 
 export function RbacPage() {
   const permissionsState = usePermissions()
-  const canCreateRBAC = hasPermission('rbac.create', permissionsState)
-  const canUpdateRBAC = hasPermission('rbac.update', permissionsState)
-  const canDeleteRBAC = hasPermission('rbac.delete', permissionsState)
+  const canCreateRBAC = hasPermission('system.rbac.create', permissionsState)
+  const canUpdateRBAC = hasPermission('system.rbac.update', permissionsState)
+  const canDeleteRBAC = hasPermission('system.rbac.delete', permissionsState)
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [roleForm, setRoleForm] = useState<RoleForm>(initialRoleForm)
@@ -47,8 +47,8 @@ export function RbacPage() {
       setLoading(true)
       setError('')
       const [roleList, permissionList] = await Promise.all([
-        fetchArray<Role>('/rbac/roles'),
-        fetchArray<Permission>('/rbac/permissions')
+        fetchArray<Role>('/system/rbac/roles'),
+        fetchArray<Permission>('/system/rbac/permissions')
       ])
       setRoles(roleList)
       setPermissions(permissionList)
@@ -73,9 +73,9 @@ export function RbacPage() {
       setSubmittingRole(true)
       setRoleFormError('')
       if (roleForm.id) {
-        await api.put(`/rbac/roles/${roleForm.id}`, roleForm)
+        await api.put(`/system/rbac/roles/${roleForm.id}`, roleForm)
       } else {
-        await api.post('/rbac/roles', roleForm)
+        await api.post('/system/rbac/roles', roleForm)
       }
       setRoleFormSuccess('保存成功')
       setRoleModalOpen(false)
@@ -96,9 +96,9 @@ export function RbacPage() {
       setSubmittingPermission(true)
       setPermissionFormError('')
       if (permissionForm.id) {
-        await api.put(`/rbac/permissions/${permissionForm.id}`, permissionForm)
+        await api.put(`/system/rbac/permissions/${permissionForm.id}`, permissionForm)
       } else {
-        await api.post('/rbac/permissions', permissionForm)
+        await api.post('/system/rbac/permissions', permissionForm)
       }
       setPermissionFormSuccess('保存成功')
       setPermissionModalOpen(false)
@@ -156,14 +156,14 @@ export function RbacPage() {
   const onDeleteRole = async (id: number, name: string) => {
     if (!canDeleteRBAC) return
     if (!confirm(`确认删除角色 ${name}？`)) return
-    await api.delete(`/rbac/roles/${id}`)
+    await api.delete(`/system/rbac/roles/${id}`)
     await load()
   }
 
   const onDeletePermission = async (id: number, name: string) => {
     if (!canDeleteRBAC) return
     if (!confirm(`确认删除权限 ${name}？`)) return
-    await api.delete(`/rbac/permissions/${id}`)
+    await api.delete(`/system/rbac/permissions/${id}`)
     await load()
   }
 
