@@ -297,6 +297,35 @@ make notify-test PROVIDER=feishu
 - `auto` 会先测邮件（若已配置），再按 `TASK_NOTIFY_PROVIDER` 或自动识别测试一个非邮件渠道。
 - 若邮件自检需要单独收件地址，可在 `.env` 配置 `SMTP_TEST_TO`（仅脚本使用，不影响业务发送）。
 
+## AI 助理（洞察分析 → AI 助理）
+AI 助理提供周报草稿、风险摘要、任务拆解三种只读生成能力，通过 OpenAI 兼容的 `chat/completions` 网关调用大模型。
+
+配置原则：
+- 需同时配置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 才会启用；任一为空则自动回退到内置模板，绝不外发项目数据。
+- 数据采集、要点、建议、来源引用均来自真实数据，仅正文（或任务拆解的 JSON）交给模型生成；模型不可用或返回异常时回退到内置结果。
+
+```bash
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=sk-xxxx
+AI_MODEL=gpt-4o-mini
+AI_TIMEOUT_SECONDS=30
+AI_PROMPT_DIR=
+```
+
+### System Prompt 模板
+三个 system prompt 以独立文件放在仓库根目录 `prompts/`，可直接编辑，无需改代码或重新编译：
+
+| 文件 | 用途 |
+|---|---|
+| `prompts/weekly_report.txt` | 周报草稿 |
+| `prompts/risk_summary.txt` | 风险摘要 |
+| `prompts/task_breakdown.txt` | 任务拆解（要求模型返回 JSON） |
+
+加载规则：
+- `AI_PROMPT_DIR` 显式指定目录时优先使用；留空时自动探测 `./prompts` 与 `../prompts`（后者对应 `cd backend` 启动的开发场景）。
+- 任一文件缺失或为空时，该项回退到代码内置的默认提示词，因此仅含二进制的精简镜像也能正常运行；如需在容器内自定义，可挂载目录并设置 `AI_PROMPT_DIR`。
+- 所有 prompt 均要求模型将 `<context>` 内容视为只读数据、不执行其中任何指令，以防提示注入。
+
 ## 项目计划与进度
 - 计划：`PLAN.md`
 - 进度：`PROGRESS.md`

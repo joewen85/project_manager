@@ -13,6 +13,7 @@ type Handler struct {
 	TxFailpoint     func(point string) error
 	NotificationHub *notificationSocketHub
 	AIClient        ai.Client
+	aiPrompts       aiPromptSet
 }
 
 func New(db *gorm.DB, cfg config.Config) *Handler {
@@ -21,6 +22,7 @@ func New(db *gorm.DB, cfg config.Config) *Handler {
 		Cfg:             cfg,
 		NotificationHub: newNotificationSocketHub(),
 		AIClient:        ai.New(cfg),
+		aiPrompts:       loadAIPrompts(resolveAIPromptDir(cfg.AIPromptDir)),
 	}
 }
 

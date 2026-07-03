@@ -43,6 +43,7 @@ type Config struct {
 	AIAPIKey           string
 	AIModel            string
 	AITimeoutSeconds   int
+	AIPromptDir        string
 }
 
 func Load() Config {
@@ -79,6 +80,7 @@ func Load() Config {
 		AIAPIKey:           getEnv("AI_API_KEY", ""),
 		AIModel:            getEnv("AI_MODEL", ""),
 		AITimeoutSeconds:   getEnvInt("AI_TIMEOUT_SECONDS", 30),
+		AIPromptDir:        getEnv("AI_PROMPT_DIR", ""),
 	}
 	return cfg
 }
