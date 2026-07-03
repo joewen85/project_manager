@@ -38,10 +38,18 @@ services:
       DB_USER: ${DB_USER:-root}
       DB_PASSWORD: ${DB_PASSWORD:-root}
       DB_NAME: ${DB_NAME:-project_management}
+      # AI 助理（洞察分析 → AI 助理）；三者同时非空才启用，否则回退内置模板
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-30}
+      # 挂载的 system prompt 目录；文件缺失或为空时回退代码内置默认提示词
+      AI_PROMPT_DIR: ${AI_PROMPT_DIR:-/app/prompts}
     ports:
       - '${BACKEND_PORT:-8080}:${APP_PORT:-8080}'
     volumes:
       - './static/uploads:/app/static/uploads'
+      - './prompts:/app/prompts:ro'
 
   frontend:
     build:
