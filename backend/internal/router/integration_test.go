@@ -214,6 +214,69 @@ func permissionCodeMap(t *testing.T, serverURL, token string) map[string]uint {
 	return codeToID
 }
 
+func TestFunctionalAPIRouteAliasesReusePermissions(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	for _, item := range []struct {
+		path string
+		name string
+	}{
+		{path: "/api/v1/workbench/tasks/me", name: "workbench tasks"},
+		{path: "/api/v1/workbench/notifications", name: "workbench notifications"},
+		{path: "/api/v1/portfolio/projects", name: "portfolio projects"},
+		{path: "/api/v1/delivery/tasks", name: "delivery tasks"},
+		{path: "/api/v1/insights/stats/dashboard", name: "insights dashboard"},
+		{path: "/api/v1/integrations/webhooks", name: "integration webhooks"},
+		{path: "/api/v1/settings/tags", name: "settings tags"},
+		{path: "/api/v1/system/users", name: "system users"},
+	} {
+		resp, body := requestJSON(t, http.MethodGet, ts.URL+item.path, adminToken, nil)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s alias expected 200 got %d, body=%v", item.name, resp.StatusCode, body)
+		}
+	}
+
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
+		"name":          "portfolio-reader-only",
+		"description":   "functional route alias permission probe",
+		"permissionIds": []uint{codeToID["projects.read"]},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create portfolio reader role expected 201 got %d, body=%v", roleResp.StatusCode, roleBody)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	userResp, userBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
+		"username":      "portfolio_alias_reader",
+		"name":          "Portfolio Alias Reader",
+		"email":         "portfolio_alias_reader@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{},
+	})
+	if userResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create portfolio reader user expected 201 got %d, body=%v", userResp.StatusCode, userBody)
+	}
+
+	loginStatus, loginBody := loginWithCredentials(t, ts.URL, "portfolio_alias_reader", "pass1234")
+	if loginStatus != http.StatusOK {
+		t.Fatalf("login portfolio reader expected 200 got %d, body=%v", loginStatus, loginBody)
+	}
+	userToken := loginBody["token"].(string)
+
+	allowedResp, allowedBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/portfolio/projects", userToken, nil)
+	if allowedResp.StatusCode != http.StatusOK {
+		t.Fatalf("portfolio alias with projects.read expected 200 got %d, body=%v", allowedResp.StatusCode, allowedBody)
+	}
+	forbiddenResp, forbiddenBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/delivery/tasks", userToken, nil)
+	if forbiddenResp.StatusCode != http.StatusForbidden || forbiddenBody["code"] != "FORBIDDEN" {
+		t.Fatalf("delivery alias without tasks.read expected 403 FORBIDDEN got %d, body=%v", forbiddenResp.StatusCode, forbiddenBody)
+	}
+}
+
 func TestChangeOwnPasswordFlow(t *testing.T) {
 	ts := setupTestRouter(t)
 	defer ts.Close()

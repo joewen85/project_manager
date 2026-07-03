@@ -64,6 +64,7 @@ export function SprintsPage() {
   const [activeSprint, setActiveSprint] = useState<Sprint | null>(null)
   const [taskOptions, setTaskOptions] = useState<Task[]>([])
   const [taskKeyword, setTaskKeyword] = useState('')
+  const [taskListKeyword, setTaskListKeyword] = useState('')
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([])
   const [taskSubmitting, setTaskSubmitting] = useState(false)
   const [taskActionError, setTaskActionError] = useState('')
@@ -139,6 +140,23 @@ export function SprintsPage() {
       }))
   }, [activeSprint, taskOptions])
 
+  const visibleSprintTasks = useMemo(() => {
+    const tasks = activeSprint?.tasks || []
+    const normalizedKeyword = taskListKeyword.trim().toLowerCase()
+    if (!normalizedKeyword) return tasks
+    return tasks.filter((task) => {
+      const haystack = [
+        task.taskNo,
+        task.title,
+        task.description || '',
+        task.status,
+        task.projectName || '',
+        task.projectCode || ''
+      ].join(' ').toLowerCase()
+      return haystack.includes(normalizedKeyword)
+    })
+  }, [activeSprint, taskListKeyword])
+
   const openCreateModal = () => {
     if (!canCreateSprint) return
     setForm(initialForm)
@@ -167,6 +185,7 @@ export function SprintsPage() {
     setActiveSprint(item)
     setSelectedTaskIds([])
     setTaskKeyword('')
+    setTaskListKeyword('')
     setTaskActionError('')
     setDetailOpen(true)
     void loadDetail(item.id)
@@ -336,8 +355,8 @@ export function SprintsPage() {
       </Modal>
 
       <Modal open={detailOpen} title={activeSprint ? `迭代任务：${activeSprint.name}` : '迭代任务'} onClose={() => setDetailOpen(false)}>
-        <div className="detail-grid">
-          <section className="detail-section">
+        <div className="detail-grid sprint-detail-grid">
+          <section className="detail-section sprint-summary-section">
             <h4>迭代概况</h4>
             <div className="detail-columns">
               <div><strong>状态：</strong>{activeSprint ? sprintStatusLabel[activeSprint.status] : '-'}</div>
@@ -348,46 +367,54 @@ export function SprintsPage() {
             </div>
             {activeSprint?.goal && <div className="detail-description-card"><strong>目标</strong><p>{activeSprint.goal}</p></div>}
           </section>
-          {canUpdateSprint && canReadTasks && (
-            <section className="detail-section">
-              <h4>加入任务</h4>
-              <div className="toolbar-grid">
-                <SearchField aria-label="搜索可加入任务" value={taskKeyword} placeholder="搜索任务编号/标题/描述" onChange={setTaskKeyword} />
-                <SearchableMultiSelect
-                  ariaLabel="选择加入迭代的任务"
-                  values={selectedTaskIds}
-                  options={availableTaskOptions}
-                  onChange={setSelectedTaskIds}
-                  placeholder="搜索候选任务"
-                  noResultsText="没有可加入的任务"
-                  summaryNoun="任务"
-                />
-                <button className="btn" disabled={taskSubmitting || selectedTaskIds.length === 0} onClick={() => { void addTasks() }}>
-                  {taskSubmitting ? '处理中...' : '加入迭代'}
-                </button>
-              </div>
-              {taskActionError && <p className="error">{taskActionError}</p>}
-            </section>
-          )}
-          <section className="detail-section">
-            <h4>任务列表</h4>
-            <DataState loading={detailLoading} error={detailError} empty={!detailLoading && !detailError && (activeSprint?.tasks || []).length === 0} emptyText="暂无可见任务" onRetry={() => { if (activeSprint) void loadDetail(activeSprint.id) }} />
-            {!detailLoading && !detailError && (activeSprint?.tasks || []).length > 0 && (
-              <table className="responsive-table"><thead><tr><th>任务</th><th>状态</th><th>进度</th><th>项目</th><th>操作</th></tr></thead><tbody>
-                {(activeSprint?.tasks || []).map((task) => (
-                  <tr key={task.id}>
-                    <td data-label="任务"><strong>{task.taskNo || `#${task.id}`}</strong><p className="table-subtext">{task.title}</p></td>
-                    <td data-label="状态">{task.status}</td>
-                    <td data-label="进度">{Number(task.progress || 0)}%</td>
-                    <td data-label="项目">{task.projectName || task.projectId || '-'}</td>
-                    <td data-label="操作">
-                      {canUpdateSprint && <button className="btn danger" disabled={taskSubmitting} onClick={() => { void removeTask(task) }}>移出</button>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody></table>
+          <div className="sprint-task-workspace">
+            {canUpdateSprint && canReadTasks && (
+              <section className="detail-section sprint-task-add-section">
+                <h4>加入任务</h4>
+                <div className="sprint-task-add-grid">
+                  <SearchableMultiSelect
+                    className="sprint-task-picker"
+                    ariaLabel="选择加入迭代的任务"
+                    values={selectedTaskIds}
+                    options={availableTaskOptions}
+                    onChange={setSelectedTaskIds}
+                    onSearchChange={setTaskKeyword}
+                    placeholder="搜索待加入任务编号/标题/描述"
+                    noResultsText={taskKeyword.trim() ? '没有匹配的待加入任务' : '没有可加入的任务'}
+                    summaryNoun="任务"
+                  />
+                  <button className="btn sprint-task-add-button" disabled={taskSubmitting || selectedTaskIds.length === 0} onClick={() => { void addTasks() }}>
+                    {taskSubmitting ? '处理中...' : '加入迭代'}
+                  </button>
+                </div>
+                {taskActionError && <p className="error">{taskActionError}</p>}
+              </section>
             )}
-          </section>
+            <section className="detail-section sprint-task-list-section">
+              <h4>任务列表</h4>
+              {(taskListKeyword || (activeSprint?.tasks || []).length > 0) && (
+                <SearchField className="sprint-task-list-search" aria-label="搜索迭代任务列表" value={taskListKeyword} placeholder="搜索已加入任务编号/标题/状态/项目" onChange={setTaskListKeyword} />
+              )}
+              <DataState loading={detailLoading} error={detailError} empty={!detailLoading && !detailError && visibleSprintTasks.length === 0} emptyText={taskListKeyword.trim() ? '没有匹配的任务' : '暂无可见任务'} onRetry={() => { if (activeSprint) void loadDetail(activeSprint.id) }} />
+              {!detailLoading && !detailError && visibleSprintTasks.length > 0 && (
+                <div className="sprint-task-table-wrap">
+                  <table className="responsive-table"><thead><tr><th>任务</th><th>状态</th><th>进度</th><th>项目</th><th>操作</th></tr></thead><tbody>
+                    {visibleSprintTasks.map((task) => (
+                      <tr key={task.id}>
+                        <td data-label="任务"><strong>{task.taskNo || `#${task.id}`}</strong><p className="table-subtext">{task.title}</p></td>
+                        <td data-label="状态">{task.status}</td>
+                        <td data-label="进度">{Number(task.progress || 0)}%</td>
+                        <td data-label="项目">{task.projectName || task.projectId || '-'}</td>
+                        <td data-label="操作">
+                          {canUpdateSprint && <button className="btn danger" disabled={taskSubmitting} onClick={() => { void removeTask(task) }}>移出</button>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody></table>
+                </div>
+              )}
+            </section>
+          </div>
         </div>
       </Modal>
     </section>

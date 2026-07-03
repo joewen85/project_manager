@@ -17,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type automationRuleRequest struct {
@@ -25,6 +26,14 @@ type automationRuleRequest struct {
 	IsEnabled  *bool                       `json:"isEnabled"`
 	Conditions automationConditionsRequest `json:"conditions"`
 	Actions    automationActionsRequest    `json:"actions"`
+}
+
+func whereAutomationTrigger(db *gorm.DB, trigger model.AutomationTrigger) *gorm.DB {
+	return db.Where(clause.Eq{Column: clause.Column{Name: "trigger"}, Value: trigger})
+}
+
+func whereEnabledAutomationRuleTrigger(db *gorm.DB, trigger model.AutomationTrigger) *gorm.DB {
+	return whereAutomationTrigger(db.Where(clause.Eq{Column: clause.Column{Name: "is_enabled"}, Value: true}), trigger)
 }
 
 type automationConditionsRequest struct {
@@ -396,7 +405,7 @@ func (h *Handler) ListAutomationRules(c *gin.Context) {
 	}
 	if trigger := strings.TrimSpace(c.Query("trigger")); trigger != "" {
 		if parsed, ok := normalizeAutomationTrigger(trigger); ok {
-			query = query.Where("trigger = ?", parsed)
+			query = whereAutomationTrigger(query, parsed)
 		}
 	}
 	if isEnabled := strings.TrimSpace(c.Query("isEnabled")); isEnabled != "" {
@@ -520,7 +529,7 @@ func (h *Handler) ListAutomationExecutionLogs(c *gin.Context) {
 		query = query.Where("status = ?", status)
 	}
 	if trigger := strings.TrimSpace(c.Query("trigger")); trigger != "" {
-		query = query.Where("trigger = ?", trigger)
+		query = whereAutomationTrigger(query, model.AutomationTrigger(trigger))
 	}
 
 	var total int64
@@ -1157,7 +1166,7 @@ func (h *Handler) executeTaskStatusChangedRulesWithDB(tx *gorm.DB, task model.Ta
 	}
 
 	var rules []model.AutomationRule
-	if err := tx.Where("is_enabled = ? AND trigger = ?", true, model.AutomationTriggerTaskStatusChanged).Order("id asc").Find(&rules).Error; err != nil {
+	if err := whereEnabledAutomationRuleTrigger(tx, model.AutomationTriggerTaskStatusChanged).Order("id asc").Find(&rules).Error; err != nil {
 		return sideEffects, err
 	}
 
@@ -1245,7 +1254,7 @@ func (h *Handler) executeTaskProgressChangedRulesWithDB(tx *gorm.DB, task model.
 	}
 
 	var rules []model.AutomationRule
-	if err := tx.Where("is_enabled = ? AND trigger = ?", true, model.AutomationTriggerTaskProgressChanged).Order("id asc").Find(&rules).Error; err != nil {
+	if err := whereEnabledAutomationRuleTrigger(tx, model.AutomationTriggerTaskProgressChanged).Order("id asc").Find(&rules).Error; err != nil {
 		return sideEffects, err
 	}
 
@@ -1333,7 +1342,7 @@ func (h *Handler) executeTaskAssigneeChangedRulesWithDB(tx *gorm.DB, task model.
 	}
 
 	var rules []model.AutomationRule
-	if err := tx.Where("is_enabled = ? AND trigger = ?", true, model.AutomationTriggerTaskAssigneeChanged).Order("id asc").Find(&rules).Error; err != nil {
+	if err := whereEnabledAutomationRuleTrigger(tx, model.AutomationTriggerTaskAssigneeChanged).Order("id asc").Find(&rules).Error; err != nil {
 		return sideEffects, err
 	}
 
@@ -1516,7 +1525,7 @@ func (h *Handler) RunAutomationRule(c *gin.Context) {
 
 func (h *Handler) RunEnabledAutomationRules(now time.Time, source string) (int, error) {
 	var rules []model.AutomationRule
-	if err := h.DB.Where("is_enabled = ? AND trigger = ?", true, model.AutomationTriggerTaskOverdue).Find(&rules).Error; err != nil {
+	if err := whereEnabledAutomationRuleTrigger(h.DB, model.AutomationTriggerTaskOverdue).Find(&rules).Error; err != nil {
 		return 0, err
 	}
 	var firstErr error

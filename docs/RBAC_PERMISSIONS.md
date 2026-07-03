@@ -11,7 +11,21 @@
   - `update`：编辑/变更
   - `delete`：删除
 
-## 2. 当前权限总览
+## 2. 菜单与功能分类
+
+菜单按业务功能分组，前端页面路径、API 分类前缀与权限模块保持一致。旧页面路径和旧 API 路径仍保留兼容，但新功能应优先接入分类后的路径。
+
+| 主菜单 | 子菜单 | 前端路径 | API 分类前缀 | 权限模块 |
+|---|---|---|---|---|
+| 工作台 | 个人工作、站内通知 | `/workbench/*` | `/workbench/*` | `tasks.*` `notifications.*` |
+| 项目管理 | 项目列表、模板管理、甘特模块、基线关键路径、风险问题决策 | `/portfolio/*` | `/portfolio/*` | `projects.*` `templates.*` `baselines.*` `registers.*` `finance.*` |
+| 执行协作 | 任务列表、迭代管理、我的日程、请求入口 | `/delivery/*` | `/delivery/*` | `tasks.*` `comments.*` `sprints.*` `requests.*` |
+| 洞察分析 | 统计分析、报表中心、AI 助理 | `/insights/*` | `/insights/*` | `stats.read` `reports.*` `ai.read` |
+| 集成自动化 | 自动化规则、Webhook 订阅、外部门户 | `/integrations/*` | `/integrations/*` | `automations.*` `webhooks.*` `portal.*` |
+| 基础配置 | 标签管理 | `/settings/tags` | `/settings/tags` | `tags.*` |
+| 系统管理 | RBAC 权限、用户管理、部门管理、审计日志、API Token | `/system/*` | `/system/*` | `system.*` |
+
+## 3. 当前权限总览
 
 | 权限码 | 说明 |
 |---|---|
@@ -89,7 +103,9 @@
 | `system.audit.read` | 查看审计日志 |
 | `uploads.create` | 上传附件 |
 
-## 3. 接口权限映射（后端已生效）
+## 4. 接口权限映射（后端已生效）
+
+分类 API 别名与旧路由复用相同权限和处理逻辑；例如 `/portfolio/projects` 等价于 `/projects`，`/delivery/tasks` 等价于 `/tasks`，`/integrations/webhooks` 等价于 `/webhooks`。
 
 | 接口 | 权限 |
 |---|---|
@@ -173,22 +189,22 @@
 | `PATCH /notifications/:id/read` `PATCH /notifications/read-all` | `notifications.update` |
 | `GET /system/audit/logs` | `system.audit.read` |
 
-## 4. 初始化与升级策略
+## 5. 初始化与升级策略
 
 - `seed` 初始化时会自动创建/更新以上权限目录。
-- 管理员角色 `admin` 每次初始化都会被覆盖为“拥有全部权限”。
+- 管理员角色 `admin` 每次初始化都会被覆盖为“拥有全部权限”，默认 `admin` 用户会绑定该角色，因此初始化后必须具备整个系统的所有权限。
 - 旧权限会自动迁移后清理：
   - `*.write` => 对应模块的 `create/read/update/delete`
   - `rbac.manage` => `system.rbac.create/read/update/delete`
   - `rbac.*`、`users.*`、`departments.*`、`api_tokens.*`、`audit.read` => 对应 `system.*` 权限
   - `notifications.write` => `notifications.read/update`
 
-## 5. 默认角色策略
+## 6. 默认角色策略
 
 - `admin`：全量权限（自动同步）。
 - `member`：默认具备 `notifications.read` + `notifications.update` + `requests.create` + `requests.read`，其余按业务分配。
 
-## 6. 新功能接入规范
+## 7. 新功能接入规范
 
 1. 在 `backend/internal/seed/seed.go` 维护新权限码。
 2. 在 `backend/internal/router/router.go` 为每个接口绑定对应 CRUD 权限。

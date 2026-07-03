@@ -254,6 +254,177 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		{
 			audit.GET("/logs", middleware.RequirePermission(h.DB, "system.audit.read"), h.ListAuditLogs)
 		}
+
+		workbench := authGroup.Group("/workbench")
+		{
+			workbench.GET("/tasks/me", middleware.RequirePermission(h.DB, "tasks.read"), h.MyTasks)
+			workbench.GET("/notifications", middleware.RequirePermission(h.DB, "notifications.read"), h.ListNotifications)
+			workbench.GET("/notifications/unread-count", middleware.RequirePermission(h.DB, "notifications.read"), h.UnreadNotificationCount)
+			workbench.PATCH("/notifications/:id/read", middleware.RequirePermission(h.DB, "notifications.update"), h.MarkNotificationRead)
+			workbench.PATCH("/notifications/read-all", middleware.RequirePermission(h.DB, "notifications.update"), h.MarkAllNotificationsRead)
+			workbench.GET("/calendar", middleware.RequirePermission(h.DB, "tasks.read"), h.TaskCalendar)
+			workbench.GET("/calendar.ics", middleware.RequirePermission(h.DB, "tasks.read"), h.ExportTaskCalendarICS)
+		}
+
+		portfolio := authGroup.Group("/portfolio")
+		{
+			portfolioProjects := portfolio.Group("/projects")
+			{
+				portfolioProjects.GET("", middleware.RequirePermission(h.DB, "projects.read"), h.ListProjects)
+				portfolioProjects.GET("/export", middleware.RequirePermission(h.DB, "projects.read"), h.ExportProjectsCSV)
+				portfolioProjects.GET("/editor-options", middleware.RequirePermission(h.DB, "projects.read"), h.ProjectEditorOptions)
+				portfolioProjects.GET("/gantt-portfolio", middleware.RequirePermission(h.DB, "projects.read"), h.GanttPortfolio)
+				portfolioProjects.POST("", middleware.RequirePermission(h.DB, "projects.create"), h.CreateProject)
+				portfolioProjects.PUT("/:id", middleware.RequirePermission(h.DB, "projects.update"), h.UpdateProject)
+				portfolioProjects.DELETE("/:id", middleware.RequirePermission(h.DB, "projects.delete"), h.DeleteProject)
+				portfolioProjects.GET("/:id/gantt", middleware.RequirePermission(h.DB, "projects.read"), h.Gantt)
+				portfolioProjects.POST("/:id/gantt/auto-resolve", middleware.RequirePermission(h.DB, "projects.update"), h.AutoResolveProjectDependencies)
+				portfolioProjects.GET("/:id/task-tree", middleware.RequirePermission(h.DB, "projects.read"), h.TaskTree)
+				portfolioProjects.GET("/:id/critical-path", middleware.RequirePermission(h.DB, "baselines.read"), h.ProjectCriticalPath)
+				portfolioProjects.GET("/:id", middleware.RequirePermission(h.DB, "projects.read"), h.ProjectDetail)
+			}
+
+			portfolioTemplates := portfolio.Group("/templates")
+			{
+				portfolioTemplates.GET("", middleware.RequirePermission(h.DB, "templates.read"), h.ListProjectTemplates)
+				portfolioTemplates.POST("", middleware.RequirePermission(h.DB, "templates.create"), h.CreateProjectTemplate)
+				portfolioTemplates.PUT("/:id", middleware.RequirePermission(h.DB, "templates.update"), h.UpdateProjectTemplate)
+				portfolioTemplates.DELETE("/:id", middleware.RequirePermission(h.DB, "templates.delete"), h.DeleteProjectTemplate)
+				portfolioTemplates.POST("/:id/create-project", middleware.RequirePermission(h.DB, "projects.create"), h.CreateProjectFromTemplate)
+			}
+
+			portfolioBaselines := portfolio.Group("/baselines")
+			{
+				portfolioBaselines.GET("", middleware.RequirePermission(h.DB, "baselines.read"), h.ListProjectBaselines)
+				portfolioBaselines.POST("", middleware.RequirePermission(h.DB, "baselines.create"), h.CreateProjectBaseline)
+				portfolioBaselines.GET("/:id", middleware.RequirePermission(h.DB, "baselines.read"), h.ProjectBaselineDetail)
+				portfolioBaselines.DELETE("/:id", middleware.RequirePermission(h.DB, "baselines.delete"), h.DeleteProjectBaseline)
+			}
+
+			portfolioRegisters := portfolio.Group("/registers")
+			{
+				portfolioRegisters.GET("", middleware.RequirePermission(h.DB, "registers.read"), h.ListProjectRegisters)
+				portfolioRegisters.POST("", middleware.RequirePermission(h.DB, "registers.create"), h.CreateProjectRegister)
+				portfolioRegisters.GET("/:id", middleware.RequirePermission(h.DB, "registers.read"), h.ProjectRegisterDetail)
+				portfolioRegisters.PUT("/:id", middleware.RequirePermission(h.DB, "registers.update"), h.UpdateProjectRegister)
+				portfolioRegisters.DELETE("/:id", middleware.RequirePermission(h.DB, "registers.delete"), h.DeleteProjectRegister)
+				portfolioRegisters.GET("/:id/activities", middleware.RequirePermission(h.DB, "registers.read"), h.ListProjectRegisterActivities)
+			}
+		}
+
+		delivery := authGroup.Group("/delivery")
+		{
+			deliveryTasks := delivery.Group("/tasks")
+			{
+				deliveryTasks.GET("", middleware.RequirePermission(h.DB, "tasks.read"), h.ListTasks)
+				deliveryTasks.GET("/export", middleware.RequirePermission(h.DB, "tasks.read"), h.ExportTasksCSV)
+				deliveryTasks.GET("/assignee-options", middleware.RequirePermission(h.DB, "tasks.read"), h.TaskAssigneeOptions)
+				deliveryTasks.GET("/calendar", middleware.RequirePermission(h.DB, "tasks.read"), h.TaskCalendar)
+				deliveryTasks.GET("/calendar.ics", middleware.RequirePermission(h.DB, "tasks.read"), h.ExportTaskCalendarICS)
+				deliveryTasks.POST("", middleware.RequirePermission(h.DB, "tasks.create"), h.CreateTask)
+				deliveryTasks.GET("/:id/comments", middleware.RequirePermission(h.DB, "comments.read"), h.ListTaskComments)
+				deliveryTasks.POST("/:id/comments", middleware.RequirePermission(h.DB, "comments.create"), h.CreateTaskComment)
+				deliveryTasks.DELETE("/:id/comments/:commentId", middleware.RequirePermission(h.DB, "comments.delete"), h.DeleteTaskComment)
+				deliveryTasks.GET("/:id/activities", middleware.RequirePermission(h.DB, "comments.read"), h.ListTaskActivities)
+				deliveryTasks.PATCH("/:id/progress", middleware.RequirePermission(h.DB, "tasks.read"), h.UpdateTaskProgress)
+				deliveryTasks.PATCH("/:id/status", middleware.RequirePermission(h.DB, "tasks.read"), h.UpdateTaskStatus)
+				deliveryTasks.PATCH("/:id/complete", middleware.RequirePermission(h.DB, "tasks.read"), h.CompleteTask)
+				deliveryTasks.PUT("/:id", middleware.RequirePermission(h.DB, "tasks.update"), h.UpdateTask)
+				deliveryTasks.PUT("/:id/dependencies", middleware.RequirePermission(h.DB, "tasks.update"), h.UpdateTaskDependencies)
+				deliveryTasks.PATCH("/:id/schedule", middleware.RequirePermission(h.DB, "tasks.update"), h.UpdateTaskSchedule)
+				deliveryTasks.DELETE("/:id", middleware.RequirePermission(h.DB, "tasks.delete"), h.DeleteTask)
+				deliveryTasks.GET("/progress-list", middleware.RequirePermission(h.DB, "tasks.read"), h.ProgressList)
+				deliveryTasks.GET("/me", middleware.RequirePermission(h.DB, "tasks.read"), h.MyTasks)
+			}
+
+			deliveryRequests := delivery.Group("/requests")
+			{
+				deliveryRequests.GET("", middleware.RequirePermission(h.DB, "requests.read"), h.ListWorkRequests)
+				deliveryRequests.POST("", middleware.RequirePermission(h.DB, "requests.create"), h.CreateWorkRequest)
+				deliveryRequests.PATCH("/:id/review", middleware.RequirePermission(h.DB, "requests.update"), h.ReviewWorkRequest)
+				deliveryRequests.POST("/:id/apply-change", middleware.RequirePermission(h.DB, "requests.update"), h.ApplyWorkRequestChange)
+				deliveryRequests.POST("/:id/convert-task", middleware.RequirePermission(h.DB, "requests.update"), h.ConvertWorkRequestToTask)
+			}
+
+			deliverySprints := delivery.Group("/sprints")
+			{
+				deliverySprints.GET("", middleware.RequirePermission(h.DB, "sprints.read"), h.ListSprints)
+				deliverySprints.POST("", middleware.RequirePermission(h.DB, "sprints.create"), h.CreateSprint)
+				deliverySprints.GET("/:id", middleware.RequirePermission(h.DB, "sprints.read"), h.SprintDetail)
+				deliverySprints.PUT("/:id", middleware.RequirePermission(h.DB, "sprints.update"), h.UpdateSprint)
+				deliverySprints.DELETE("/:id", middleware.RequirePermission(h.DB, "sprints.delete"), h.DeleteSprint)
+				deliverySprints.POST("/:id/tasks", middleware.RequirePermission(h.DB, "sprints.update"), h.AddSprintTasks)
+				deliverySprints.DELETE("/:id/tasks/:taskId", middleware.RequirePermission(h.DB, "sprints.update"), h.RemoveSprintTask)
+			}
+		}
+
+		insights := authGroup.Group("/insights")
+		{
+			insights.GET("/stats/dashboard", middleware.RequirePermission(h.DB, "stats.read"), h.DashboardStats)
+			insights.GET("/stats/project-health", middleware.RequirePermission(h.DB, "stats.read"), h.ProjectHealth)
+			insights.GET("/stats/member-workload", middleware.RequirePermission(h.DB, "stats.read"), h.MemberWorkload)
+
+			insightReports := insights.Group("/reports")
+			{
+				insightReports.GET("", middleware.RequirePermission(h.DB, "reports.read"), h.ListSavedReports)
+				insightReports.POST("", middleware.RequirePermission(h.DB, "reports.create"), h.CreateSavedReport)
+				insightReports.GET("/:id", middleware.RequirePermission(h.DB, "reports.read"), h.SavedReportDetail)
+				insightReports.PUT("/:id", middleware.RequirePermission(h.DB, "reports.update"), h.UpdateSavedReport)
+				insightReports.DELETE("/:id", middleware.RequirePermission(h.DB, "reports.delete"), h.DeleteSavedReport)
+			}
+
+			insightAI := insights.Group("/ai")
+			{
+				insightAI.POST("/project-weekly-report", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectWeeklyReport)
+				insightAI.POST("/project-risk-summary", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRiskSummary)
+				insightAI.POST("/task-breakdown", middleware.RequirePermission(h.DB, "ai.read"), h.AITaskBreakdown)
+			}
+		}
+
+		integrations := authGroup.Group("/integrations")
+		{
+			integrationWebhooks := integrations.Group("/webhooks")
+			{
+				integrationWebhooks.GET("", middleware.RequirePermission(h.DB, "webhooks.read"), h.ListWebhookSubscriptions)
+				integrationWebhooks.POST("", middleware.RequirePermission(h.DB, "webhooks.create"), h.CreateWebhookSubscription)
+				integrationWebhooks.GET("/deliveries", middleware.RequirePermission(h.DB, "webhooks.read"), h.ListWebhookDeliveries)
+				integrationWebhooks.POST("/deliveries/:id/retry", middleware.RequirePermission(h.DB, "webhooks.update"), h.RetryWebhookDelivery)
+				integrationWebhooks.GET("/:id", middleware.RequirePermission(h.DB, "webhooks.read"), h.WebhookSubscriptionDetail)
+				integrationWebhooks.PUT("/:id", middleware.RequirePermission(h.DB, "webhooks.update"), h.UpdateWebhookSubscription)
+				integrationWebhooks.DELETE("/:id", middleware.RequirePermission(h.DB, "webhooks.delete"), h.DeleteWebhookSubscription)
+			}
+
+			integrationPortalInvites := integrations.Group("/portal-invites")
+			{
+				integrationPortalInvites.GET("", middleware.RequirePermission(h.DB, "portal.read"), h.ListPortalInvites)
+				integrationPortalInvites.POST("", middleware.RequirePermission(h.DB, "portal.create"), h.CreatePortalInvite)
+				integrationPortalInvites.PUT("/:id", middleware.RequirePermission(h.DB, "portal.update"), h.UpdatePortalInvite)
+				integrationPortalInvites.PATCH("/:id/revoke", middleware.RequirePermission(h.DB, "portal.update"), h.RevokePortalInvite)
+				integrationPortalInvites.DELETE("/:id", middleware.RequirePermission(h.DB, "portal.delete"), h.DeletePortalInvite)
+			}
+
+			integrationAutomations := integrations.Group("/automation-rules")
+			{
+				integrationAutomations.GET("", middleware.RequirePermission(h.DB, "automations.read"), h.ListAutomationRules)
+				integrationAutomations.POST("", middleware.RequirePermission(h.DB, "automations.create"), h.CreateAutomationRule)
+				integrationAutomations.GET("/logs", middleware.RequirePermission(h.DB, "automations.read"), h.ListAutomationExecutionLogs)
+				integrationAutomations.PUT("/:id", middleware.RequirePermission(h.DB, "automations.update"), h.UpdateAutomationRule)
+				integrationAutomations.DELETE("/:id", middleware.RequirePermission(h.DB, "automations.delete"), h.DeleteAutomationRule)
+				integrationAutomations.POST("/:id/run", middleware.RequirePermission(h.DB, "automations.update"), h.RunAutomationRule)
+			}
+		}
+
+		settings := authGroup.Group("/settings")
+		{
+			settingsTags := settings.Group("/tags")
+			{
+				settingsTags.GET("", middleware.RequirePermission(h.DB, "tags.read"), h.ListTags)
+				settingsTags.GET("/:id", middleware.RequirePermission(h.DB, "tags.read"), h.GetTag)
+				settingsTags.POST("", middleware.RequirePermission(h.DB, "tags.create"), h.CreateTag)
+				settingsTags.PUT("/:id", middleware.RequirePermission(h.DB, "tags.update"), h.UpdateTag)
+				settingsTags.DELETE("/:id", middleware.RequirePermission(h.DB, "tags.delete"), h.DeleteTag)
+			}
+		}
 	}
 
 	return r

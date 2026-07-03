@@ -47,30 +47,35 @@ function Guard({ children }: { children: ReactElement }) {
   return token ? children : <Navigate to="/login" replace />
 }
 
+function LegacyRedirect({ to }: { to: string }) {
+  const location = useLocation()
+  return <Navigate to={`${to}${location.search}${location.hash}`} replace />
+}
+
 const protectedRoutes = [
-  { path: '/', permission: 'stats.read' },
+  { path: '/insights/dashboard', permission: 'stats.read' },
+  { path: '/workbench/me', permission: 'tasks.read' },
+  { path: '/workbench/notifications', permission: 'notifications.read' },
+  { path: '/portfolio/projects', permission: 'projects.read' },
+  { path: '/portfolio/templates', permission: 'templates.read' },
+  { path: '/portfolio/gantt', permission: 'projects.read' },
+  { path: '/portfolio/baselines', permission: 'baselines.read' },
+  { path: '/portfolio/registers', permission: 'registers.read' },
+  { path: '/delivery/tasks', permission: 'tasks.read' },
+  { path: '/delivery/sprints', permission: 'sprints.read' },
+  { path: '/delivery/calendar', permission: 'tasks.read' },
+  { path: '/delivery/requests', permission: 'requests.read' },
+  { path: '/insights/reports', permission: 'reports.read' },
+  { path: '/insights/assistant', permission: 'ai.read' },
+  { path: '/integrations/automations', permission: 'automations.read' },
+  { path: '/integrations/webhooks', permission: 'webhooks.read' },
+  { path: '/integrations/portals', permission: 'portal.read' },
+  { path: '/settings/tags', permission: 'tags.read' },
   { path: '/system/rbac', permission: 'system.rbac.read' },
   { path: '/system/users', permission: 'system.users.read' },
   { path: '/system/departments', permission: 'system.departments.read' },
   { path: '/system/audit', permission: 'system.audit.read' },
-  { path: '/system/api-tokens', permission: 'system.api_tokens.read' },
-  { path: '/tags', permission: 'tags.read' },
-  { path: '/projects', permission: 'projects.read' },
-  { path: '/project-templates', permission: 'templates.read' },
-  { path: '/gantt', permission: 'projects.read' },
-  { path: '/project-baselines', permission: 'baselines.read' },
-  { path: '/registers', permission: 'registers.read' },
-  { path: '/tasks', permission: 'tasks.read' },
-  { path: '/sprints', permission: 'sprints.read' },
-  { path: '/calendar', permission: 'tasks.read' },
-  { path: '/reports', permission: 'reports.read' },
-  { path: '/requests', permission: 'requests.read' },
-  { path: '/automation-rules', permission: 'automations.read' },
-  { path: '/webhooks', permission: 'webhooks.read' },
-  { path: '/portals', permission: 'portal.read' },
-  { path: '/assistant', permission: 'ai.read' },
-  { path: '/notifications', permission: 'notifications.read' },
-  { path: '/me', permission: 'tasks.read' }
+  { path: '/system/api-tokens', permission: 'system.api_tokens.read' }
 ]
 
 function PermissionGuard({ permission, children }: { permission: string; children: ReactElement }) {
@@ -153,34 +158,52 @@ export default function App() {
             </Guard>
           }
         >
-          <Route index element={<PermissionGuard permission="stats.read"><DashboardPage /></PermissionGuard>} />
-          <Route path="rbac" element={<Navigate to="/system/rbac" replace />} />
-          <Route path="users" element={<Navigate to="/system/users" replace />} />
-          <Route path="departments" element={<Navigate to="/system/departments" replace />} />
-          <Route path="api-tokens" element={<Navigate to="/system/api-tokens" replace />} />
-          <Route path="audit" element={<Navigate to="/system/audit" replace />} />
+          <Route index element={<Navigate to="/insights/dashboard" replace />} />
+          <Route path="workbench/me" element={<PermissionGuard permission="tasks.read"><MyWorkPage /></PermissionGuard>} />
+          <Route path="workbench/notifications" element={<PermissionGuard permission="notifications.read"><NotificationsPage /></PermissionGuard>} />
+          <Route path="portfolio/projects" element={<PermissionGuard permission="projects.read"><ProjectsPage /></PermissionGuard>} />
+          <Route path="portfolio/templates" element={<PermissionGuard permission="templates.read"><ProjectTemplatesPage /></PermissionGuard>} />
+          <Route path="portfolio/gantt" element={<PermissionGuard permission="projects.read"><GanttPage /></PermissionGuard>} />
+          <Route path="portfolio/baselines" element={<PermissionGuard permission="baselines.read"><ProjectBaselinesPage /></PermissionGuard>} />
+          <Route path="portfolio/registers" element={<PermissionGuard permission="registers.read"><ProjectRegistersPage /></PermissionGuard>} />
+          <Route path="delivery/tasks" element={<PermissionGuard permission="tasks.read"><TasksPage /></PermissionGuard>} />
+          <Route path="delivery/sprints" element={<PermissionGuard permission="sprints.read"><SprintsPage /></PermissionGuard>} />
+          <Route path="delivery/calendar" element={<PermissionGuard permission="tasks.read"><CalendarPage /></PermissionGuard>} />
+          <Route path="delivery/requests" element={<PermissionGuard permission="requests.read"><RequestsPage /></PermissionGuard>} />
+          <Route path="insights/dashboard" element={<PermissionGuard permission="stats.read"><DashboardPage /></PermissionGuard>} />
+          <Route path="insights/reports" element={<PermissionGuard permission="reports.read"><ReportsPage /></PermissionGuard>} />
+          <Route path="insights/assistant" element={<PermissionGuard permission="ai.read"><AssistantPage /></PermissionGuard>} />
+          <Route path="integrations/automations" element={<PermissionGuard permission="automations.read"><AutomationRulesPage /></PermissionGuard>} />
+          <Route path="integrations/webhooks" element={<PermissionGuard permission="webhooks.read"><WebhooksPage /></PermissionGuard>} />
+          <Route path="integrations/portals" element={<PermissionGuard permission="portal.read"><PortalAdminPage /></PermissionGuard>} />
+          <Route path="settings/tags" element={<PermissionGuard permission="tags.read"><TagsPage /></PermissionGuard>} />
+          <Route path="rbac" element={<LegacyRedirect to="/system/rbac" />} />
+          <Route path="users" element={<LegacyRedirect to="/system/users" />} />
+          <Route path="departments" element={<LegacyRedirect to="/system/departments" />} />
+          <Route path="api-tokens" element={<LegacyRedirect to="/system/api-tokens" />} />
+          <Route path="audit" element={<LegacyRedirect to="/system/audit" />} />
+          <Route path="tags" element={<LegacyRedirect to="/settings/tags" />} />
+          <Route path="projects" element={<LegacyRedirect to="/portfolio/projects" />} />
+          <Route path="project-templates" element={<LegacyRedirect to="/portfolio/templates" />} />
+          <Route path="gantt" element={<LegacyRedirect to="/portfolio/gantt" />} />
+          <Route path="project-baselines" element={<LegacyRedirect to="/portfolio/baselines" />} />
+          <Route path="registers" element={<LegacyRedirect to="/portfolio/registers" />} />
+          <Route path="tasks" element={<LegacyRedirect to="/delivery/tasks" />} />
+          <Route path="sprints" element={<LegacyRedirect to="/delivery/sprints" />} />
+          <Route path="calendar" element={<LegacyRedirect to="/delivery/calendar" />} />
+          <Route path="requests" element={<LegacyRedirect to="/delivery/requests" />} />
+          <Route path="reports" element={<LegacyRedirect to="/insights/reports" />} />
+          <Route path="automation-rules" element={<LegacyRedirect to="/integrations/automations" />} />
+          <Route path="webhooks" element={<LegacyRedirect to="/integrations/webhooks" />} />
+          <Route path="portals" element={<LegacyRedirect to="/integrations/portals" />} />
+          <Route path="assistant" element={<LegacyRedirect to="/insights/assistant" />} />
+          <Route path="notifications" element={<LegacyRedirect to="/workbench/notifications" />} />
+          <Route path="me" element={<LegacyRedirect to="/workbench/me" />} />
           <Route path="system/rbac" element={<PermissionGuard permission="system.rbac.read"><RbacPage /></PermissionGuard>} />
           <Route path="system/users" element={<PermissionGuard permission="system.users.read"><UsersPage /></PermissionGuard>} />
           <Route path="system/departments" element={<PermissionGuard permission="system.departments.read"><DepartmentsPage /></PermissionGuard>} />
           <Route path="system/api-tokens" element={<PermissionGuard permission="system.api_tokens.read"><ApiTokensPage /></PermissionGuard>} />
           <Route path="system/audit" element={<PermissionGuard permission="system.audit.read"><AuditPage /></PermissionGuard>} />
-          <Route path="tags" element={<PermissionGuard permission="tags.read"><TagsPage /></PermissionGuard>} />
-          <Route path="projects" element={<PermissionGuard permission="projects.read"><ProjectsPage /></PermissionGuard>} />
-          <Route path="project-templates" element={<PermissionGuard permission="templates.read"><ProjectTemplatesPage /></PermissionGuard>} />
-          <Route path="gantt" element={<PermissionGuard permission="projects.read"><GanttPage /></PermissionGuard>} />
-          <Route path="project-baselines" element={<PermissionGuard permission="baselines.read"><ProjectBaselinesPage /></PermissionGuard>} />
-          <Route path="registers" element={<PermissionGuard permission="registers.read"><ProjectRegistersPage /></PermissionGuard>} />
-          <Route path="tasks" element={<PermissionGuard permission="tasks.read"><TasksPage /></PermissionGuard>} />
-          <Route path="sprints" element={<PermissionGuard permission="sprints.read"><SprintsPage /></PermissionGuard>} />
-          <Route path="calendar" element={<PermissionGuard permission="tasks.read"><CalendarPage /></PermissionGuard>} />
-          <Route path="reports" element={<PermissionGuard permission="reports.read"><ReportsPage /></PermissionGuard>} />
-          <Route path="requests" element={<PermissionGuard permission="requests.read"><RequestsPage /></PermissionGuard>} />
-          <Route path="automation-rules" element={<PermissionGuard permission="automations.read"><AutomationRulesPage /></PermissionGuard>} />
-          <Route path="webhooks" element={<PermissionGuard permission="webhooks.read"><WebhooksPage /></PermissionGuard>} />
-          <Route path="portals" element={<PermissionGuard permission="portal.read"><PortalAdminPage /></PermissionGuard>} />
-          <Route path="assistant" element={<PermissionGuard permission="ai.read"><AssistantPage /></PermissionGuard>} />
-          <Route path="notifications" element={<PermissionGuard permission="notifications.read"><NotificationsPage /></PermissionGuard>} />
-          <Route path="me" element={<PermissionGuard permission="tasks.read"><MyWorkPage /></PermissionGuard>} />
         </Route>
       </Routes>
     </Suspense>

@@ -3,6 +3,20 @@
 Base URL: `http://localhost:8080/api/v1`
 统一错误返回: `{ "code": "...", "message": "..." }`
 
+## 功能分类路由
+
+新功能优先使用下表中的分类 API 前缀；旧的扁平路由继续保留兼容，权限码与处理逻辑完全一致。
+
+| 功能分类 | 前端菜单路径 | API 前缀 | 主要权限 |
+|---|---|---|---|
+| 工作台 | `/workbench/me` `/workbench/notifications` | `/workbench/tasks/me` `/workbench/notifications` `/workbench/calendar` | `tasks.*` `notifications.*` |
+| 项目管理 | `/portfolio/projects` `/portfolio/templates` `/portfolio/gantt` `/portfolio/baselines` `/portfolio/registers` | `/portfolio/projects` `/portfolio/templates` `/portfolio/baselines` `/portfolio/registers` | `projects.*` `templates.*` `baselines.*` `registers.*` `finance.*` |
+| 执行协作 | `/delivery/tasks` `/delivery/sprints` `/delivery/calendar` `/delivery/requests` | `/delivery/tasks` `/delivery/sprints` `/delivery/requests` | `tasks.*` `comments.*` `sprints.*` `requests.*` |
+| 洞察分析 | `/insights/dashboard` `/insights/reports` `/insights/assistant` | `/insights/stats` `/insights/reports` `/insights/ai` | `stats.read` `reports.*` `ai.read` |
+| 集成自动化 | `/integrations/automations` `/integrations/webhooks` `/integrations/portals` | `/integrations/automation-rules` `/integrations/webhooks` `/integrations/portal-invites` | `automations.*` `webhooks.*` `portal.*` |
+| 基础配置 | `/settings/tags` | `/settings/tags` | `tags.*` |
+| 系统管理 | `/system/rbac` `/system/users` `/system/departments` `/system/audit` `/system/api-tokens` | `/system/rbac` `/system/users` `/system/departments` `/system/audit` `/system/api-tokens` | `system.*` |
+
 ## 认证
 
 受保护接口统一使用 `Authorization: Bearer <token>`。`token` 可以是登录接口返回的 JWT，也可以是 API Token 模块生成的 `pmt_...` 服务账号 Token。
@@ -18,6 +32,8 @@ Base URL: `http://localhost:8080/api/v1`
 - Header: `Authorization: Bearer <token>`
 
 ## 权限总览（接口级）
+
+分类 API 别名与旧路由复用相同权限。例如 `GET /portfolio/projects` 与 `GET /projects` 都要求 `projects.read`，`GET /delivery/tasks` 与 `GET /tasks` 都要求 `tasks.read`。
 
 | 方法 | 路径 | 权限 |
 |---|---|---|

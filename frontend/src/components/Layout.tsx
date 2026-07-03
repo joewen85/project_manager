@@ -23,6 +23,44 @@ interface MenuGroup {
 
 type MenuEntry = MenuItem | MenuGroup
 
+const notificationPagePath = '/workbench/notifications'
+
+const workbenchMenus: MenuItem[] = [
+  { to: '/workbench/me', label: '个人工作', icon: UserCircle2, permission: 'tasks.read' },
+  { to: notificationPagePath, label: '站内通知', icon: Bell, permission: 'notifications.read' }
+]
+
+const portfolioMenus: MenuItem[] = [
+  { to: '/portfolio/projects', label: '项目列表', icon: FolderKanban, permission: 'projects.read' },
+  { to: '/portfolio/templates', label: '模板管理', icon: FolderKanban, permission: 'templates.read' },
+  { to: '/portfolio/gantt', label: '甘特模块', icon: CalendarRange, permission: 'projects.read' },
+  { to: '/portfolio/baselines', label: '基线关键路径', icon: GitBranch, permission: 'baselines.read' },
+  { to: '/portfolio/registers', label: '风险问题决策', icon: AlertTriangle, permission: 'registers.read' }
+]
+
+const deliveryMenus: MenuItem[] = [
+  { to: '/delivery/tasks', label: '任务列表', icon: ListChecks, permission: 'tasks.read' },
+  { to: '/delivery/sprints', label: '迭代管理', icon: RefreshCcw, permission: 'sprints.read' },
+  { to: '/delivery/calendar', label: '我的日程', icon: CalendarDays, permission: 'tasks.read' },
+  { to: '/delivery/requests', label: '请求入口', icon: ClipboardList, permission: 'requests.read' }
+]
+
+const insightMenus: MenuItem[] = [
+  { to: '/insights/dashboard', label: '项目 Dashboard', icon: BarChart3, permission: 'stats.read' },
+  { to: '/insights/reports', label: '报表中心', icon: BarChart3, permission: 'reports.read' },
+  { to: '/insights/assistant', label: 'AI 助理', icon: Sparkles, permission: 'ai.read' }
+]
+
+const integrationMenus: MenuItem[] = [
+  { to: '/integrations/automations', label: '自动化规则', icon: Workflow, permission: 'automations.read' },
+  { to: '/integrations/webhooks', label: 'Webhook订阅', icon: Webhook, permission: 'webhooks.read' },
+  { to: '/integrations/portals', label: '外部门户', icon: Globe2, permission: 'portal.read' }
+]
+
+const settingsMenus: MenuItem[] = [
+  { to: '/settings/tags', label: '标签管理', icon: Tag, permission: 'tags.read' }
+]
+
 const systemMenus: MenuItem[] = [
   { to: '/system/rbac', label: 'RBAC权限', icon: Shield, permission: 'system.rbac.read' },
   { to: '/system/users', label: '用户管理', icon: Users, permission: 'system.users.read' },
@@ -32,25 +70,13 @@ const systemMenus: MenuItem[] = [
 ]
 
 const menus: MenuEntry[] = [
-  { to: '/', label: '统计分析', icon: BarChart3, permission: 'stats.read' },
-  { label: '系统管理', icon: Settings, children: systemMenus },
-  { to: '/tags', label: '标签管理', icon: Tag, permission: 'tags.read' },
-  { to: '/projects', label: '项目列表', icon: FolderKanban, permission: 'projects.read' },
-  { to: '/project-templates', label: '模板管理', icon: FolderKanban, permission: 'templates.read' },
-  { to: '/gantt', label: '甘特模块', icon: CalendarRange, permission: 'projects.read' },
-  { to: '/project-baselines', label: '基线关键路径', icon: GitBranch, permission: 'baselines.read' },
-  { to: '/registers', label: '风险问题决策', icon: AlertTriangle, permission: 'registers.read' },
-  { to: '/tasks', label: '任务列表', icon: ListChecks, permission: 'tasks.read' },
-  { to: '/sprints', label: '迭代管理', icon: RefreshCcw, permission: 'sprints.read' },
-  { to: '/calendar', label: '我的日程', icon: CalendarDays, permission: 'tasks.read' },
-  { to: '/reports', label: '报表中心', icon: BarChart3, permission: 'reports.read' },
-  { to: '/requests', label: '请求入口', icon: ClipboardList, permission: 'requests.read' },
-  { to: '/automation-rules', label: '自动化规则', icon: Workflow, permission: 'automations.read' },
-  { to: '/assistant', label: 'AI 助理', icon: Sparkles, permission: 'ai.read' },
-  { to: '/webhooks', label: 'Webhook订阅', icon: Webhook, permission: 'webhooks.read' },
-  { to: '/portals', label: '外部门户', icon: Globe2, permission: 'portal.read' },
-  { to: '/notifications', label: '站内通知', icon: Bell, permission: 'notifications.read' },
-  { to: '/me', label: '个人工作', icon: UserCircle2, permission: 'tasks.read' }
+  { label: '洞察分析', icon: BarChart3, children: insightMenus },
+  { label: '工作台', icon: UserCircle2, children: workbenchMenus },
+  { label: '项目管理', icon: FolderKanban, children: portfolioMenus },
+  { label: '执行协作', icon: ListChecks, children: deliveryMenus },
+  { label: '集成自动化', icon: Workflow, children: integrationMenus },
+  { label: '基础配置', icon: Settings, children: settingsMenus },
+  { label: '系统管理', icon: Settings, children: systemMenus }
 ]
 
 const isMenuGroup = (entry: MenuEntry): entry is MenuGroup => 'children' in entry
@@ -218,7 +244,7 @@ export function Layout() {
       return
     }
     try {
-      const countData = await fetchData<UnreadCountResponse>('/notifications/unread-count', undefined, { silent: true })
+      const countData = await fetchData<UnreadCountResponse>('/workbench/notifications/unread-count', undefined, { silent: true })
       setUnreadCount(Number(countData?.count || 0))
       markNotificationApiRecovered('unread')
     } catch (error) {
@@ -237,7 +263,7 @@ export function Layout() {
       return
     }
     try {
-      const listPage = await fetchPage<Notification>('/notifications', { page: 1, pageSize: 5 }, { page: 1, pageSize: 5 }, { silent: true })
+      const listPage = await fetchPage<Notification>('/workbench/notifications', { page: 1, pageSize: 5 }, { page: 1, pageSize: 5 }, { silent: true })
       setLatestNotifications(listPage.list)
       markNotificationApiRecovered('list')
       setNotificationsApiReady(true)
@@ -296,7 +322,7 @@ export function Layout() {
     const handler = () => {
       const currentPermissions = permissionsRef.current
       void refreshUnreadCount(currentPermissions)
-      if (notificationMenuOpen || location.pathname.startsWith('/notifications')) {
+      if (notificationMenuOpen || location.pathname.startsWith(notificationPagePath)) {
         if (!isNotificationsListApiEnabled()) return
         void refreshLatestNotifications(currentPermissions)
       }
@@ -307,7 +333,7 @@ export function Layout() {
 
   useEffect(() => {
     if (!isNotificationsListApiEnabled()) return
-    if (location.pathname.startsWith('/notifications')) {
+    if (location.pathname.startsWith(notificationPagePath)) {
       void refreshUnreadCount(permissions)
       void refreshLatestNotifications(permissions)
     }
@@ -323,7 +349,7 @@ export function Layout() {
 
   const markNotificationRead = async (id: number) => {
     if (!canUpdateNotifications) return
-    await api.patch(`/notifications/${id}/read`)
+    await api.patch(`/workbench/notifications/${id}/read`)
     await refreshUnreadCount(permissions)
     await refreshLatestNotifications(permissions)
     window.dispatchEvent(new Event('notifications:changed'))
@@ -334,26 +360,26 @@ export function Layout() {
       await markNotificationRead(item.id)
     }
     if (item.module === 'tasks' && item.targetId) {
-      navigate(`/tasks?taskId=${item.targetId}&view=1`)
+      navigate(`/delivery/tasks?taskId=${item.targetId}&view=1`)
       setNotificationMenuOpen(false)
       return
     }
     if (item.module === 'projects' && item.targetId) {
-      navigate(`/projects?projectId=${item.targetId}`)
+      navigate(`/portfolio/projects?projectId=${item.targetId}`)
       setNotificationMenuOpen(false)
       return
     }
     if (item.module === 'project_registers' && item.targetId) {
-      navigate(`/registers?registerId=${item.targetId}`)
+      navigate(`/portfolio/registers?registerId=${item.targetId}`)
       setNotificationMenuOpen(false)
       return
     }
     if (item.module === 'requests' && item.targetId) {
-      navigate('/requests')
+      navigate('/delivery/requests')
       setNotificationMenuOpen(false)
       return
     }
-    navigate('/notifications')
+    navigate(notificationPagePath)
     setNotificationMenuOpen(false)
   }
 
@@ -490,7 +516,25 @@ export function Layout() {
 
   const initials = (profile.name || profile.username || 'U').slice(0, 2).toUpperCase()
   const titleEntries: Array<[string, string]> = [
-    ['/', '统计分析'],
+    ['/', '项目 Dashboard'],
+    ['/workbench/me', '个人工作'],
+    ['/workbench/notifications', '站内通知'],
+    ['/portfolio/projects', '项目列表'],
+    ['/portfolio/templates', '模板管理'],
+    ['/portfolio/baselines', '基线关键路径'],
+    ['/portfolio/registers', '风险问题决策'],
+    ['/portfolio/gantt', '甘特图模块'],
+    ['/delivery/tasks', '任务列表'],
+    ['/delivery/sprints', '迭代管理'],
+    ['/delivery/calendar', '我的日程'],
+    ['/delivery/requests', '请求入口'],
+    ['/insights/dashboard', '项目 Dashboard'],
+    ['/insights/reports', '报表中心'],
+    ['/insights/assistant', 'AI 助理'],
+    ['/integrations/automations', '自动化规则'],
+    ['/integrations/webhooks', 'Webhook订阅'],
+    ['/integrations/portals', '外部门户'],
+    ['/settings/tags', '标签管理'],
     ['/system/rbac', 'RBAC 权限管理'],
     ['/system/users', '用户管理'],
     ['/system/departments', '部门管理'],
@@ -558,6 +602,7 @@ export function Layout() {
                     <div className="nav-submenu" role="group" aria-label={menu.label}>
                       {menu.children.map((child) => {
                         const ChildIcon = child.icon
+                        const isNotificationChild = child.to === notificationPagePath
                         return (
                           <NavLink
                             className={({ isActive: childActive }) => `nav-item nav-subitem${childActive ? ' active' : ''}`}
@@ -569,6 +614,7 @@ export function Layout() {
                           >
                             <ChildIcon size={16} />
                             <span>{child.label}</span>
+                            {isNotificationChild && unreadCount > 0 && <em className="nav-badge">{unreadCount > 99 ? '99+' : unreadCount}</em>}
                           </NavLink>
                         )
                       })}
@@ -578,7 +624,7 @@ export function Layout() {
               )
             }
             const Icon = menu.icon
-            const isNotification = menu.to === '/notifications'
+            const isNotification = menu.to === notificationPagePath
             return (
               <NavLink
                 className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
@@ -659,7 +705,7 @@ export function Layout() {
                         {!item.isRead && canUpdateNotifications && <button className="btn secondary" role="menuitem" tabIndex={0} onClick={() => { void markNotificationRead(item.id) }}>已读</button>}
                       </div>
                     ))}
-                    <NavLink to="/notifications" role="menuitem" tabIndex={0} className="notify-more" onClick={() => setNotificationMenuOpen(false)}>
+                    <NavLink to={notificationPagePath} role="menuitem" tabIndex={0} className="notify-more" onClick={() => setNotificationMenuOpen(false)}>
                       查看全部通知
                     </NavLink>
                   </div>

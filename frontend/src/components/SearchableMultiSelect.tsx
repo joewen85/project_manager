@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronDown, X } from 'lucide-react'
 import { SearchField } from './SearchField'
 
@@ -17,6 +17,7 @@ interface SearchableMultiSelectProps {
   noResultsText?: string
   summaryNoun?: string
   className?: string
+  onSearchChange?: (query: string) => void
 }
 
 export function SearchableMultiSelect({
@@ -27,7 +28,8 @@ export function SearchableMultiSelect({
   placeholder = '搜索',
   noResultsText = '没有匹配项',
   summaryNoun = '项',
-  className = ''
+  className = '',
+  onSearchChange
 }: SearchableMultiSelectProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -60,19 +62,24 @@ export function SearchableMultiSelect({
     return [...selected, ...unselected]
   }, [filteredOptions, query, selectedSet])
 
+  const updateQuery = useCallback((nextQuery: string) => {
+    setQuery(nextQuery)
+    onSearchChange?.(nextQuery)
+  }, [onSearchChange])
+
   useEffect(() => {
     if (!open) return
     const handleOutside = (event: MouseEvent) => {
       const target = event.target as Node
       if (!wrapRef.current?.contains(target)) {
         setOpen(false)
-        setQuery('')
+        updateQuery('')
       }
     }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setOpen(false)
-        setQuery('')
+        updateQuery('')
       }
     }
     document.addEventListener('mousedown', handleOutside)
@@ -81,7 +88,7 @@ export function SearchableMultiSelect({
       document.removeEventListener('mousedown', handleOutside)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [open])
+  }, [open, updateQuery])
 
   useEffect(() => {
     if (!open) return
@@ -111,7 +118,7 @@ export function SearchableMultiSelect({
         aria-controls={listId}
         onClick={() => {
           setOpen((prev) => !prev)
-          if (open) setQuery('')
+          if (open) updateQuery('')
         }}
       >
         <span className="searchable-multi-select-summary">{summaryLabel}</span>
@@ -146,7 +153,7 @@ export function SearchableMultiSelect({
               aria-label={`${ariaLabel}搜索`}
               value={query}
               placeholder={placeholder}
-              onChange={setQuery}
+              onChange={updateQuery}
             />
           </div>
           <div className="searchable-multi-select-actions">

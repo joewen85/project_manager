@@ -107,6 +107,144 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postUploads
+  /workbench/tasks/me:
+    $ref: '#/paths/~1tasks~1me'
+  /workbench/notifications:
+    $ref: '#/paths/~1notifications'
+  /workbench/notifications/unread-count:
+    $ref: '#/paths/~1notifications~1unread-count'
+  /workbench/notifications/{id}/read:
+    $ref: '#/paths/~1notifications~1{id}~1read'
+  /workbench/notifications/read-all:
+    $ref: '#/paths/~1notifications~1read-all'
+  /workbench/calendar:
+    $ref: '#/paths/~1tasks~1calendar'
+  /workbench/calendar.ics:
+    $ref: '#/paths/~1tasks~1calendar.ics'
+  /portfolio/projects:
+    $ref: '#/paths/~1projects'
+  /portfolio/projects/export:
+    $ref: '#/paths/~1projects~1export'
+  /portfolio/projects/editor-options:
+    $ref: '#/paths/~1projects~1editor-options'
+  /portfolio/projects/gantt-portfolio:
+    $ref: '#/paths/~1projects~1gantt-portfolio'
+  /portfolio/projects/{id}:
+    $ref: '#/paths/~1projects~1{id}'
+  /portfolio/projects/{id}/gantt:
+    $ref: '#/paths/~1projects~1{id}~1gantt'
+  /portfolio/projects/{id}/gantt/auto-resolve:
+    $ref: '#/paths/~1projects~1{id}~1gantt~1auto-resolve'
+  /portfolio/projects/{id}/task-tree:
+    $ref: '#/paths/~1projects~1{id}~1task-tree'
+  /portfolio/projects/{id}/critical-path:
+    $ref: '#/paths/~1projects~1{id}~1critical-path'
+  /portfolio/templates:
+    $ref: '#/paths/~1project-templates'
+  /portfolio/templates/{id}:
+    $ref: '#/paths/~1project-templates~1{id}'
+  /portfolio/templates/{id}/create-project:
+    $ref: '#/paths/~1project-templates~1{id}~1create-project'
+  /portfolio/baselines:
+    $ref: '#/paths/~1project-baselines'
+  /portfolio/baselines/{id}:
+    $ref: '#/paths/~1project-baselines~1{id}'
+  /portfolio/registers:
+    $ref: '#/paths/~1project-registers'
+  /portfolio/registers/{id}:
+    $ref: '#/paths/~1project-registers~1{id}'
+  /portfolio/registers/{id}/activities:
+    $ref: '#/paths/~1project-registers~1{id}~1activities'
+  /delivery/tasks:
+    $ref: '#/paths/~1tasks'
+  /delivery/tasks/export:
+    $ref: '#/paths/~1tasks~1export'
+  /delivery/tasks/assignee-options:
+    $ref: '#/paths/~1tasks~1assignee-options'
+  /delivery/tasks/calendar:
+    $ref: '#/paths/~1tasks~1calendar'
+  /delivery/tasks/calendar.ics:
+    $ref: '#/paths/~1tasks~1calendar.ics'
+  /delivery/tasks/progress-list:
+    $ref: '#/paths/~1tasks~1progress-list'
+  /delivery/tasks/me:
+    $ref: '#/paths/~1tasks~1me'
+  /delivery/tasks/{id}:
+    $ref: '#/paths/~1tasks~1{id}'
+  /delivery/tasks/{id}/comments:
+    $ref: '#/paths/~1tasks~1{id}~1comments'
+  /delivery/tasks/{id}/comments/{commentId}:
+    $ref: '#/paths/~1tasks~1{id}~1comments~1{commentId}'
+  /delivery/tasks/{id}/activities:
+    $ref: '#/paths/~1tasks~1{id}~1activities'
+  /delivery/tasks/{id}/dependencies:
+    $ref: '#/paths/~1tasks~1{id}~1dependencies'
+  /delivery/tasks/{id}/progress:
+    $ref: '#/paths/~1tasks~1{id}~1progress'
+  /delivery/tasks/{id}/status:
+    $ref: '#/paths/~1tasks~1{id}~1status'
+  /delivery/tasks/{id}/complete:
+    $ref: '#/paths/~1tasks~1{id}~1complete'
+  /delivery/tasks/{id}/schedule:
+    $ref: '#/paths/~1tasks~1{id}~1schedule'
+  /delivery/requests:
+    $ref: '#/paths/~1requests'
+  /delivery/requests/{id}/review:
+    $ref: '#/paths/~1requests~1{id}~1review'
+  /delivery/requests/{id}/convert-task:
+    $ref: '#/paths/~1requests~1{id}~1convert-task'
+  /delivery/requests/{id}/apply-change:
+    $ref: '#/paths/~1requests~1{id}~1apply-change'
+  /delivery/sprints:
+    $ref: '#/paths/~1sprints'
+  /delivery/sprints/{id}:
+    $ref: '#/paths/~1sprints~1{id}'
+  /delivery/sprints/{id}/tasks:
+    $ref: '#/paths/~1sprints~1{id}~1tasks'
+  /delivery/sprints/{id}/tasks/{taskId}:
+    $ref: '#/paths/~1sprints~1{id}~1tasks~1{taskId}'
+  /insights/stats/dashboard:
+    $ref: '#/paths/~1stats~1dashboard'
+  /insights/stats/project-health:
+    $ref: '#/paths/~1stats~1project-health'
+  /insights/stats/member-workload:
+    $ref: '#/paths/~1stats~1member-workload'
+  /insights/reports:
+    $ref: '#/paths/~1reports'
+  /insights/reports/{id}:
+    $ref: '#/paths/~1reports~1{id}'
+  /insights/ai/project-weekly-report:
+    $ref: '#/paths/~1ai~1project-weekly-report'
+  /insights/ai/project-risk-summary:
+    $ref: '#/paths/~1ai~1project-risk-summary'
+  /insights/ai/task-breakdown:
+    $ref: '#/paths/~1ai~1task-breakdown'
+  /integrations/webhooks:
+    $ref: '#/paths/~1webhooks'
+  /integrations/webhooks/{id}:
+    $ref: '#/paths/~1webhooks~1{id}'
+  /integrations/webhooks/deliveries:
+    $ref: '#/paths/~1webhooks~1deliveries'
+  /integrations/webhooks/deliveries/{id}/retry:
+    $ref: '#/paths/~1webhooks~1deliveries~1{id}~1retry'
+  /integrations/portal-invites:
+    $ref: '#/paths/~1portal-invites'
+  /integrations/portal-invites/{id}:
+    $ref: '#/paths/~1portal-invites~1{id}'
+  /integrations/portal-invites/{id}/revoke:
+    $ref: '#/paths/~1portal-invites~1{id}~1revoke'
+  /integrations/automation-rules:
+    $ref: '#/paths/~1automation-rules'
+  /integrations/automation-rules/logs:
+    $ref: '#/paths/~1automation-rules~1logs'
+  /integrations/automation-rules/{id}:
+    $ref: '#/paths/~1automation-rules~1{id}'
+  /integrations/automation-rules/{id}/run:
+    $ref: '#/paths/~1automation-rules~1{id}~1run'
+  /settings/tags:
+    $ref: '#/paths/~1tags'
+  /settings/tags/{id}:
+    $ref: '#/paths/~1tags~1{id}'
   /portal/{token}:
     get:
       summary: 外部门户项目状态
