@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"project-manager/backend/internal/config"
 	"project-manager/backend/internal/database"
@@ -3501,6 +3502,199 @@ func TestSavedReportsCRUDAndOwnerScope(t *testing.T) {
 	emptyReports, _ := emptyListBody["list"].([]any)
 	if len(emptyReports) != 0 {
 		t.Fatalf("owner report list should be empty after delete got %v", emptyListBody)
+	}
+}
+
+func TestSavedReportRunExportAndSubscriptionScope(t *testing.T) {
+	ts := setupTestRouter(t)
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	codeToID := permissionCodeMap(t, ts.URL, adminToken)
+
+	roleResp, roleBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/rbac/roles", adminToken, map[string]any{
+		"name":        "report-runner",
+		"description": "report runner",
+		"permissionIds": []uint{
+			codeToID["reports.create"],
+			codeToID["reports.read"],
+			codeToID["reports.update"],
+			codeToID["reports.delete"],
+			codeToID["notifications.read"],
+		},
+	})
+	if roleResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create report runner role expected 201 got %d body=%v", roleResp.StatusCode, roleBody)
+	}
+	roleID := uint(roleBody["id"].(float64))
+
+	deptResp, deptBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/departments", adminToken, map[string]any{
+		"name":        "报表验收部门",
+		"description": "用于报表中心验收",
+	})
+	if deptResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create department expected 201 got %d body=%v", deptResp.StatusCode, deptBody)
+	}
+	departmentID := int(deptBody["id"].(float64))
+
+	ownerResp, ownerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
+		"username":      "report_runner",
+		"name":          "Report Runner",
+		"email":         "report_runner@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{roleID},
+		"departmentIds": []uint{uint(departmentID)},
+	})
+	if ownerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create report runner expected 201 got %d body=%v", ownerResp.StatusCode, ownerBody)
+	}
+	ownerID := int(ownerBody["id"].(float64))
+
+	hiddenResp, hiddenBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/system/users", adminToken, map[string]any{
+		"username":      "report_hidden_assignee",
+		"name":          "Report Hidden",
+		"email":         "report_hidden_assignee@example.com",
+		"password":      "pass1234",
+		"roleIds":       []uint{},
+		"departmentIds": []uint{uint(departmentID)},
+	})
+	if hiddenResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden assignee expected 201 got %d body=%v", hiddenResp.StatusCode, hiddenBody)
+	}
+	hiddenUserID := int(hiddenBody["id"].(float64))
+
+	loginStatus, loginBody := loginWithCredentials(t, ts.URL, "report_runner", "pass1234")
+	if loginStatus != http.StatusOK {
+		t.Fatalf("login report runner expected 200 got %d body=%v", loginStatus, loginBody)
+	}
+	ownerToken := loginBody["token"].(string)
+
+	visibleProjectResp, visibleProjectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":          "REPORT-VISIBLE",
+		"name":          "Visible Risk Project",
+		"description":   "visible to report runner",
+		"userIds":       []uint{uint(ownerID)},
+		"departmentIds": []uint{uint(departmentID)},
+	})
+	if visibleProjectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible project expected 201 got %d body=%v", visibleProjectResp.StatusCode, visibleProjectBody)
+	}
+	visibleProjectID := int(visibleProjectBody["id"].(float64))
+
+	hiddenProjectResp, hiddenProjectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":          "REPORT-HIDDEN",
+		"name":          "Hidden Risk Project",
+		"description":   "hidden from report runner",
+		"departmentIds": []uint{uint(departmentID)},
+	})
+	if hiddenProjectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden project expected 201 got %d body=%v", hiddenProjectResp.StatusCode, hiddenProjectBody)
+	}
+	hiddenProjectID := int(hiddenProjectBody["id"].(float64))
+
+	now := time.Now()
+	startAt := now.AddDate(0, 0, -8).Format(time.RFC3339)
+	endAt := now.AddDate(0, 0, -2).Format(time.RFC3339)
+	visibleTaskResp, visibleTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":          "Visible Risk Task",
+		"description":    "runner can see this overdue task",
+		"projectId":      visibleProjectID,
+		"status":         "processing",
+		"priority":       "high",
+		"progress":       20,
+		"startAt":        startAt,
+		"endAt":          endAt,
+		"estimatedHours": 12,
+		"assigneeIds":    []uint{uint(ownerID)},
+	})
+	if visibleTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create visible task expected 201 got %d body=%v", visibleTaskResp.StatusCode, visibleTaskBody)
+	}
+	hiddenTaskResp, hiddenTaskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/tasks", adminToken, map[string]any{
+		"title":       "Hidden Risk Task",
+		"description": "runner must not see this overdue task",
+		"projectId":   hiddenProjectID,
+		"status":      "processing",
+		"priority":    "high",
+		"progress":    10,
+		"startAt":     startAt,
+		"endAt":       endAt,
+		"assigneeIds": []uint{uint(hiddenUserID)},
+	})
+	if hiddenTaskResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create hidden task expected 201 got %d body=%v", hiddenTaskResp.StatusCode, hiddenTaskBody)
+	}
+
+	createResp, createBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/reports", ownerToken, map[string]any{
+		"name":        "本部门项目风险",
+		"description": "验收部门内可见项目风险",
+		"type":        "project_health",
+		"filters": map[string]any{
+			"departmentId": departmentID,
+		},
+		"chartConfig": map[string]any{"displayMode": "table"},
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create project health report expected 201 got %d body=%v", createResp.StatusCode, createBody)
+	}
+	reportID := int(createBody["id"].(float64))
+	filters, _ := createBody["filters"].(map[string]any)
+	if int(filters["departmentId"].(float64)) != departmentID {
+		t.Fatalf("department filter should be persisted got %v", filters)
+	}
+
+	runResp, runBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/reports/"+strconv.Itoa(reportID)+"/run", ownerToken, nil)
+	if runResp.StatusCode != http.StatusOK {
+		t.Fatalf("run saved report expected 200 got %d body=%v", runResp.StatusCode, runBody)
+	}
+	runText := fmt.Sprint(runBody)
+	if !strings.Contains(runText, "Visible Risk Project") || strings.Contains(runText, "Hidden Risk Project") || strings.Contains(runText, "Hidden Risk Task") {
+		t.Fatalf("report run must include only visible scoped data got: %s", runText)
+	}
+
+	exportReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/reports/"+strconv.Itoa(reportID)+"/export.csv", nil)
+	exportReq.Header.Set("Authorization", "Bearer "+ownerToken)
+	exportResp, err := http.DefaultClient.Do(exportReq)
+	if err != nil {
+		t.Fatalf("csv export failed: %v", err)
+	}
+	exportRaw, _ := io.ReadAll(exportResp.Body)
+	exportResp.Body.Close()
+	if exportResp.StatusCode != http.StatusOK {
+		t.Fatalf("csv export expected 200 got %d body=%s", exportResp.StatusCode, string(exportRaw))
+	}
+	exportText := string(exportRaw)
+	if !strings.Contains(exportText, "Visible Risk Project") || strings.Contains(exportText, "Hidden Risk Project") {
+		t.Fatalf("csv export must respect report scope got: %s", exportText)
+	}
+
+	subscribeResp, subscribeBody := requestJSON(t, http.MethodPut, ts.URL+"/api/v1/reports/"+strconv.Itoa(reportID)+"/subscription", ownerToken, map[string]any{
+		"isEnabled":        true,
+		"schedule":         "weekly",
+		"weekday":          int(now.Weekday()),
+		"hour":             now.Hour(),
+		"channels":         []string{"in_app"},
+		"recipientUserIds": []uint{uint(ownerID)},
+	})
+	if subscribeResp.StatusCode != http.StatusOK {
+		t.Fatalf("upsert report subscription expected 200 got %d body=%v", subscribeResp.StatusCode, subscribeBody)
+	}
+
+	runSubResp, runSubBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/reports/"+strconv.Itoa(reportID)+"/subscription/run", ownerToken, nil)
+	if runSubResp.StatusCode != http.StatusOK {
+		t.Fatalf("manual report subscription run expected 200 got %d body=%v", runSubResp.StatusCode, runSubBody)
+	}
+	if runSubBody["lastStatus"] != "success" {
+		t.Fatalf("subscription run should mark success got %v", runSubBody)
+	}
+
+	notificationResp, notificationBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/notifications?module=reports&keyword=项目周报", ownerToken, nil)
+	if notificationResp.StatusCode != http.StatusOK {
+		t.Fatalf("report notification query expected 200 got %d body=%v", notificationResp.StatusCode, notificationBody)
+	}
+	notificationText := fmt.Sprint(notificationBody)
+	if !strings.Contains(notificationText, "Visible Risk Project") || strings.Contains(notificationText, "Hidden Risk Project") {
+		t.Fatalf("report subscription notification must respect scope got: %s", notificationText)
 	}
 }
 

@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS report_subscriptions (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  created_at DATETIME(3) NULL,
+  updated_at DATETIME(3) NULL,
+  report_id BIGINT UNSIGNED NOT NULL,
+  is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  schedule VARCHAR(20) NOT NULL DEFAULT 'weekly',
+  weekday INT NOT NULL DEFAULT 1,
+  hour INT NOT NULL DEFAULT 9,
+  channels JSON NULL,
+  recipient_user_ids JSON NULL,
+  last_run_at DATETIME(3) NULL,
+  last_status VARCHAR(20) NULL,
+  last_error TEXT NULL,
+  created_by_id BIGINT UNSIGNED NOT NULL,
+  INDEX idx_report_subscriptions_enabled (is_enabled),
+  UNIQUE INDEX idx_report_subscription_owner (report_id, created_by_id),
+  CONSTRAINT fk_report_subscriptions_report FOREIGN KEY (report_id) REFERENCES saved_reports(id) ON DELETE CASCADE,
+  CONSTRAINT fk_report_subscriptions_created_by FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE CASCADE
+);

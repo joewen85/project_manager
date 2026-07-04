@@ -249,9 +249,12 @@ type ProjectTemplate struct {
 type SavedReportType string
 
 const (
-	SavedReportProjectHealth  SavedReportType = "project_health"
-	SavedReportMemberWorkload SavedReportType = "member_workload"
-	SavedReportTaskStatus     SavedReportType = "task_status"
+	SavedReportProjectHealth          SavedReportType = "project_health"
+	SavedReportMemberWorkload         SavedReportType = "member_workload"
+	SavedReportTaskStatus             SavedReportType = "task_status"
+	SavedReportTaskThroughput         SavedReportType = "task_throughput"
+	SavedReportOverdueTrend           SavedReportType = "overdue_trend"
+	SavedReportDepartmentDistribution SavedReportType = "department_distribution"
 )
 
 type ProjectRegisterType string
@@ -289,9 +292,13 @@ const (
 )
 
 type SavedReportFilters struct {
-	ProjectID uint     `json:"projectId,omitempty"`
-	Keyword   string   `json:"keyword,omitempty"`
-	Statuses  []string `json:"statuses,omitempty"`
+	ProjectID    uint     `json:"projectId,omitempty"`
+	DepartmentID uint     `json:"departmentId,omitempty"`
+	OwnerID      uint     `json:"ownerId,omitempty"`
+	DateFrom     string   `json:"dateFrom,omitempty"`
+	DateTo       string   `json:"dateTo,omitempty"`
+	Keyword      string   `json:"keyword,omitempty"`
+	Statuses     []string `json:"statuses,omitempty"`
 }
 
 type SavedReportChartConfig struct {
@@ -307,6 +314,23 @@ type SavedReport struct {
 	ChartConfig SavedReportChartConfig `gorm:"serializer:json" json:"chartConfig"`
 	CreatedByID uint                   `gorm:"not null;index" json:"createdById"`
 	CreatedBy   User                   `json:"createdBy,omitempty"`
+}
+
+type ReportSubscription struct {
+	BaseModel
+	ReportID         uint        `gorm:"not null;uniqueIndex:idx_report_subscription_owner" json:"reportId"`
+	Report           SavedReport `gorm:"foreignKey:ReportID;constraint:OnDelete:CASCADE;" json:"report,omitempty"`
+	IsEnabled        bool        `gorm:"default:true;index" json:"isEnabled"`
+	Schedule         string      `gorm:"size:20;not null;default:'weekly';index" json:"schedule"`
+	Weekday          int         `gorm:"not null;default:1" json:"weekday"`
+	Hour             int         `gorm:"not null;default:9" json:"hour"`
+	Channels         []string    `gorm:"serializer:json" json:"channels"`
+	RecipientUserIDs []uint      `gorm:"serializer:json" json:"recipientUserIds"`
+	LastRunAt        *time.Time  `json:"lastRunAt,omitempty"`
+	LastStatus       string      `gorm:"size:20" json:"lastStatus"`
+	LastError        string      `gorm:"type:text" json:"lastError"`
+	CreatedByID      uint        `gorm:"not null;uniqueIndex:idx_report_subscription_owner" json:"createdById"`
+	CreatedBy        User        `json:"createdBy,omitempty"`
 }
 
 type ProjectRegister struct {

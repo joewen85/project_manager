@@ -471,7 +471,7 @@ export interface TaskCalendarResponse {
   items?: TaskCalendarItem[]
 }
 
-export type SavedReportType = 'project_health' | 'member_workload' | 'task_status'
+export type SavedReportType = 'project_health' | 'member_workload' | 'task_status' | 'task_throughput' | 'overdue_trend' | 'department_distribution'
 export type ProjectRegisterType = 'risk' | 'issue' | 'decision'
 export type ProjectRegisterStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
 export type ProjectRegisterSeverity = 'low' | 'medium' | 'high' | 'critical'
@@ -479,6 +479,10 @@ export type ProjectRegisterProbability = 'low' | 'medium' | 'high'
 
 export interface SavedReportFilters {
   projectId?: number
+  departmentId?: number
+  ownerId?: number
+  dateFrom?: string
+  dateTo?: string
   keyword?: string
   statuses?: Status[]
 }
@@ -496,6 +500,46 @@ export interface SavedReport {
   chartConfig?: SavedReportChartConfig
   createdById: number
   createdBy?: User
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ReportMetric {
+  label: string
+  value: string
+  tone?: 'danger' | 'warning' | string
+}
+
+export interface ReportColumn {
+  key: string
+  label: string
+}
+
+export interface ReportRunResult {
+  reportId: number
+  name: string
+  type: SavedReportType
+  filters?: SavedReportFilters
+  chartConfig?: SavedReportChartConfig
+  generatedAt: string
+  summary?: ReportMetric[]
+  columns?: ReportColumn[]
+  rows?: Record<string, unknown>[]
+}
+
+export interface ReportSubscription {
+  id: number
+  reportId: number
+  isEnabled: boolean
+  schedule: 'weekly' | string
+  weekday: number
+  hour: number
+  channels: string[]
+  recipientUserIds: number[]
+  lastRunAt?: string
+  lastStatus?: string
+  lastError?: string
+  createdById: number
   createdAt?: string
   updatedAt?: string
 }

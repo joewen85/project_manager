@@ -25,6 +25,7 @@ func Migrate(db *gorm.DB) error {
 		&model.ProjectBaseline{},
 		&model.ProjectTemplate{},
 		&model.SavedReport{},
+		&model.ReportSubscription{},
 		&model.Sprint{},
 		&model.SprintTask{},
 		&model.WebhookSubscription{},

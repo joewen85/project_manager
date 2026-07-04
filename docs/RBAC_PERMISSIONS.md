@@ -154,11 +154,12 @@
 | `PUT /project-templates/:id` | `templates.update` |
 | `DELETE /project-templates/:id` | `templates.delete` |
 | `POST /project-templates/:id/create-project` | `projects.create` + `templates.read` |
-| `GET /reports` `GET /reports/:id` | `reports.read`；普通用户仅查看自己创建的保存报表 |
+| `GET /reports` `GET /reports/:id` `GET /reports/:id/run` `GET /reports/:id/export.csv` | `reports.read`；普通用户仅查看、运行和导出自己创建的保存报表，报表数据仍按项目/任务可见范围过滤 |
 | `POST /reports` | `reports.create` |
 | `PUT /reports/:id` | `reports.update`；普通用户仅更新自己创建的保存报表 |
+| `GET /reports/:id/subscription` | `reports.read`；查看自己的报表订阅 |
+| `PUT /reports/:id/subscription` `DELETE /reports/:id/subscription` `POST /reports/:id/subscription/run` | `reports.update`；普通用户仅配置和触发自己创建报表的订阅 |
 | `DELETE /reports/:id` | `reports.delete`；普通用户仅删除自己创建的保存报表 |
-| 报表中心预览卡片 | 复用 `/stats/project-health`、`/stats/member-workload`、`/tasks/progress-list`，仍分别要求 `stats.read`、`tasks.read` |
 | `GET /sprints` `GET /sprints/:id` | `sprints.read`；普通用户仅查看自己创建或包含自己可见任务的迭代 |
 | `POST /sprints` | `sprints.create` |
 | `PUT /sprints/:id` | `sprints.update`；普通用户仅更新自己创建的迭代 |

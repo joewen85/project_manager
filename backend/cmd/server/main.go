@@ -51,6 +51,15 @@ func startAutomationRuleJob(h *handler.Handler) {
 	}()
 }
 
+func startReportSubscriptionJob(h *handler.Handler) {
+	ticker := time.NewTicker(time.Hour)
+	go func() {
+		for range ticker.C {
+			h.LogReportSubscriptionJob(time.Now())
+		}
+	}()
+}
+
 func main() {
 	_ = godotenv.Load(".env")
 	_ = godotenv.Load("../.env")
@@ -75,6 +84,7 @@ func main() {
 	h := handler.New(db, cfg)
 	startAuditRetentionJob(h)
 	startAutomationRuleJob(h)
+	startReportSubscriptionJob(h)
 	r := router.New(cfg, h)
 
 	if err = r.Run(":" + cfg.Port); err != nil {
