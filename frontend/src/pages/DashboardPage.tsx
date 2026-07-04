@@ -11,7 +11,8 @@ import type {
   DashboardProjectProgressItem,
   DashboardRiskChartItem,
   DashboardTrendItem,
-  DashboardWorkloadChartItem
+  DashboardWorkloadChartItem,
+  WorkloadSortKey
 } from '../components/DashboardCharts'
 import { usePermissions } from '../hooks/usePermissions'
 
@@ -87,6 +88,7 @@ export function DashboardPage() {
   const [projectHealthError, setProjectHealthError] = useState('')
   const [memberWorkload, setMemberWorkload] = useState<MemberWorkloadResponse>({ members: [] })
   const [memberWorkloadError, setMemberWorkloadError] = useState('')
+  const [workloadSort, setWorkloadSort] = useState<WorkloadSortKey>('utilization')
   const [highRiskRegisterCount, setHighRiskRegisterCount] = useState(0)
   const [unresolvedIssueCount, setUnresolvedIssueCount] = useState(0)
   const [registerError, setRegisterError] = useState('')
@@ -212,16 +214,17 @@ export function DashboardPage() {
   ], [highRiskRegisterCount, overdueTaskCount, projectHealth, redProjectCount, unresolvedIssueCount])
 
   const workloadChart = useMemo<DashboardWorkloadChartItem[]>(() => {
+    const sortValue = (item: MemberWorkloadItem) => (workloadSort === 'taskCount' ? item.taskCount : item.utilizationRate)
     return [...(memberWorkload.members || [])]
-      .sort((left, right) => right.utilizationRate - left.utilizationRate)
-      .slice(0, 8)
+      .sort((left, right) => sortValue(right) - sortValue(left))
+      .slice(0, 10)
       .map((item) => ({
         name: item.name || item.username,
         utilization: Math.round((item.utilizationRate || 0) * 100),
         taskCount: item.taskCount,
         fill: item.overloaded ? '#ef4444' : '#2563eb'
       }))
-  }, [memberWorkload.members])
+  }, [memberWorkload.members, workloadSort])
 
   const deliveryChart = useMemo<DashboardDeliveryItem[]>(() => {
     const sum = (pick: (item: ProjectHealth) => number) => projectHealth.reduce((total, item) => total + (pick(item) || 0), 0)
@@ -284,6 +287,8 @@ export function DashboardPage() {
             projectProgress={projectProgressChart}
             riskItems={riskChart}
             workload={workloadChart}
+            workloadSort={workloadSort}
+            onWorkloadSortChange={setWorkloadSort}
             trend={trendChart}
             delivery={deliveryChart}
           />

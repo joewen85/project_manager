@@ -46,6 +46,8 @@ export interface DashboardDeliveryItem {
   fill: string
 }
 
+export type WorkloadSortKey = 'utilization' | 'taskCount'
+
 interface DashboardChartsProps {
   progress: DashboardProgressItem[]
   completionRate: number
@@ -55,9 +57,71 @@ interface DashboardChartsProps {
   projectProgress: DashboardProjectProgressItem[]
   riskItems: DashboardRiskChartItem[]
   workload: DashboardWorkloadChartItem[]
+  workloadSort: WorkloadSortKey
+  onWorkloadSortChange: (key: WorkloadSortKey) => void
   trend: DashboardTrendItem[]
   delivery: DashboardDeliveryItem[]
 }
+
+// Fixed accent colors for secondary series, kept in sync with the design tokens.
+const ACCENT_SCORE = '#94a3b8'
+const ACCENT_TASKCOUNT = '#38bdf8'
+const ACCENT_TREND_CUMULATIVE = '#2563eb'
+const ACCENT_TREND_COUNT = '#22c55e'
+
+const sanitize = (color: string) => color.replace(/[^a-zA-Z0-9]/g, '')
+const gradientId = (color: string) => `bar-grad-${sanitize(color)}`
+const areaId = (color: string) => `area-grad-${sanitize(color)}`
+
+// Shared axis presentation — no axis/tick lines, subtle themed ticks (color via CSS).
+const axisProps = {
+  tickLine: false,
+  axisLine: false,
+  tickMargin: 8,
+  style: { fontSize: 12 }
+} as const
+
+// Vertical (or horizontal) gradient defs, one per unique color used in a chart.
+function BarGradients({ colors, direction = 'vertical' }: { colors: string[]; direction?: 'vertical' | 'horizontal' }) {
+  const unique = Array.from(new Set(colors))
+  const coords = direction === 'vertical' ? { x1: 0, y1: 0, x2: 0, y2: 1 } : { x1: 0, y1: 0, x2: 1, y2: 0 }
+  return (
+    <defs>
+      {unique.map((color) => (
+        <linearGradient key={color} id={gradientId(color)} {...coords}>
+          <stop offset="0%" stopColor={color} stopOpacity={0.95} />
+          <stop offset="100%" stopColor={color} stopOpacity={0.5} />
+        </linearGradient>
+      ))}
+    </defs>
+  )
+}
+
+interface TooltipEntry {
+  name?: string
+  value?: number | string
+  color?: string
+  payload?: { fill?: string }
+}
+
+// Theme-aware tooltip that replaces the default white Recharts box.
+function ChartTooltip({ active, payload, label, unit }: { active?: boolean; payload?: TooltipEntry[]; label?: string; unit?: string }) {
+  if (!active || !payload || payload.length === 0) return null
+  return (
+    <div className="chart-tooltip">
+      {label != null && label !== '' && <p className="chart-tooltip-label">{label}</p>}
+      {payload.map((entry, index) => (
+        <div className="chart-tooltip-row" key={`${entry.name ?? 'item'}-${index}`}>
+          <span className="chart-tooltip-dot" style={{ background: entry.color || entry.payload?.fill || 'var(--color-primary)' }} />
+          <span className="chart-tooltip-name">{entry.name}</span>
+          <span className="chart-tooltip-value">{entry.value}{unit ?? ''}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const tooltipCommon = { cursor: { className: 'chart-cursor' }, wrapperStyle: { outline: 'none' } } as const
 
 export function DashboardCharts({
   progress,
@@ -68,10 +132,12 @@ export function DashboardCharts({
   projectProgress,
   riskItems,
   workload,
+  workloadSort,
+  onWorkloadSortChange,
   trend,
   delivery
 }: DashboardChartsProps) {
-  const gaugeData = [{ name: '完成率', value: completionRate, fill: '#2563eb' }]
+  const gaugeData = [{ name: '完成率', value: completionRate, fill: 'url(#gauge-grad)' }]
 
   return (
     <div className="dashboard-chart-grid">
@@ -82,9 +148,14 @@ export function DashboardCharts({
         </div>
         <div className="data-viz-surface dashboard-gauge-surface">
           <ResponsiveContainer width="100%" height={220}>
-            <RadialBarChart data={gaugeData} cx="50%" cy="70%" innerRadius="72%" outerRadius="100%" startAngle={180} endAngle={0}>
+            <RadialBarChart data={gaugeData} cx="50%" cy="72%" innerRadius="72%" outerRadius="100%" startAngle={180} endAngle={0} barSize={22}>
+              <defs>
+                <linearGradient id="gauge-grad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#2563eb" />
+                  <stop offset="100%" stopColor="#60a5fa" />
+                </linearGradient>
+              </defs>
               <RadialBar dataKey="value" background cornerRadius={12} />
-              <Tooltip />
             </RadialBarChart>
           </ResponsiveContainer>
           <div className="dashboard-gauge-value">
@@ -101,15 +172,15 @@ export function DashboardCharts({
         </div>
         <div className="data-viz-surface">
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={progress}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#dbeafe" />
-              <XAxis dataKey="statusLabel" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="count" name="任务数量" radius={[8, 8, 0, 0]}>
+            <BarChart data={progress} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+              <BarGradients colors={progress.map((item) => item.fill)} />
+              <CartesianGrid vertical={false} strokeDasharray="4 4" />
+              <XAxis dataKey="statusLabel" {...axisProps} />
+              <YAxis allowDecimals={false} {...axisProps} />
+              <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
+              <Bar dataKey="count" name="任务数量" radius={[8, 8, 0, 0]} maxBarSize={48}>
                 {progress.map((item) => (
-                  <Cell key={item.status} fill={item.fill} />
+                  <Cell key={item.status} fill={`url(#${gradientId(item.fill)})`} />
                 ))}
               </Bar>
             </BarChart>
@@ -125,13 +196,13 @@ export function DashboardCharts({
         <div className="data-viz-surface">
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
-              <Pie data={progress} dataKey="count" nameKey="statusLabel" outerRadius={90}>
+              <Pie data={progress} dataKey="count" nameKey="statusLabel" innerRadius={52} outerRadius={92} paddingAngle={2} cornerRadius={4}>
                 {progress.map((item) => (
                   <Cell key={`pie-${item.status}`} fill={item.fill} />
                 ))}
               </Pie>
-              <Legend />
-              <Tooltip />
+              <Legend iconType="circle" />
+              <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -144,18 +215,19 @@ export function DashboardCharts({
         </div>
         <div className="data-viz-surface">
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={projectProgress} layout="vertical" margin={{ left: 18, right: 18 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#dbeafe" />
-              <XAxis type="number" domain={[0, 100]} tickFormatter={(value: number) => `${value}%`} />
-              <YAxis dataKey="name" type="category" width={116} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="completionRate" name="完成率 %" radius={[0, 8, 8, 0]}>
+            <BarChart data={projectProgress} layout="vertical" margin={{ top: 8, left: 18, right: 18, bottom: 0 }}>
+              <BarGradients colors={[...projectProgress.map((item) => item.fill), ACCENT_SCORE]} direction="horizontal" />
+              <CartesianGrid horizontal={false} strokeDasharray="4 4" />
+              <XAxis type="number" domain={[0, 100]} tickFormatter={(value: number) => `${value}%`} {...axisProps} />
+              <YAxis dataKey="name" type="category" width={116} {...axisProps} />
+              <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
+              <Legend iconType="circle" />
+              <Bar dataKey="completionRate" name="完成率 %" radius={[0, 6, 6, 0]} maxBarSize={20}>
                 {projectProgress.map((item) => (
-                  <Cell key={item.name} fill={item.fill} />
+                  <Cell key={item.name} fill={`url(#${gradientId(item.fill)})`} />
                 ))}
               </Bar>
-              <Bar dataKey="score" name="健康分" fill="#64748b" radius={[0, 8, 8, 0]} />
+              <Bar dataKey="score" name="健康分" fill={`url(#${gradientId(ACCENT_SCORE)})`} radius={[0, 6, 6, 0]} maxBarSize={20} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -169,13 +241,13 @@ export function DashboardCharts({
         <div className="data-viz-surface">
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
-              <Pie data={health} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92}>
+              <Pie data={health} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={2} cornerRadius={4}>
                 {health.map((item) => (
                   <Cell key={item.name} fill={item.fill} />
                 ))}
               </Pie>
-              <Legend />
-              <Tooltip />
+              <Legend iconType="circle" />
+              <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -188,14 +260,15 @@ export function DashboardCharts({
         </div>
         <div className="data-viz-surface">
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={riskItems}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#dbeafe" />
-              <XAxis dataKey="name" />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="value" name="数量" radius={[8, 8, 0, 0]}>
+            <BarChart data={riskItems} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+              <BarGradients colors={riskItems.map((item) => item.fill)} />
+              <CartesianGrid vertical={false} strokeDasharray="4 4" />
+              <XAxis dataKey="name" {...axisProps} />
+              <YAxis allowDecimals={false} {...axisProps} />
+              <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
+              <Bar dataKey="value" name="数量" radius={[8, 8, 0, 0]} maxBarSize={44}>
                 {riskItems.map((item) => (
-                  <Cell key={item.name} fill={item.fill} />
+                  <Cell key={item.name} fill={`url(#${gradientId(item.fill)})`} />
                 ))}
               </Bar>
             </BarChart>
@@ -206,22 +279,26 @@ export function DashboardCharts({
       <div className="card chart-card data-viz-card dashboard-wide-chart">
         <div className="chart-card-header">
           <h3>成员负载使用率</h3>
-          <span>Top 8</span>
+          <div className="chart-sort-toggle" role="group" aria-label="成员负载排序方式">
+            <button type="button" className={workloadSort === 'utilization' ? 'active' : ''} aria-pressed={workloadSort === 'utilization'} onClick={() => onWorkloadSortChange('utilization')}>使用率</button>
+            <button type="button" className={workloadSort === 'taskCount' ? 'active' : ''} aria-pressed={workloadSort === 'taskCount'} onClick={() => onWorkloadSortChange('taskCount')}>任务数</button>
+          </div>
         </div>
         <div className="data-viz-surface">
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={workload} margin={{ left: 8, right: 18 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#dbeafe" />
-              <XAxis dataKey="name" />
-              <YAxis tickFormatter={(value: number) => `${value}%`} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="utilization" name="使用率 %" radius={[8, 8, 0, 0]}>
+            <BarChart data={workload} margin={{ top: 8, left: -8, right: 18, bottom: 0 }}>
+              <BarGradients colors={[...workload.map((item) => item.fill), ACCENT_TASKCOUNT]} />
+              <CartesianGrid vertical={false} strokeDasharray="4 4" />
+              <XAxis dataKey="name" {...axisProps} />
+              <YAxis tickFormatter={(value: number) => `${value}%`} {...axisProps} />
+              <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
+              <Legend iconType="circle" />
+              <Bar dataKey="utilization" name="使用率 %" radius={[8, 8, 0, 0]} maxBarSize={36}>
                 {workload.map((item) => (
-                  <Cell key={item.name} fill={item.fill} />
+                  <Cell key={item.name} fill={`url(#${gradientId(item.fill)})`} />
                 ))}
               </Bar>
-              <Bar dataKey="taskCount" name="任务数" fill="#38bdf8" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="taskCount" name="任务数" fill={`url(#${gradientId(ACCENT_TASKCOUNT)})`} radius={[8, 8, 0, 0]} maxBarSize={36} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -235,14 +312,24 @@ export function DashboardCharts({
           </div>
           <div className="data-viz-surface">
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={trend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#dbeafe" />
-                <XAxis dataKey="stage" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Legend />
-                <Area type="monotone" dataKey="cumulative" name="累计任务" stroke="#2563eb" fill="#bfdbfe" />
-                <Area type="monotone" dataKey="count" name="当前阶段" stroke="#16a34a" fill="#bbf7d0" />
+              <AreaChart data={trend} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                <defs>
+                  <linearGradient id={areaId(ACCENT_TREND_CUMULATIVE)} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={ACCENT_TREND_CUMULATIVE} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={ACCENT_TREND_CUMULATIVE} stopOpacity={0.02} />
+                  </linearGradient>
+                  <linearGradient id={areaId(ACCENT_TREND_COUNT)} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={ACCENT_TREND_COUNT} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={ACCENT_TREND_COUNT} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} strokeDasharray="4 4" />
+                <XAxis dataKey="stage" {...axisProps} />
+                <YAxis allowDecimals={false} {...axisProps} />
+                <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
+                <Legend iconType="circle" />
+                <Area type="monotone" dataKey="cumulative" name="累计任务" stroke={ACCENT_TREND_CUMULATIVE} strokeWidth={2} fill={`url(#${areaId(ACCENT_TREND_CUMULATIVE)})`} activeDot={{ r: 4 }} />
+                <Area type="monotone" dataKey="count" name="当前阶段" stroke={ACCENT_TREND_COUNT} strokeWidth={2} fill={`url(#${areaId(ACCENT_TREND_COUNT)})`} activeDot={{ r: 4 }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -255,14 +342,15 @@ export function DashboardCharts({
           </div>
           <div className="data-viz-surface">
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={delivery}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#dbeafe" />
-                <XAxis dataKey="name" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="value" name="任务数" radius={[8, 8, 0, 0]}>
+              <BarChart data={delivery} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                <BarGradients colors={delivery.map((item) => item.fill)} />
+                <CartesianGrid vertical={false} strokeDasharray="4 4" />
+                <XAxis dataKey="name" {...axisProps} />
+                <YAxis allowDecimals={false} {...axisProps} />
+                <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
+                <Bar dataKey="value" name="任务数" radius={[8, 8, 0, 0]} maxBarSize={44}>
                   {delivery.map((item) => (
-                    <Cell key={item.name} fill={item.fill} />
+                    <Cell key={item.name} fill={`url(#${gradientId(item.fill)})`} />
                   ))}
                 </Bar>
               </BarChart>

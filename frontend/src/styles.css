@@ -40,6 +40,13 @@
   --space-5: 20px;
   --shadow-sm: 0 8px 20px rgba(15, 23, 42, 0.04);
   --shadow-focus: 0 0 0 3px rgba(37, 99, 235, 0.2);
+  --chart-grid: rgba(148, 163, 184, 0.22);
+  --chart-axis: #64748b;
+  --chart-track: #eef2f7;
+  --chart-cursor: rgba(37, 99, 235, 0.06);
+  --chart-tooltip-bg: rgba(255, 255, 255, 0.98);
+  --chart-tooltip-border: #e2e8f0;
+  --chart-tooltip-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
   --duration-fast: 160ms;
   --duration-base: 220ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
@@ -90,6 +97,13 @@
   --color-danger-hover: #dc2626;
   --shadow-sm: 0 10px 26px rgba(2, 6, 23, 0.35);
   --shadow-focus: 0 0 0 3px rgba(59, 130, 246, 0.35);
+  --chart-grid: rgba(148, 163, 184, 0.16);
+  --chart-axis: #94a3b8;
+  --chart-track: rgba(148, 163, 184, 0.14);
+  --chart-cursor: rgba(59, 130, 246, 0.12);
+  --chart-tooltip-bg: rgba(17, 24, 39, 0.98);
+  --chart-tooltip-border: #334155;
+  --chart-tooltip-shadow: 0 14px 34px rgba(2, 6, 23, 0.5);
   color-scheme: dark;
 }
 
@@ -703,28 +717,139 @@ button, input, select, textarea { max-width: 100%; font: inherit; }
 }
 .charts,
 .dashboard-chart-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-.chart-card { min-height: 320px; }
+.chart-card { min-height: 320px; padding: 18px 18px 14px; }
 .chart-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
 }
 .chart-card-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  padding-left: 12px;
+  position: relative;
+}
+.chart-card-header h3::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 15px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--color-primary), #60a5fa);
 }
 .chart-card-header span {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: 12px;
   text-align: right;
+}
+.chart-sort-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  flex: none;
+}
+.chart-sort-toggle button {
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+.chart-sort-toggle button.active {
+  background: var(--color-primary);
+  color: #fff;
+}
+.chart-sort-toggle button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 .data-viz-card {
   overflow: hidden;
 }
 .data-viz-surface {
   min-width: 0;
+}
+/* Theme-aware Recharts styling — CSS wins over the library's presentation attributes. */
+.data-viz-surface .recharts-cartesian-axis-tick-value,
+.data-viz-surface .recharts-text {
+  fill: var(--chart-axis);
+  font-size: 12px;
+}
+.data-viz-surface .recharts-cartesian-grid line {
+  stroke: var(--chart-grid);
+}
+.data-viz-surface .recharts-cartesian-axis-line,
+.data-viz-surface .recharts-cartesian-axis-tick-line {
+  stroke: transparent;
+}
+.data-viz-surface .recharts-radial-bar-background-sector {
+  fill: var(--chart-track);
+}
+.data-viz-surface .recharts-pie .recharts-sector {
+  stroke: var(--color-surface);
+  stroke-width: 2;
+}
+.data-viz-surface .chart-cursor,
+.data-viz-surface .recharts-tooltip-cursor {
+  fill: var(--chart-cursor);
+}
+.data-viz-surface .recharts-legend-item-text {
+  color: var(--color-text-muted) !important;
+  font-size: 12px;
+}
+.data-viz-surface .recharts-default-legend {
+  margin-top: 6px !important;
+}
+.chart-tooltip {
+  min-width: 128px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--chart-tooltip-bg);
+  border: 1px solid var(--chart-tooltip-border);
+  box-shadow: var(--chart-tooltip-shadow);
+  backdrop-filter: blur(8px);
+}
+.chart-tooltip-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.chart-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.9;
+}
+.chart-tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.chart-tooltip-name {
+  color: var(--color-text-muted);
+}
+.chart-tooltip-value {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--color-text);
 }
 .dashboard-wide-chart {
   grid-column: span 2;
