@@ -217,12 +217,12 @@ export function DashboardPage() {
     const sortValue = (item: MemberWorkloadItem) => (workloadSort === 'taskCount' ? item.taskCount : item.utilizationRate)
     return [...(memberWorkload.members || [])]
       .sort((left, right) => sortValue(right) - sortValue(left))
-      .slice(0, 10)
+      .slice(0, 8)
       .map((item) => ({
         name: item.name || item.username,
         utilization: Math.round((item.utilizationRate || 0) * 100),
         taskCount: item.taskCount,
-        fill: item.overloaded ? '#ef4444' : '#2563eb'
+        barFill: item.overloaded ? '#ef4444' : '#2563eb'
       }))
   }, [memberWorkload.members, workloadSort])
 

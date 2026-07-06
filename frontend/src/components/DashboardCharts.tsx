@@ -31,7 +31,7 @@ export interface DashboardWorkloadChartItem {
   name: string
   utilization: number
   taskCount: number
-  fill: string
+  barFill: string
 }
 
 export interface DashboardTrendItem {
@@ -65,7 +65,7 @@ interface DashboardChartsProps {
 
 // Fixed accent colors for secondary series, kept in sync with the design tokens.
 const ACCENT_SCORE = '#94a3b8'
-const ACCENT_TASKCOUNT = '#38bdf8'
+const ACCENT_TASKCOUNT = '#f59e0b'
 const ACCENT_TREND_CUMULATIVE = '#2563eb'
 const ACCENT_TREND_COUNT = '#22c55e'
 
@@ -253,54 +253,61 @@ export function DashboardCharts({
         </div>
       </div>
 
-      <div className="card chart-card data-viz-card">
-        <div className="chart-card-header">
-          <h3>风险问题占比</h3>
-          <span>风险、问题与逾期</span>
-        </div>
-        <div className="data-viz-surface">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={riskItems} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-              <BarGradients colors={riskItems.map((item) => item.fill)} />
-              <CartesianGrid vertical={false} strokeDasharray="4 4" />
-              <XAxis dataKey="name" {...axisProps} />
-              <YAxis allowDecimals={false} {...axisProps} />
-              <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
-              <Bar dataKey="value" name="数量" radius={[8, 8, 0, 0]} maxBarSize={44}>
-                {riskItems.map((item) => (
-                  <Cell key={item.name} fill={`url(#${gradientId(item.fill)})`} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="card chart-card data-viz-card dashboard-wide-chart">
-        <div className="chart-card-header">
-          <h3>成员负载使用率</h3>
-          <div className="chart-sort-toggle" role="group" aria-label="成员负载排序方式">
-            <button type="button" className={workloadSort === 'utilization' ? 'active' : ''} aria-pressed={workloadSort === 'utilization'} onClick={() => onWorkloadSortChange('utilization')}>使用率</button>
-            <button type="button" className={workloadSort === 'taskCount' ? 'active' : ''} aria-pressed={workloadSort === 'taskCount'} onClick={() => onWorkloadSortChange('taskCount')}>任务数</button>
+      <div className="dashboard-split-row">
+        <div className="card chart-card data-viz-card">
+          <div className="chart-card-header">
+            <h3>风险问题占比</h3>
+            <span>风险、问题与逾期</span>
+          </div>
+          <div className="data-viz-surface">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={riskItems} layout="vertical" margin={{ top: 8, right: 18, left: 8, bottom: 0 }}>
+                <BarGradients colors={riskItems.map((item) => item.fill)} direction="horizontal" />
+                <CartesianGrid horizontal={false} strokeDasharray="4 4" />
+                <XAxis type="number" allowDecimals={false} {...axisProps} />
+                <YAxis type="category" dataKey="name" width={76} {...axisProps} />
+                <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
+                <Bar dataKey="value" name="数量" radius={[0, 6, 6, 0]} maxBarSize={22}>
+                  {riskItems.map((item) => (
+                    <Cell key={item.name} fill={`url(#${gradientId(item.fill)})`} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
-        <div className="data-viz-surface">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={workload} margin={{ top: 8, left: -8, right: 18, bottom: 0 }}>
-              <BarGradients colors={[...workload.map((item) => item.fill), ACCENT_TASKCOUNT]} />
-              <CartesianGrid vertical={false} strokeDasharray="4 4" />
-              <XAxis dataKey="name" {...axisProps} />
-              <YAxis tickFormatter={(value: number) => `${value}%`} {...axisProps} />
-              <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
-              <Legend iconType="circle" />
-              <Bar dataKey="utilization" name="使用率 %" radius={[8, 8, 0, 0]} maxBarSize={36}>
-                {workload.map((item) => (
-                  <Cell key={item.name} fill={`url(#${gradientId(item.fill)})`} />
-                ))}
-              </Bar>
-              <Bar dataKey="taskCount" name="任务数" fill={`url(#${gradientId(ACCENT_TASKCOUNT)})`} radius={[8, 8, 0, 0]} maxBarSize={36} />
-            </BarChart>
-          </ResponsiveContainer>
+
+        <div className="card chart-card data-viz-card">
+          <div className="chart-card-header">
+            <h3>成员负载使用率</h3>
+            <div className="chart-sort-toggle" role="group" aria-label="成员负载排序方式">
+              <button type="button" className={workloadSort === 'utilization' ? 'active' : ''} aria-pressed={workloadSort === 'utilization'} onClick={() => onWorkloadSortChange('utilization')}>使用率</button>
+              <button type="button" className={workloadSort === 'taskCount' ? 'active' : ''} aria-pressed={workloadSort === 'taskCount'} onClick={() => onWorkloadSortChange('taskCount')}>任务数</button>
+            </div>
+          </div>
+          <div className="data-viz-surface">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={workload} layout="vertical" margin={{ top: 8, right: 18, left: 8, bottom: 0 }}>
+                <BarGradients colors={[...workload.map((item) => item.barFill), ACCENT_TASKCOUNT]} direction="horizontal" />
+                <CartesianGrid horizontal={false} strokeDasharray="4 4" />
+                <XAxis type="number" xAxisId="utilization" domain={[0, 100]} tickFormatter={(value: number) => `${value}%`} {...axisProps} />
+                <XAxis type="number" xAxisId="taskCount" orientation="top" allowDecimals={false} {...axisProps} />
+                <YAxis type="category" dataKey="name" width={76} {...axisProps} />
+                <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
+                <Legend iconType="circle" />
+                <Bar xAxisId="utilization" dataKey="utilization" name="使用率 %" fill="#2563eb" radius={[0, 6, 6, 0]} maxBarSize={14}>
+                  {workload.map((item) => (
+                    <Cell key={item.name} fill={`url(#${gradientId(item.barFill)})`} />
+                  ))}
+                </Bar>
+                <Bar xAxisId="taskCount" dataKey="taskCount" name="任务数" fill={ACCENT_TASKCOUNT} radius={[0, 6, 6, 0]} maxBarSize={14}>
+                  {workload.map((item) => (
+                    <Cell key={item.name} fill={`url(#${gradientId(ACCENT_TASKCOUNT)})`} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
