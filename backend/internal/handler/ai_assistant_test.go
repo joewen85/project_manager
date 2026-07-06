@@ -1,10 +1,31 @@
 package handler
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"project-manager/backend/internal/ai"
 )
+
+type fakeStreamingAIClient struct {
+	deltas []string
+}
+
+func (f fakeStreamingAIClient) Chat(context.Context, []ai.Message) (string, error) {
+	return strings.Join(f.deltas, ""), nil
+}
+
+func (f fakeStreamingAIClient) ChatStream(_ context.Context, _ []ai.Message, onDelta func(string) error) (string, error) {
+	for _, delta := range f.deltas {
+		if err := onDelta(delta); err != nil {
+			return "", err
+		}
+	}
+	return strings.Join(f.deltas, ""), nil
+}
 
 func TestAIParseSuggestedTasksValid(t *testing.T) {
 	sources := []aiSourceRef{{Type: "project", ID: 1, Label: "P1"}}
@@ -53,6 +74,24 @@ func TestAIParseSuggestedTasksRejectsGarbage(t *testing.T) {
 		if _, ok := aiParseSuggestedTasks(raw, nil); ok {
 			t.Errorf("expected ok=false for %q", raw)
 		}
+	}
+}
+
+func TestAIComposeNarrativeStreamResultEmitsDeltas(t *testing.T) {
+	h := &Handler{AIClient: fakeStreamingAIClient{deltas: []string{"周", "报", "正文"}}}
+	var got []string
+	out, used := h.aiComposeNarrativeStreamResult(context.Background(), "system", "context", "fallback", func(delta string) error {
+		got = append(got, delta)
+		return nil
+	})
+	if !used {
+		t.Fatal("expected model to be used")
+	}
+	if out != "周报正文" {
+		t.Fatalf("unexpected output %q", out)
+	}
+	if strings.Join(got, "") != "周报正文" || len(got) != 3 {
+		t.Fatalf("unexpected deltas: %#v", got)
 	}
 }
 

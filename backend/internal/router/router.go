@@ -237,8 +237,11 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 		ai := authGroup.Group("/ai")
 		{
 			ai.POST("/project-weekly-report", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectWeeklyReport)
+			ai.POST("/project-weekly-report/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectWeeklyReportStream)
 			ai.POST("/project-risk-summary", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRiskSummary)
+			ai.POST("/project-risk-summary/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRiskSummaryStream)
 			ai.POST("/task-breakdown", middleware.RequirePermission(h.DB, "ai.read"), h.AITaskBreakdown)
+			ai.POST("/task-breakdown/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AITaskBreakdownStream)
 		}
 
 		stats := authGroup.Group("/stats")
@@ -388,8 +391,11 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			insightAI := insights.Group("/ai")
 			{
 				insightAI.POST("/project-weekly-report", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectWeeklyReport)
+				insightAI.POST("/project-weekly-report/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectWeeklyReportStream)
 				insightAI.POST("/project-risk-summary", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRiskSummary)
+				insightAI.POST("/project-risk-summary/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRiskSummaryStream)
 				insightAI.POST("/task-breakdown", middleware.RequirePermission(h.DB, "ai.read"), h.AITaskBreakdown)
+				insightAI.POST("/task-breakdown/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AITaskBreakdownStream)
 			}
 		}
 

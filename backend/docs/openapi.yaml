@@ -215,10 +215,16 @@ paths:
     $ref: '#/paths/~1reports~1{id}'
   /insights/ai/project-weekly-report:
     $ref: '#/paths/~1ai~1project-weekly-report'
+  /insights/ai/project-weekly-report/stream:
+    $ref: '#/paths/~1ai~1project-weekly-report~1stream'
   /insights/ai/project-risk-summary:
     $ref: '#/paths/~1ai~1project-risk-summary'
+  /insights/ai/project-risk-summary/stream:
+    $ref: '#/paths/~1ai~1project-risk-summary~1stream'
   /insights/ai/task-breakdown:
     $ref: '#/paths/~1ai~1task-breakdown'
+  /insights/ai/task-breakdown/stream:
+    $ref: '#/paths/~1ai~1task-breakdown~1stream'
   /integrations/webhooks:
     $ref: '#/paths/~1webhooks'
   /integrations/webhooks/{id}:
@@ -2739,6 +2745,28 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postAIProjectWeeklyReport
+  /ai/project-weekly-report/stream:
+    post:
+      summary: AI 项目周报草稿（SSE）
+      description: 以 text/event-stream 返回 AI 助理生成进度与模型流式文本；事件包括 status、delta、result、error、done，其中 delta 为 {text}，result 承载 AIDraftResponse。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIProjectRequest'
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postAIProjectWeeklyReportStream
   /ai/project-risk-summary:
     post:
       summary: AI 项目风险摘要
@@ -2761,6 +2789,28 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postAIProjectRiskSummary
+  /ai/project-risk-summary/stream:
+    post:
+      summary: AI 项目风险摘要（SSE）
+      description: 以 text/event-stream 返回 AI 助理生成进度与模型流式文本；事件包括 status、delta、result、error、done，其中 delta 为 {text}，result 承载 AIDraftResponse。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIProjectRequest'
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postAIProjectRiskSummaryStream
   /ai/task-breakdown:
     post:
       summary: AI 任务拆解建议
@@ -2783,6 +2833,28 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postAITaskBreakdown
+  /ai/task-breakdown/stream:
+    post:
+      summary: AI 任务拆解建议（SSE）
+      description: 以 text/event-stream 返回 AI 助理生成进度与模型流式文本；事件包括 status、delta、result、error、done，其中 delta 为 {text}，result 承载 AITaskBreakdownResponse。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AITaskBreakdownRequest'
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postAITaskBreakdownStream
   /stats/dashboard:
     get:
       summary: 仪表盘统计

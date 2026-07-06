@@ -693,23 +693,35 @@ API Token 用于外部系统以服务账号身份调用接口。请求仍使用 
 
 ## AI 助理
 
-AI 助理当前为本地结构化草稿生成：不调用外部模型、不保存草稿、不直接创建或更新项目/任务。所有响应都包含 `requiresConfirmation=true` 和 `sourceRefs`，前端展示为可编辑草稿。
+AI 助理支持通过 OpenAI 兼容的 `chat/completions` 网关生成草稿；未配置模型或模型不可用时回退到本地结构化结果。AI 助理不保存草稿、不直接创建或更新项目/任务。所有最终响应都包含 `requiresConfirmation=true` 和 `sourceRefs`，前端展示为可编辑草稿。
+
+前端默认使用 `/stream` 版本接口读取 `text/event-stream`：
+- `event: status`: `{ message }`，用于展示生成进度
+- `event: delta`: `{ text }`，模型流式文本片段；周报和风险摘要会在前端逐段追加到草稿预览
+- `event: result`: `AIDraftResponse` 或 `AITaskBreakdownResponse`
+- `event: error`: `{ code, message }`
+- `event: done`: `{ message }`
+
+非 `/stream` 版本保留 JSON 响应，便于脚本和第三方集成继续使用。
 
 ### POST `/ai/project-weekly-report`
 - 权限: `ai.read` + `projects.read`；任务状态需 `tasks.read`，评论/活动需 `comments.read`，登记册需 `registers.read`
 - 请求体: `{ projectId, weekStart?, weekEnd? }`
 - `weekStart/weekEnd`: 可空；传入时必须是 RFC3339，空值默认当前周
 - 响应: `{ mode, title, draft, highlights, recommendations, sourceRefs, requiresConfirmation, generatedAt }`
+- SSE: `POST /ai/project-weekly-report/stream`
 
 ### POST `/ai/project-risk-summary`
 - 权限: `ai.read` + `projects.read`；任务风险需 `tasks.read`，登记册风险需 `registers.read`
 - 请求体: `{ projectId }`
 - 响应: `{ mode, title, draft, highlights, recommendations, sourceRefs, requiresConfirmation, generatedAt }`
+- SSE: `POST /ai/project-risk-summary/stream`
 
 ### POST `/ai/task-breakdown`
 - 权限: `ai.read`；如传 `projectId` 则额外要求 `projects.read` 且项目当前用户可见
 - 请求体: `{ projectId?, title?, description? }`
 - 响应: `{ mode, title, summary, tasks, sourceRefs, requiresConfirmation, generatedAt }`
+- SSE: `POST /ai/task-breakdown/stream`
 - `tasks`: `[{ title, description, priority, isMilestone, relativeStartDay, durationDays, sourceRefs }]`
 - 安全边界: AI 助理不会读取财务字段、附件正文、密码、密钥或审计敏感数据；没有源权限时不会把对应源数据纳入草稿
 

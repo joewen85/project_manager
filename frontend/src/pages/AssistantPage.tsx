@@ -14,7 +14,7 @@ import {
   Sparkles
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { api, readApiError } from '../services/api'
+import { readApiError } from '../services/api'
 import { DateTimeQuickField } from '../components/DateTimeQuickField'
 import { RemoteProjectSelect } from '../components/RemoteProjectSelect'
 import { MarkdownView } from '../components/MarkdownView'
@@ -48,6 +48,12 @@ const modeMeta: Record<AssistantMode, { label: string; hint: string }> = {
 }
 
 const modeOrder: AssistantMode[] = ['weekly_report', 'risk_summary', 'task_breakdown']
+const defaultAIAssistantTimeoutMs = 35000
+const configuredAIAssistantTimeoutMs = Number(import.meta.env.VITE_AI_ASSISTANT_TIMEOUT_MS)
+const aiAssistantRequestTimeoutMs = Number.isFinite(configuredAIAssistantTimeoutMs) && configuredAIAssistantTimeoutMs > 0
+  ? configuredAIAssistantTimeoutMs
+  : defaultAIAssistantTimeoutMs
+const apiBaseURL = String(import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/+$/, '')
 
 const priorityMeta: Record<TaskPriority, { label: string; className: string }> = {
   high: { label: '高', className: 'priority-high' },
@@ -85,6 +91,103 @@ const formatGeneratedAt = (value?: string) => {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
+const buildAIStreamURL = (path: string) => `${apiBaseURL}${path}/stream`
+
+const parseSSEBlock = (block: string) => {
+  let event = 'message'
+  const dataLines: string[] = []
+  for (const rawLine of block.split('\n')) {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
+    if (line.startsWith('event:')) {
+      event = line.slice('event:'.length).trim()
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice('data:'.length).trimStart())
+    }
+  }
+  const dataText = dataLines.join('\n').trim()
+  return { event, data: dataText ? JSON.parse(dataText) as unknown : null }
+}
+
+const postAIStream = async <T,>(
+  path: string,
+  payload: Record<string, unknown>,
+  onStatus: (message: string) => void,
+  onDelta?: (text: string) => void
+): Promise<T> => {
+  const controller = new AbortController()
+  let timeoutID: number | undefined
+  const refreshTimeout = () => {
+    if (timeoutID !== undefined) window.clearTimeout(timeoutID)
+    timeoutID = window.setTimeout(() => controller.abort(), aiAssistantRequestTimeoutMs)
+  }
+  refreshTimeout()
+  try {
+    const token = localStorage.getItem('token') || ''
+    const headers: Record<string, string> = {
+      Accept: 'text/event-stream',
+      'Content-Type': 'application/json'
+    }
+    if (token) headers.Authorization = `Bearer ${token}`
+
+    const response = await fetch(buildAIStreamURL(path), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    })
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => null) as { message?: string } | null
+      throw new Error(errorBody?.message || `请求失败（${response.status}）`)
+    }
+    if (!response.body) {
+      throw new Error('浏览器不支持流式响应')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let result: T | null = null
+    let done = false
+    while (!done) {
+      const chunk = await reader.read()
+      if (chunk.done) break
+      refreshTimeout()
+      buffer += decoder.decode(chunk.value, { stream: true })
+      let boundary = buffer.indexOf('\n\n')
+      while (boundary >= 0) {
+        const block = buffer.slice(0, boundary).trim()
+        buffer = buffer.slice(boundary + 2)
+        if (block) {
+          const message = parseSSEBlock(block)
+          if (message.event === 'status' && message.data && typeof message.data === 'object' && 'message' in message.data) {
+            onStatus(String((message.data as { message?: string }).message || ''))
+          }
+          if (message.event === 'delta' && message.data && typeof message.data === 'object' && 'text' in message.data) {
+            onDelta?.(String((message.data as { text?: string }).text || ''))
+          }
+          if (message.event === 'error' && message.data && typeof message.data === 'object' && 'message' in message.data) {
+            throw new Error(String((message.data as { message?: string }).message || 'AI 助理生成失败'))
+          }
+          if (message.event === 'result') {
+            result = message.data as T
+          }
+          if (message.event === 'done') {
+            done = true
+            break
+          }
+        }
+        boundary = buffer.indexOf('\n\n')
+      }
+    }
+    if (!result) {
+      throw new Error('AI 助理没有返回结果')
+    }
+    return result
+  } finally {
+    if (timeoutID !== undefined) window.clearTimeout(timeoutID)
+  }
+}
+
 function SourceList({ sources }: { sources: AISourceRef[] }) {
   if (sources.length === 0) return <p className="inline-tip">生成后将在此列出引用的项目、任务与登记项</p>
   return (
@@ -115,8 +218,10 @@ export function AssistantPage() {
   const [draftResult, setDraftResult] = useState<AIDraftResponse | null>(null)
   const [taskResult, setTaskResult] = useState<AITaskBreakdownResponse | null>(null)
   const [editableDraft, setEditableDraft] = useState('')
+  const [streamingDraft, setStreamingDraft] = useState('')
   const [draftView, setDraftView] = useState<DraftView>('preview')
   const [submitting, setSubmitting] = useState(false)
+  const [streamStatus, setStreamStatus] = useState('')
   const [error, setError] = useState('')
   const [copySuccess, setCopySuccess] = useState('')
 
@@ -127,6 +232,8 @@ export function AssistantPage() {
   const highlights = draftResult?.highlights?.filter((item) => item.trim()) || []
   const recommendations = draftResult?.recommendations?.filter((item) => item.trim()) || []
   const hasResult = Boolean(draftResult || taskResult)
+  const hasDraftOutput = Boolean(draftResult || streamingDraft)
+  const visibleDraft = draftResult ? editableDraft : streamingDraft
   const resultTitle = draftResult?.title || taskResult?.title || modeMeta[form.mode].label
   const generatedAt = formatGeneratedAt(draftResult?.generatedAt || taskResult?.generatedAt)
 
@@ -134,7 +241,9 @@ export function AssistantPage() {
     setDraftResult(null)
     setTaskResult(null)
     setEditableDraft('')
+    setStreamingDraft('')
     setError('')
+    setStreamStatus('')
   }
 
   const selectMode = (mode: AssistantMode) => {
@@ -149,6 +258,7 @@ export function AssistantPage() {
     event.preventDefault()
     setCopySuccess('')
     setError('')
+    setStreamStatus('')
     if ((form.mode === 'weekly_report' || form.mode === 'risk_summary') && !form.projectId) {
       setError('请选择项目')
       return
@@ -159,36 +269,50 @@ export function AssistantPage() {
       setError('时间格式不正确')
       return
     }
+    setDraftResult(null)
+    setTaskResult(null)
+    setEditableDraft('')
+    setStreamingDraft('')
+    setDraftView('preview')
     try {
       setSubmitting(true)
+      setStreamStatus('正在提交 AI 助理请求')
       if (form.mode === 'task_breakdown') {
-        const response = await api.post<AITaskBreakdownResponse>('/ai/task-breakdown', {
+        const result = await postAIStream<AITaskBreakdownResponse>('/ai/task-breakdown', {
           projectId: form.projectId ? Number(form.projectId) : 0,
           title: form.title,
           description: form.description
-        })
-        setTaskResult(response.data)
+        }, setStreamStatus)
+        setTaskResult(result)
         setDraftResult(null)
         setEditableDraft('')
         return
       }
       const path = form.mode === 'weekly_report' ? '/ai/project-weekly-report' : '/ai/project-risk-summary'
-      const response = await api.post<AIDraftResponse>(path, {
+      let nextDraft = ''
+      const result = await postAIStream<AIDraftResponse>(path, {
         projectId: Number(form.projectId),
         weekStart,
         weekEnd
+      }, setStreamStatus, (text) => {
+        nextDraft += text
+        setStreamingDraft(nextDraft)
       })
-      setDraftResult(response.data)
+      setDraftResult(result)
       setTaskResult(null)
-      setEditableDraft(response.data.draft || '')
+      setEditableDraft(result.draft || '')
+      setStreamingDraft('')
       setDraftView('preview')
     } catch (submitError) {
-      setError(readApiError(submitError, 'AI 助理生成失败'))
+      const isAbort = submitError instanceof DOMException && submitError.name === 'AbortError'
+      setError(isAbort ? 'AI 助理生成超时，请稍后重试' : readApiError(submitError, 'AI 助理生成失败'))
       setDraftResult(null)
       setTaskResult(null)
       setEditableDraft('')
+      setStreamingDraft('')
     } finally {
       setSubmitting(false)
+      setStreamStatus('')
     }
   }
 
@@ -308,6 +432,11 @@ export function AssistantPage() {
               重置
             </button>
           </div>
+          {submitting && streamStatus && (
+            <p className="assistant-stream-status">
+              <Sparkles size={13} /> {streamStatus}
+            </p>
+          )}
           {error && <p className="error assistant-error">{error}</p>}
         </form>
 
@@ -351,17 +480,17 @@ export function AssistantPage() {
             </div>
             {copySuccess && <p className={copySuccess === '复制失败' ? 'error' : 'success'}>{copySuccess}</p>}
 
-            {draftResult ? (
+            {hasDraftOutput ? (
               <div className="assistant-draft">
-                {highlights.length > 0 && (
+                {draftResult && highlights.length > 0 && (
                   <div className="assistant-highlight-grid">
                     {highlights.map((item) => (
                       <span key={item} className="assistant-highlight">{item}</span>
                     ))}
                   </div>
                 )}
-                {draftView === 'preview' ? (
-                  <MarkdownView content={editableDraft} className="assistant-draft-preview" />
+                {draftView === 'preview' || !draftResult ? (
+                  <MarkdownView content={visibleDraft} className="assistant-draft-preview" />
                 ) : (
                   <textarea
                     className="assistant-draft-editor"
@@ -369,7 +498,7 @@ export function AssistantPage() {
                     onChange={(event) => setEditableDraft(event.target.value)}
                   />
                 )}
-                {recommendations.length > 0 && (
+                {draftResult && recommendations.length > 0 && (
                   <div className="assistant-reco">
                     <div className="assistant-section-label"><Lightbulb size={15} /> 建议动作</div>
                     <ul>

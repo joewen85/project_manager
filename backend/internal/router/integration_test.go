@@ -3,6 +3,7 @@ package router
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"project-manager/backend/internal/ai"
 	"project-manager/backend/internal/config"
 	"project-manager/backend/internal/database"
 	"project-manager/backend/internal/handler"
@@ -137,6 +139,21 @@ type multipartUploadFile struct {
 	FileName     string
 	RelativePath string
 	Content      []byte
+}
+
+type streamingAIClient struct{}
+
+func (streamingAIClient) Chat(context.Context, []ai.Message) (string, error) {
+	return "同步模型正文", nil
+}
+
+func (streamingAIClient) ChatStream(_ context.Context, _ []ai.Message, onDelta func(string) error) (string, error) {
+	for _, delta := range []string{"流", "式", "正文"} {
+		if err := onDelta(delta); err != nil {
+			return "", err
+		}
+	}
+	return "流式正文", nil
 }
 
 func requestMultipartFiles(t *testing.T, method, url, token, fieldName string, files []multipartUploadFile) (*http.Response, map[string]any) {
@@ -1473,6 +1490,32 @@ func TestAIAssistantPermissionsScopeAndReadOnlyDrafts(t *testing.T) {
 		t.Fatalf("weekly draft should include traceable source refs, got: %v", weeklyBody["sourceRefs"])
 	}
 
+	streamPayload, _ := json.Marshal(map[string]any{
+		"projectId": projectID,
+		"weekStart": "2026-01-01T00:00:00Z",
+		"weekEnd":   "2026-12-31T23:59:59Z",
+	})
+	streamReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/ai/project-weekly-report/stream", bytes.NewReader(streamPayload))
+	streamReq.Header.Set("Authorization", "Bearer "+fullToken)
+	streamReq.Header.Set("Content-Type", "application/json")
+	streamReq.Header.Set("Accept", "text/event-stream")
+	streamResp, err := http.DefaultClient.Do(streamReq)
+	if err != nil {
+		t.Fatalf("weekly ai stream request failed: %v", err)
+	}
+	streamRaw, _ := io.ReadAll(streamResp.Body)
+	streamResp.Body.Close()
+	streamText := string(streamRaw)
+	if streamResp.StatusCode != http.StatusOK {
+		t.Fatalf("weekly ai stream expected 200 got %d, body=%s", streamResp.StatusCode, streamText)
+	}
+	if !strings.Contains(streamResp.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("weekly ai stream should use text/event-stream, got %q", streamResp.Header.Get("Content-Type"))
+	}
+	if !strings.Contains(streamText, "event: status") || !strings.Contains(streamText, "event: result") || !strings.Contains(streamText, `"mode":"weekly_report"`) {
+		t.Fatalf("weekly ai stream should include status and result events, got: %s", streamText)
+	}
+
 	riskResp, riskBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/ai/project-risk-summary", fullToken, map[string]any{
 		"projectId": projectID,
 	})
@@ -1509,6 +1552,54 @@ func TestAIAssistantPermissionsScopeAndReadOnlyDrafts(t *testing.T) {
 	}
 	if taskListBeforeBody["total"].(float64) != taskListAfterBody["total"].(float64) {
 		t.Fatalf("task breakdown must not persist tasks, before=%v after=%v", taskListBeforeBody["total"], taskListAfterBody["total"])
+	}
+}
+
+func TestAIAssistantStreamEmitsModelDeltas(t *testing.T) {
+	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
+		h.AIClient = streamingAIClient{}
+	})
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", token, map[string]any{
+		"code":        "AI-STREAM",
+		"name":        "AI Stream Project",
+		"description": "streaming test",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create stream project expected 201 got %d, body=%v", projectResp.StatusCode, projectBody)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	payload, _ := json.Marshal(map[string]any{
+		"projectId": projectID,
+		"weekStart": "2026-01-01T00:00:00Z",
+		"weekEnd":   "2026-12-31T23:59:59Z",
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/ai/project-weekly-report/stream", bytes.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("weekly ai stream request failed: %v", err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	text := string(raw)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("weekly ai stream expected 200 got %d, body=%s", resp.StatusCode, text)
+	}
+	if !strings.Contains(text, "event: delta") || !strings.Contains(text, `"text":"流"`) {
+		t.Fatalf("weekly ai stream should include model delta events, got: %s", text)
+	}
+	if !strings.Contains(text, `"draft":"流式正文"`) {
+		t.Fatalf("weekly ai stream result should use streamed model output, got: %s", text)
+	}
+	if deltaIndex, resultIndex := strings.Index(text, "event: delta"), strings.Index(text, "event: result"); deltaIndex < 0 || resultIndex < 0 || deltaIndex > resultIndex {
+		t.Fatalf("delta events should arrive before result event, got: %s", text)
 	}
 }
 

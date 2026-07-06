@@ -89,18 +89,32 @@ func aiParseSuggestedTasks(raw string, sources []aiSourceRef) ([]aiSuggestedTask
 // output. The context data is passed as a user message and the system prompt
 // instructs the model to treat it strictly as data — comments and register
 // entries are user-writable and must never be honoured as instructions.
-func (h *Handler) aiComposeNarrative(ctx context.Context, systemPrompt, contextData, fallback string) string {
+func (h *Handler) aiComposeNarrativeResult(ctx context.Context, systemPrompt, contextData, fallback string) (string, bool) {
 	if h.AIClient == nil {
-		return fallback
+		return fallback, false
 	}
 	out, err := h.AIClient.Chat(ctx, []ai.Message{
 		{Role: ai.RoleSystem, Content: systemPrompt},
 		{Role: ai.RoleUser, Content: contextData},
 	})
 	if err != nil || strings.TrimSpace(out) == "" {
-		return fallback
+		return fallback, false
 	}
-	return out
+	return out, true
+}
+
+func (h *Handler) aiComposeNarrativeStreamResult(ctx context.Context, systemPrompt, contextData, fallback string, onDelta func(string) error) (string, bool) {
+	if h.AIClient == nil {
+		return fallback, false
+	}
+	out, err := h.AIClient.ChatStream(ctx, []ai.Message{
+		{Role: ai.RoleSystem, Content: systemPrompt},
+		{Role: ai.RoleUser, Content: contextData},
+	}, onDelta)
+	if err != nil || strings.TrimSpace(out) == "" {
+		return fallback, false
+	}
+	return out, true
 }
 
 type aiProjectRequest struct {
@@ -151,6 +165,69 @@ type aiTaskBreakdownResponse struct {
 	SourceRefs           []aiSourceRef     `json:"sourceRefs"`
 	RequiresConfirmation bool              `json:"requiresConfirmation"`
 	GeneratedAt          time.Time         `json:"generatedAt"`
+}
+
+type aiDraftGenerationPlan struct {
+	mode            string
+	title           string
+	systemPrompt    string
+	contextData     string
+	fallbackDraft   string
+	highlights      []string
+	recommendations []string
+	sourceRefs      []aiSourceRef
+}
+
+type aiTaskBreakdownGenerationPlan struct {
+	title         string
+	systemPrompt  string
+	contextData   string
+	fallbackTasks []aiSuggestedTask
+	sourceRefs    []aiSourceRef
+}
+
+type aiAssistantStreamStatus struct {
+	Message string `json:"message"`
+}
+
+type aiAssistantStreamDelta struct {
+	Text string `json:"text"`
+}
+
+type aiAssistantStreamError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type aiAssistantSSEWriter struct {
+	c       *gin.Context
+	flusher http.Flusher
+}
+
+func newAIAssistantSSEWriter(c *gin.Context) (*aiAssistantSSEWriter, bool) {
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		respondError(c, http.StatusInternalServerError, "SSE_UNSUPPORTED", "当前连接不支持流式响应")
+		return nil, false
+	}
+	header := c.Writer.Header()
+	header.Set("Content-Type", "text/event-stream")
+	header.Set("Cache-Control", "no-cache")
+	header.Set("Connection", "keep-alive")
+	header.Set("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+	flusher.Flush()
+	return &aiAssistantSSEWriter{c: c, flusher: flusher}, true
+}
+
+func (w *aiAssistantSSEWriter) send(event string, payload any) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		raw, _ = json.Marshal(aiAssistantStreamError{Code: "SSE_ENCODE_FAILED", Message: err.Error()})
+		event = "error"
+	}
+	fmt.Fprintf(w.c.Writer, "event: %s\ndata: %s\n\n", event, raw)
+	w.flusher.Flush()
 }
 
 func aiProjectSource(project model.Project) aiSourceRef {
@@ -369,25 +446,25 @@ func (h *Handler) aiProjectRegisters(c *gin.Context, projectID uint) ([]model.Pr
 	return items, err
 }
 
-func (h *Handler) AIProjectWeeklyReport(c *gin.Context) {
+func (h *Handler) buildAIProjectWeeklyReport(c *gin.Context) (aiDraftGenerationPlan, bool) {
 	var req aiProjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondValidationError(c, err)
-		return
+		return aiDraftGenerationPlan{}, false
 	}
 	weekStart, weekEnd, ok := aiWeekRange(req.WeekStart, req.WeekEnd)
 	if !ok {
 		respondError(c, http.StatusBadRequest, "INVALID_AI_WEEK_RANGE", "weekStart/weekEnd 必须是有效 RFC3339 时间，且结束时间不能早于开始时间")
-		return
+		return aiDraftGenerationPlan{}, false
 	}
 	project, ok := h.aiProject(c, req.ProjectID)
 	if !ok {
-		return
+		return aiDraftGenerationPlan{}, false
 	}
 	tasks, err := h.aiVisibleProjectTasks(c, project.ID)
 	if err != nil {
 		respondDBError(c, http.StatusInternalServerError, "QUERY_AI_TASKS_FAILED", err)
-		return
+		return aiDraftGenerationPlan{}, false
 	}
 	taskIDs := aiTaskIDs(tasks)
 	activities := []model.TaskActivity{}
@@ -396,18 +473,18 @@ func (h *Handler) AIProjectWeeklyReport(c *gin.Context) {
 		activities, err = h.aiRecentActivities(taskIDs, weekStart, weekEnd)
 		if err != nil {
 			respondDBError(c, http.StatusInternalServerError, "QUERY_AI_ACTIVITIES_FAILED", err)
-			return
+			return aiDraftGenerationPlan{}, false
 		}
 		comments, err = h.aiRecentComments(taskIDs, weekStart, weekEnd)
 		if err != nil {
 			respondDBError(c, http.StatusInternalServerError, "QUERY_AI_COMMENTS_FAILED", err)
-			return
+			return aiDraftGenerationPlan{}, false
 		}
 	}
 	registers, err := h.aiProjectRegisters(c, project.ID)
 	if err != nil {
 		respondDBError(c, http.StatusInternalServerError, "QUERY_AI_REGISTERS_FAILED", err)
-		return
+		return aiDraftGenerationPlan{}, false
 	}
 
 	statusCounts := aiTaskStatusCounts(tasks)
@@ -511,39 +588,110 @@ func (h *Handler) AIProjectWeeklyReport(c *gin.Context) {
 
 	fallbackDraft := builder.String()
 	contextData := "<context>\n" + fallbackDraft + "\n</context>"
-	draft := h.aiComposeNarrative(c.Request.Context(), h.aiPrompts.weeklyReport, contextData, fallbackDraft)
-
-	c.JSON(http.StatusOK, aiDraftResponse{
-		Mode:                 "weekly_report",
-		Title:                "项目周报草稿",
-		Draft:                draft,
-		Highlights:           highlights,
-		Recommendations:      recommendations,
-		SourceRefs:           sources,
-		RequiresConfirmation: true,
-		GeneratedAt:          time.Now(),
-	})
+	return aiDraftGenerationPlan{
+		mode:            "weekly_report",
+		title:           "项目周报草稿",
+		systemPrompt:    h.aiPrompts.weeklyReport,
+		contextData:     contextData,
+		fallbackDraft:   fallbackDraft,
+		highlights:      highlights,
+		recommendations: recommendations,
+		sourceRefs:      sources,
+	}, true
 }
 
-func (h *Handler) AIProjectRiskSummary(c *gin.Context) {
+func (h *Handler) finishAIDraft(ctx context.Context, plan aiDraftGenerationPlan) (aiDraftResponse, bool) {
+	draft, modelUsed := h.aiComposeNarrativeResult(ctx, plan.systemPrompt, plan.contextData, plan.fallbackDraft)
+	return aiDraftResponse{
+		Mode:                 plan.mode,
+		Title:                plan.title,
+		Draft:                draft,
+		Highlights:           plan.highlights,
+		Recommendations:      plan.recommendations,
+		SourceRefs:           plan.sourceRefs,
+		RequiresConfirmation: true,
+		GeneratedAt:          time.Now(),
+	}, modelUsed
+}
+
+func (h *Handler) streamAIDraft(c *gin.Context, plan aiDraftGenerationPlan) {
+	writer, ok := newAIAssistantSSEWriter(c)
+	if !ok {
+		return
+	}
+	writer.send("status", aiAssistantStreamStatus{Message: "已读取项目上下文"})
+	draft := plan.fallbackDraft
+	modelUsed := false
+	if h.AIClient == nil {
+		writer.send("status", aiAssistantStreamStatus{Message: "AI 网关未配置，使用内置草稿"})
+	} else {
+		writer.send("status", aiAssistantStreamStatus{Message: "正在调用 AI 模型"})
+		draft, modelUsed = h.aiComposeNarrativeStreamResult(
+			c.Request.Context(),
+			plan.systemPrompt,
+			plan.contextData,
+			plan.fallbackDraft,
+			func(delta string) error {
+				if delta != "" {
+					writer.send("delta", aiAssistantStreamDelta{Text: delta})
+				}
+				return nil
+			},
+		)
+	}
+	if h.AIClient != nil && !modelUsed {
+		writer.send("status", aiAssistantStreamStatus{Message: "AI 模型暂不可用，已回退内置草稿"})
+	}
+	result := aiDraftResponse{
+		Mode:                 plan.mode,
+		Title:                plan.title,
+		Draft:                draft,
+		Highlights:           plan.highlights,
+		Recommendations:      plan.recommendations,
+		SourceRefs:           plan.sourceRefs,
+		RequiresConfirmation: true,
+		GeneratedAt:          time.Now(),
+	}
+	writer.send("result", result)
+	writer.send("done", aiAssistantStreamStatus{Message: "生成完成"})
+}
+
+func (h *Handler) AIProjectWeeklyReport(c *gin.Context) {
+	plan, ok := h.buildAIProjectWeeklyReport(c)
+	if !ok {
+		return
+	}
+	result, _ := h.finishAIDraft(c.Request.Context(), plan)
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *Handler) AIProjectWeeklyReportStream(c *gin.Context) {
+	plan, ok := h.buildAIProjectWeeklyReport(c)
+	if !ok {
+		return
+	}
+	h.streamAIDraft(c, plan)
+}
+
+func (h *Handler) buildAIProjectRiskSummary(c *gin.Context) (aiDraftGenerationPlan, bool) {
 	var req aiProjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondValidationError(c, err)
-		return
+		return aiDraftGenerationPlan{}, false
 	}
 	project, ok := h.aiProject(c, req.ProjectID)
 	if !ok {
-		return
+		return aiDraftGenerationPlan{}, false
 	}
 	tasks, err := h.aiVisibleProjectTasks(c, project.ID)
 	if err != nil {
 		respondDBError(c, http.StatusInternalServerError, "QUERY_AI_TASKS_FAILED", err)
-		return
+		return aiDraftGenerationPlan{}, false
 	}
 	registers, err := h.aiProjectRegisters(c, project.ID)
 	if err != nil {
 		respondDBError(c, http.StatusInternalServerError, "QUERY_AI_REGISTERS_FAILED", err)
-		return
+		return aiDraftGenerationPlan{}, false
 	}
 
 	now := time.Now()
@@ -579,7 +727,7 @@ func (h *Handler) AIProjectRiskSummary(c *gin.Context) {
 		criticalCounts, err := h.criticalOverdueByVisibleProject(c, now)
 		if err != nil {
 			respondDBError(c, http.StatusInternalServerError, "QUERY_AI_CRITICAL_PATH_FAILED", err)
-			return
+			return aiDraftGenerationPlan{}, false
 		}
 		acc.criticalOverdueTasks = criticalCounts[project.ID]
 	}
@@ -650,25 +798,40 @@ func (h *Handler) AIProjectRiskSummary(c *gin.Context) {
 
 	fallbackDraft := builder.String()
 	contextData := "<context>\n" + fallbackDraft + "\n</context>"
-	draft := h.aiComposeNarrative(c.Request.Context(), h.aiPrompts.riskSummary, contextData, fallbackDraft)
-
-	c.JSON(http.StatusOK, aiDraftResponse{
-		Mode:                 "risk_summary",
-		Title:                "AI 风险摘要",
-		Draft:                draft,
-		Highlights:           health.Reasons,
-		Recommendations:      recommendations,
-		SourceRefs:           sources,
-		RequiresConfirmation: true,
-		GeneratedAt:          time.Now(),
-	})
+	return aiDraftGenerationPlan{
+		mode:            "risk_summary",
+		title:           "AI 风险摘要",
+		systemPrompt:    h.aiPrompts.riskSummary,
+		contextData:     contextData,
+		fallbackDraft:   fallbackDraft,
+		highlights:      health.Reasons,
+		recommendations: recommendations,
+		sourceRefs:      sources,
+	}, true
 }
 
-func (h *Handler) AITaskBreakdown(c *gin.Context) {
+func (h *Handler) AIProjectRiskSummary(c *gin.Context) {
+	plan, ok := h.buildAIProjectRiskSummary(c)
+	if !ok {
+		return
+	}
+	result, _ := h.finishAIDraft(c.Request.Context(), plan)
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *Handler) AIProjectRiskSummaryStream(c *gin.Context) {
+	plan, ok := h.buildAIProjectRiskSummary(c)
+	if !ok {
+		return
+	}
+	h.streamAIDraft(c, plan)
+}
+
+func (h *Handler) buildAITaskBreakdown(c *gin.Context) (aiTaskBreakdownGenerationPlan, bool) {
 	var req aiTaskBreakdownRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondValidationError(c, err)
-		return
+		return aiTaskBreakdownGenerationPlan{}, false
 	}
 	title := strings.TrimSpace(req.Title)
 	description := strings.TrimSpace(req.Description)
@@ -679,7 +842,7 @@ func (h *Handler) AITaskBreakdown(c *gin.Context) {
 		var ok bool
 		project, ok = h.aiProject(c, req.ProjectID)
 		if !ok {
-			return
+			return aiTaskBreakdownGenerationPlan{}, false
 		}
 		if title == "" {
 			title = project.Name
@@ -691,7 +854,7 @@ func (h *Handler) AITaskBreakdown(c *gin.Context) {
 	}
 	if title == "" && description == "" {
 		respondError(c, http.StatusBadRequest, "AI_TASK_BREAKDOWN_INPUT_REQUIRED", "请提供项目或任务拆解描述")
-		return
+		return aiTaskBreakdownGenerationPlan{}, false
 	}
 
 	subject := title
@@ -746,37 +909,114 @@ func (h *Handler) AITaskBreakdown(c *gin.Context) {
 		})
 	}
 
+	var ctxBuilder strings.Builder
+	ctxBuilder.WriteString("标题：" + subject + "\n")
+	if description != "" {
+		ctxBuilder.WriteString("描述：" + description + "\n")
+	}
+	if req.ProjectID > 0 {
+		ctxBuilder.WriteString("所属项目：" + project.Code + " - " + project.Name + "\n")
+	}
+	contextData := "<context>\n" + ctxBuilder.String() + "</context>"
+
+	return aiTaskBreakdownGenerationPlan{
+		title:         "AI 任务拆解建议",
+		systemPrompt:  h.aiPrompts.taskBreakdown,
+		contextData:   contextData,
+		fallbackTasks: tasks,
+		sourceRefs:    sources,
+	}, true
+}
+
+func (h *Handler) finishAITaskBreakdown(ctx context.Context, plan aiTaskBreakdownGenerationPlan) (aiTaskBreakdownResponse, bool) {
+	tasks := plan.fallbackTasks
+	modelUsed := false
 	if h.AIClient != nil {
-		var ctxBuilder strings.Builder
-		ctxBuilder.WriteString("标题：" + subject + "\n")
-		if description != "" {
-			ctxBuilder.WriteString("描述：" + description + "\n")
-		}
-		if req.ProjectID > 0 {
-			ctxBuilder.WriteString("所属项目：" + project.Code + " - " + project.Name + "\n")
-		}
-		contextData := "<context>\n" + ctxBuilder.String() + "</context>"
-		if reply, err := h.AIClient.Chat(c.Request.Context(), []ai.Message{
-			{Role: ai.RoleSystem, Content: h.aiPrompts.taskBreakdown},
-			{Role: ai.RoleUser, Content: contextData},
+		if reply, err := h.AIClient.Chat(ctx, []ai.Message{
+			{Role: ai.RoleSystem, Content: plan.systemPrompt},
+			{Role: ai.RoleUser, Content: plan.contextData},
 		}); err == nil {
-			if parsed, ok := aiParseSuggestedTasks(reply, sources); ok {
+			if parsed, ok := aiParseSuggestedTasks(reply, plan.sourceRefs); ok {
 				tasks = parsed
+				modelUsed = true
 			}
 		}
 	}
-
 	sort.SliceStable(tasks, func(i, j int) bool {
 		return tasks[i].RelativeStartDay < tasks[j].RelativeStartDay
 	})
 	summary := "已生成 " + strconv.Itoa(len(tasks)) + " 条任务草稿，需项目经理确认后再创建真实任务。"
-	c.JSON(http.StatusOK, aiTaskBreakdownResponse{
+	return aiTaskBreakdownResponse{
 		Mode:                 "task_breakdown",
-		Title:                "AI 任务拆解建议",
+		Title:                plan.title,
 		Summary:              summary,
 		Tasks:                tasks,
-		SourceRefs:           sources,
+		SourceRefs:           plan.sourceRefs,
 		RequiresConfirmation: true,
 		GeneratedAt:          time.Now(),
+	}, modelUsed
+}
+
+func (h *Handler) streamAITaskBreakdown(c *gin.Context, plan aiTaskBreakdownGenerationPlan) {
+	writer, ok := newAIAssistantSSEWriter(c)
+	if !ok {
+		return
+	}
+	writer.send("status", aiAssistantStreamStatus{Message: "已读取任务拆解上下文"})
+	tasks := plan.fallbackTasks
+	modelUsed := false
+	if h.AIClient == nil {
+		writer.send("status", aiAssistantStreamStatus{Message: "AI 网关未配置，使用内置任务草稿"})
+	} else {
+		writer.send("status", aiAssistantStreamStatus{Message: "正在调用 AI 模型"})
+		if reply, err := h.AIClient.ChatStream(c.Request.Context(), []ai.Message{
+			{Role: ai.RoleSystem, Content: plan.systemPrompt},
+			{Role: ai.RoleUser, Content: plan.contextData},
+		}, func(delta string) error {
+			if delta != "" {
+				writer.send("delta", aiAssistantStreamDelta{Text: delta})
+			}
+			return nil
+		}); err == nil {
+			if parsed, ok := aiParseSuggestedTasks(reply, plan.sourceRefs); ok {
+				tasks = parsed
+				modelUsed = true
+			}
+		}
+	}
+	if h.AIClient != nil && !modelUsed {
+		writer.send("status", aiAssistantStreamStatus{Message: "AI 模型暂不可用，已回退内置任务草稿"})
+	}
+	sort.SliceStable(tasks, func(i, j int) bool {
+		return tasks[i].RelativeStartDay < tasks[j].RelativeStartDay
 	})
+	summary := "已生成 " + strconv.Itoa(len(tasks)) + " 条任务草稿，需项目经理确认后再创建真实任务。"
+	result := aiTaskBreakdownResponse{
+		Mode:                 "task_breakdown",
+		Title:                plan.title,
+		Summary:              summary,
+		Tasks:                tasks,
+		SourceRefs:           plan.sourceRefs,
+		RequiresConfirmation: true,
+		GeneratedAt:          time.Now(),
+	}
+	writer.send("result", result)
+	writer.send("done", aiAssistantStreamStatus{Message: "生成完成"})
+}
+
+func (h *Handler) AITaskBreakdown(c *gin.Context) {
+	plan, ok := h.buildAITaskBreakdown(c)
+	if !ok {
+		return
+	}
+	result, _ := h.finishAITaskBreakdown(c.Request.Context(), plan)
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *Handler) AITaskBreakdownStream(c *gin.Context) {
+	plan, ok := h.buildAITaskBreakdown(c)
+	if !ok {
+		return
+	}
+	h.streamAITaskBreakdown(c, plan)
 }

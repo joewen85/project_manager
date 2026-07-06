@@ -38,6 +38,11 @@ type Client interface {
 	// It returns an error on transport failure, non-2xx responses, or an empty
 	// completion so callers can fall back deterministically.
 	Chat(ctx context.Context, messages []Message) (string, error)
+
+	// ChatStream sends the messages to the gateway with streaming enabled,
+	// calling onDelta for each assistant text delta. It also returns the full
+	// assistant reply after the stream completes.
+	ChatStream(ctx context.Context, messages []Message, onDelta func(string) error) (string, error)
 }
 
 // New builds a Client from configuration. It returns nil when the gateway is

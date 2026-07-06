@@ -58,6 +58,8 @@ services:
         NODE_BUILDER_IMAGE: ${NODE_BUILDER_IMAGE:-registry.cn-guangzhou.aliyuncs.com/joe/node:24-alpine}
         NGINX_IMAGE: ${NGINX_IMAGE:-registry.cn-guangzhou.aliyuncs.com/joe/nginx:alpine}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        VITE_AI_ASSISTANT_TIMEOUT_MS: ${VITE_AI_ASSISTANT_TIMEOUT_MS:-35000}
     container_name: pm-frontend
     depends_on:
       - backend
