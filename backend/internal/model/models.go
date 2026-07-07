@@ -352,6 +352,7 @@ type ProjectRegister struct {
 	DecisionDetail string                     `gorm:"type:text" json:"decisionDetail"`
 	Background     string                     `gorm:"type:text" json:"background"`
 	ImpactScope    string                     `gorm:"type:text" json:"impactScope"`
+	Images         []Attachment               `gorm:"serializer:json" json:"images"`
 	DueAt          *time.Time                 `gorm:"index" json:"dueAt,omitempty"`
 	OwnerID        *uint                      `gorm:"index" json:"ownerId,omitempty"`
 	Owner          *User                      `json:"owner,omitempty"`

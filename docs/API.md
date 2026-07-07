@@ -281,9 +281,10 @@ Base URL: `http://localhost:8080/api/v1`
 
 ### POST `/project-registers`
 - 权限: `registers.create`
-- 请求体: `{ type, projectId, taskId?, title, description?, status?, severity?, probability?, impact?, source?, responsePlan?, resolution?, decisionDetail?, background?, impactScope?, dueAt?, ownerId?, participantIds? }`
+- 请求体: `{ type, projectId, taskId?, title, description?, status?, severity?, probability?, impact?, source?, responsePlan?, resolution?, decisionDetail?, background?, impactScope?, images?, dueAt?, ownerId?, participantIds? }`
 - `probability`: `low|medium|high`
 - `impact`: `low|medium|high|critical`
+- `images`: 附件数组，必须来自上传目录、`mimeType` 为 `image/*`，单张不超过 50M
 - 规则: `projectId` 必须当前用户可见；`taskId` 如填写，任务必须当前用户可见且属于同项目；负责人和参与人必须是有效用户；`dueAt` 如填写必须是 RFC3339；状态默认 `open`，等级默认 `medium`
 
 ### PUT `/project-registers/:id`

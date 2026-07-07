@@ -716,6 +716,7 @@ export interface ProjectRegister {
   decisionDetail?: string
   background?: string
   impactScope?: string
+  images?: UploadAttachment[]
   dueAt?: string
   ownerId?: number
   owner?: User

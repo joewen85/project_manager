@@ -60,6 +60,47 @@ func setupTestRouterWithHandler(t *testing.T, configure func(*handler.Handler)) 
 	return httptest.NewServer(engine)
 }
 
+func installRestrictiveRegisterActivityFK(t *testing.T, h *handler.Handler) {
+	t.Helper()
+	sqlDB, err := h.DB.DB()
+	if err != nil {
+		t.Fatalf("get sql db failed: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	if err := h.DB.Exec("PRAGMA foreign_keys = OFF").Error; err != nil {
+		t.Fatalf("disable sqlite foreign keys failed: %v", err)
+	}
+	if err := h.DB.Exec("DROP TABLE IF EXISTS project_register_activities").Error; err != nil {
+		t.Fatalf("drop project_register_activities failed: %v", err)
+	}
+	if err := h.DB.Exec(`
+CREATE TABLE project_register_activities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at DATETIME NULL,
+  updated_at DATETIME NULL,
+  register_id INTEGER NOT NULL,
+  actor_id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  detail TEXT,
+  CONSTRAINT fk_project_registers_activities FOREIGN KEY (register_id) REFERENCES project_registers(id)
+)`).Error; err != nil {
+		t.Fatalf("create restrictive project_register_activities failed: %v", err)
+	}
+	if err := h.DB.Exec("CREATE INDEX idx_project_register_activities_register_id ON project_register_activities(register_id)").Error; err != nil {
+		t.Fatalf("create activity register index failed: %v", err)
+	}
+	if err := h.DB.Exec("CREATE INDEX idx_project_register_activities_actor_id ON project_register_activities(actor_id)").Error; err != nil {
+		t.Fatalf("create activity actor index failed: %v", err)
+	}
+	if err := h.DB.Exec("CREATE INDEX idx_project_register_activities_type ON project_register_activities(type)").Error; err != nil {
+		t.Fatalf("create activity type index failed: %v", err)
+	}
+	if err := h.DB.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
+		t.Fatalf("enable sqlite foreign keys failed: %v", err)
+	}
+}
+
 func loginAndToken(t *testing.T, serverURL string) string {
 	t.Helper()
 	payload := map[string]string{"username": "admin", "password": "admin123"}
@@ -2041,6 +2082,15 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 	}
 	userToken := loginBody["token"].(string)
 
+	registerImages := []map[string]any{
+		{
+			"fileName":     "delay-risk.png",
+			"filePath":     "/static/uploads/2026/07/07/delay-risk.png",
+			"relativePath": "delay-risk.png",
+			"fileSize":     1024,
+			"mimeType":     "image/png",
+		},
+	}
 	riskPayload := map[string]any{
 		"type":           "risk",
 		"projectId":      visibleProjectID,
@@ -2053,6 +2103,7 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 		"source":         "周会",
 		"responsePlan":   "准备替代供应商",
 		"dueAt":          "2026-07-15T00:00:00Z",
+		"images":         registerImages,
 		"ownerId":        userID,
 		"participantIds": []uint{userID},
 	}
@@ -2061,6 +2112,45 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 		t.Fatalf("create risk register expected 201 got %d, body=%v", riskResp.StatusCode, riskBody)
 	}
 	riskID := int(riskBody["id"].(float64))
+	riskImages, _ := riskBody["images"].([]any)
+	if len(riskImages) != 1 {
+		t.Fatalf("risk register images should be saved got %v", riskBody["images"])
+	}
+
+	invalidImageResp, invalidImageBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-registers", userToken, map[string]any{
+		"type":      "risk",
+		"projectId": visibleProjectID,
+		"title":     "非图片附件风险",
+		"status":    "open",
+		"severity":  "medium",
+		"images": []map[string]any{{
+			"fileName":     "not-image.pdf",
+			"filePath":     "/static/uploads/2026/07/07/not-image.pdf",
+			"relativePath": "not-image.pdf",
+			"fileSize":     2048,
+			"mimeType":     "application/pdf",
+		}},
+	})
+	if invalidImageResp.StatusCode != http.StatusBadRequest || invalidImageBody["code"] != "INVALID_REGISTER_IMAGES" {
+		t.Fatalf("non-image register image expected 400 INVALID_REGISTER_IMAGES got %d, body=%v", invalidImageResp.StatusCode, invalidImageBody)
+	}
+	oversizeImageResp, oversizeImageBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-registers", userToken, map[string]any{
+		"type":      "risk",
+		"projectId": visibleProjectID,
+		"title":     "超大图片风险",
+		"status":    "open",
+		"severity":  "medium",
+		"images": []map[string]any{{
+			"fileName":     "oversize.png",
+			"filePath":     "/static/uploads/2026/07/07/oversize.png",
+			"relativePath": "oversize.png",
+			"fileSize":     50*1024*1024 + 1,
+			"mimeType":     "image/png",
+		}},
+	})
+	if oversizeImageResp.StatusCode != http.StatusBadRequest || oversizeImageBody["code"] != "INVALID_REGISTER_IMAGES" {
+		t.Fatalf("oversize register image expected 400 INVALID_REGISTER_IMAGES got %d, body=%v", oversizeImageResp.StatusCode, oversizeImageBody)
+	}
 
 	issueResp, issueBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-registers", userToken, map[string]any{
 		"type":        "issue",
@@ -2122,6 +2212,7 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 		"source":         "周会",
 		"responsePlan":   "启动替代供应商并每日跟进",
 		"dueAt":          "2026-07-15T00:00:00Z",
+		"images":         registerImages,
 		"ownerId":        userID,
 		"participantIds": []uint{userID},
 	}
@@ -2131,6 +2222,10 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 	}
 	if updateBody["severity"] != "critical" || updateBody["title"] != "供应商交付延期风险已升级" {
 		t.Fatalf("updated register should return changed fields got %v", updateBody)
+	}
+	updatedImages, _ := updateBody["images"].([]any)
+	if len(updatedImages) != 1 {
+		t.Fatalf("updated register should keep images got %v", updateBody["images"])
 	}
 
 	activityResp, activityBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/project-registers/"+strconv.Itoa(riskID)+"/activities", userToken, nil)
@@ -2193,6 +2288,50 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 	detailAfterDeleteResp, _ := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/project-registers/"+strconv.Itoa(riskID), userToken, nil)
 	if detailAfterDeleteResp.StatusCode != http.StatusNotFound {
 		t.Fatalf("deleted register detail expected 404 got %d", detailAfterDeleteResp.StatusCode)
+	}
+}
+
+func TestDeleteProjectRegisterRemovesActivitiesWithoutCascadeFK(t *testing.T) {
+	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
+		installRestrictiveRegisterActivityFK(t, h)
+	})
+	defer ts.Close()
+
+	adminToken := loginAndToken(t, ts.URL)
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", adminToken, map[string]any{
+		"code":        "REGISTER-DELETE-P1",
+		"name":        "Register Delete",
+		"description": "delete register project",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create register delete project expected 201 got %d, body=%v", projectResp.StatusCode, projectBody)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	registerResp, registerBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-registers", adminToken, map[string]any{
+		"type":      "risk",
+		"projectId": projectID,
+		"title":     "可删除风险",
+		"status":    "open",
+		"severity":  "medium",
+	})
+	if registerResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create deletable register expected 201 got %d, body=%v", registerResp.StatusCode, registerBody)
+	}
+	registerID := int(registerBody["id"].(float64))
+
+	activityResp, activityBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/project-registers/"+strconv.Itoa(registerID)+"/activities", adminToken, nil)
+	if activityResp.StatusCode != http.StatusOK || int(activityBody["total"].(float64)) != 1 {
+		t.Fatalf("register should have one create activity got status=%d body=%v", activityResp.StatusCode, activityBody)
+	}
+
+	deleteResp, deleteBody := requestJSON(t, http.MethodDelete, ts.URL+"/api/v1/project-registers/"+strconv.Itoa(registerID), adminToken, nil)
+	if deleteResp.StatusCode != http.StatusOK {
+		t.Fatalf("delete register with restrictive activity fk expected 200 got %d, body=%v", deleteResp.StatusCode, deleteBody)
+	}
+	detailResp, _ := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/project-registers/"+strconv.Itoa(registerID), adminToken, nil)
+	if detailResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("deleted register detail expected 404 got %d", detailResp.StatusCode)
 	}
 }
 

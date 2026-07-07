@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,25 +14,28 @@ import (
 )
 
 type projectRegisterRequest struct {
-	Type           string `json:"type" binding:"required"`
-	ProjectID      uint   `json:"projectId" binding:"required"`
-	TaskID         *uint  `json:"taskId"`
-	Title          string `json:"title" binding:"required"`
-	Description    string `json:"description"`
-	Status         string `json:"status"`
-	Severity       string `json:"severity"`
-	Probability    string `json:"probability"`
-	Impact         string `json:"impact"`
-	Source         string `json:"source"`
-	ResponsePlan   string `json:"responsePlan"`
-	Resolution     string `json:"resolution"`
-	DecisionDetail string `json:"decisionDetail"`
-	Background     string `json:"background"`
-	ImpactScope    string `json:"impactScope"`
-	DueAt          string `json:"dueAt"`
-	OwnerID        *uint  `json:"ownerId"`
-	ParticipantIDs []uint `json:"participantIds"`
+	Type           string               `json:"type" binding:"required"`
+	ProjectID      uint                 `json:"projectId" binding:"required"`
+	TaskID         *uint                `json:"taskId"`
+	Title          string               `json:"title" binding:"required"`
+	Description    string               `json:"description"`
+	Status         string               `json:"status"`
+	Severity       string               `json:"severity"`
+	Probability    string               `json:"probability"`
+	Impact         string               `json:"impact"`
+	Source         string               `json:"source"`
+	ResponsePlan   string               `json:"responsePlan"`
+	Resolution     string               `json:"resolution"`
+	DecisionDetail string               `json:"decisionDetail"`
+	Background     string               `json:"background"`
+	ImpactScope    string               `json:"impactScope"`
+	DueAt          string               `json:"dueAt"`
+	Images         *[]attachmentRequest `json:"images"`
+	OwnerID        *uint                `json:"ownerId"`
+	ParticipantIDs []uint               `json:"participantIds"`
 }
+
+const maxProjectRegisterImageSize = 50 * 1024 * 1024
 
 func normalizeProjectRegisterType(value string) (model.ProjectRegisterType, bool) {
 	switch model.ProjectRegisterType(strings.TrimSpace(value)) {
@@ -118,6 +122,24 @@ func parseProjectRegisterSeverities(value string) []string {
 		}
 	}
 	return out
+}
+
+func validateProjectRegisterImages(items []attachmentRequest, publicBase string) error {
+	if err := validateAttachments(items, publicBase); err != nil {
+		return err
+	}
+	for _, item := range items {
+		if isAttachmentEmpty(item) {
+			continue
+		}
+		if item.FileSize > maxProjectRegisterImageSize {
+			return errors.New("单张图片不能大于50M")
+		}
+		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(item.MimeType)), "image/") {
+			return errors.New("登记项图片只支持图片文件")
+		}
+	}
+	return nil
 }
 
 func projectRegisterTypeLabel(value model.ProjectRegisterType) string {
@@ -284,6 +306,14 @@ func (h *Handler) normalizeProjectRegisterRequest(c *gin.Context, req projectReg
 		respondError(c, http.StatusBadRequest, "INVALID_REGISTER_DUE_AT", "截止时间必须是 RFC3339 格式")
 		return model.ProjectRegister{}, false
 	}
+	images := []attachmentRequest{}
+	if req.Images != nil {
+		images = *req.Images
+	}
+	if err := validateProjectRegisterImages(images, h.Cfg.UploadPublicBase); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_REGISTER_IMAGES", err.Error())
+		return model.ProjectRegister{}, false
+	}
 	return model.ProjectRegister{
 		Type:           registerType,
 		ProjectID:      req.ProjectID,
@@ -300,6 +330,7 @@ func (h *Handler) normalizeProjectRegisterRequest(c *gin.Context, req projectReg
 		DecisionDetail: strings.TrimSpace(req.DecisionDetail),
 		Background:     strings.TrimSpace(req.Background),
 		ImpactScope:    strings.TrimSpace(req.ImpactScope),
+		Images:         toModelAttachments(images),
 		DueAt:          dueAt,
 		OwnerID:        req.OwnerID,
 		ParticipantIDs: participantIDs,
@@ -463,6 +494,9 @@ func (h *Handler) UpdateProjectRegister(c *gin.Context) {
 	item.DecisionDetail = next.DecisionDetail
 	item.Background = next.Background
 	item.ImpactScope = next.ImpactScope
+	if req.Images != nil {
+		item.Images = next.Images
+	}
 	item.DueAt = next.DueAt
 	item.OwnerID = next.OwnerID
 	item.ParticipantIDs = next.ParticipantIDs
@@ -503,6 +537,9 @@ func (h *Handler) DeleteProjectRegister(c *gin.Context) {
 		return
 	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("register_id = ?", item.ID).Delete(&model.ProjectRegisterActivity{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Delete(item).Error; err != nil {
 			return err
 		}

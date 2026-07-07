@@ -4072,6 +4072,11 @@ components:
           type: string
         impactScope:
           type: string
+        images:
+          type: array
+          description: 登记项图片，单张不超过 50M，mimeType 必须为 image/*
+          items:
+            $ref: '#/components/schemas/Attachment'
         dueAt:
           type: string
           format: date-time
@@ -4162,6 +4167,11 @@ components:
           type: string
         impactScope:
           type: string
+        images:
+          type: array
+          description: 登记项图片，单张不超过 50M，mimeType 必须为 image/*
+          items:
+            $ref: '#/components/schemas/Attachment'
         dueAt:
           type: string
           format: date-time

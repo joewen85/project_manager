@@ -4,6 +4,8 @@ import { api, fetchData, fetchPage, hasPermission, readApiError } from '../servi
 import { DataState } from '../components/DataState'
 import { DateTimeQuickField } from '../components/DateTimeQuickField'
 import { FilterPanel } from '../components/FilterPanel'
+import { ImageAttachmentField } from '../components/ImageAttachmentField'
+import { ImagePreviewOverlay } from '../components/ImagePreviewOverlay'
 import { Modal } from '../components/Modal'
 import { Pagination } from '../components/Pagination'
 import { RemoteProjectSelect } from '../components/RemoteProjectSelect'
@@ -11,7 +13,7 @@ import { SearchField } from '../components/SearchField'
 import { SearchableMultiSelect } from '../components/SearchableMultiSelect'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { formatDateTime } from '../utils/datetime'
-import { ProjectRegister, ProjectRegisterActivity, ProjectRegisterProbability, ProjectRegisterSeverity, ProjectRegisterStatus, ProjectRegisterType, User } from '../types'
+import { ProjectRegister, ProjectRegisterActivity, ProjectRegisterProbability, ProjectRegisterSeverity, ProjectRegisterStatus, ProjectRegisterType, UploadAttachment, User, emptyUploadAttachments } from '../types'
 import { usePermissions } from '../hooks/usePermissions'
 
 interface RegisterForm {
@@ -31,6 +33,7 @@ interface RegisterForm {
   decisionDetail: string
   background: string
   impactScope: string
+  images: UploadAttachment[]
   dueAt: string
   ownerId: string
   participantIds: string[]
@@ -83,6 +86,7 @@ const initialForm: RegisterForm = {
   decisionDetail: '',
   background: '',
   impactScope: '',
+  images: emptyUploadAttachments(),
   dueAt: '',
   ownerId: '',
   participantIds: []
@@ -119,6 +123,7 @@ const normalizeForm = (item?: ProjectRegister | null): RegisterForm => ({
   decisionDetail: item?.decisionDetail || '',
   background: item?.background || '',
   impactScope: item?.impactScope || '',
+  images: item?.images || emptyUploadAttachments(),
   dueAt: toLocalDateTimeInput(item?.dueAt),
   ownerId: item?.ownerId ? String(item.ownerId) : '',
   participantIds: (item?.participantIds || []).map(String)
@@ -136,6 +141,7 @@ export function ProjectRegistersPage() {
   const canCreate = hasPermission('registers.create', permissions)
   const canUpdate = hasPermission('registers.update', permissions)
   const canDelete = hasPermission('registers.delete', permissions)
+  const canUploadAttachment = hasPermission('uploads.create', permissions)
   const canReadUsers = hasPermission('system.users.read', permissions)
   const [items, setItems] = useState<ProjectRegister[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -160,6 +166,7 @@ export function ProjectRegistersPage() {
   const [activities, setActivities] = useState<ProjectRegisterActivity[]>([])
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityError, setActivityError] = useState('')
+  const [previewImage, setPreviewImage] = useState<UploadAttachment | null>(null)
 
   const userOptions = useMemo(() => users.map((user) => ({
     value: String(user.id),
@@ -216,7 +223,7 @@ export function ProjectRegistersPage() {
 
   const openCreate = () => {
     if (!canCreate) return
-    setForm({ ...initialForm, projectId: projectFilter })
+    setForm({ ...initialForm, projectId: projectFilter, images: emptyUploadAttachments() })
     setFormError('')
     setModalOpen(true)
   }
@@ -285,6 +292,7 @@ export function ProjectRegistersPage() {
       decisionDetail: form.decisionDetail.trim(),
       background: form.background.trim(),
       impactScope: form.impactScope.trim(),
+      images: form.images,
       dueAt,
       ownerId: form.ownerId ? Number(form.ownerId) : undefined,
       participantIds: form.participantIds.map((value) => Number(value)).filter((value) => Number.isFinite(value))
@@ -298,7 +306,7 @@ export function ProjectRegistersPage() {
         await api.post('/project-registers', payload)
       }
       setModalOpen(false)
-      setForm(initialForm)
+      setForm({ ...initialForm, images: emptyUploadAttachments() })
       await load()
       window.dispatchEvent(new Event('notifications:changed'))
     } catch (submitError) {
@@ -438,6 +446,8 @@ export function ProjectRegistersPage() {
           )}
           <label htmlFor="register-impact-scope">影响范围</label>
           <textarea id="register-impact-scope" rows={3} value={form.impactScope} onChange={(event) => setForm((prev) => ({ ...prev, impactScope: event.target.value }))} />
+          <label htmlFor="register-images">图片</label>
+          <ImageAttachmentField inputId="register-images" value={form.images} disabled={!canUploadAttachment} onChange={(images) => setForm((prev) => ({ ...prev, images }))} />
           <label htmlFor="register-due-at">截止时间</label>
           <DateTimeQuickField inputId="register-due-at" value={form.dueAt} onChange={(value) => setForm((prev) => ({ ...prev, dueAt: value }))} />
           <label htmlFor="register-owner">负责人</label>
@@ -477,6 +487,15 @@ export function ProjectRegistersPage() {
                 <div><strong>截止：</strong>{formatDateTime(activeItem.dueAt)}</div>
               </div>
               {activeItem.description && <p>{activeItem.description}</p>}
+              {Boolean(activeItem.images?.length) && (
+                <div className="register-image-gallery">
+                  {activeItem.images?.map((image) => (
+                    <button key={image.filePath} type="button" onClick={() => setPreviewImage(image)} aria-label={`预览${image.relativePath || image.fileName || '登记项图片'}`}>
+                      <img src={image.filePath} alt={image.relativePath || image.fileName || '登记项图片'} />
+                    </button>
+                  ))}
+                </div>
+              )}
             </section>
             <section className="detail-section">
               <h4>动态</h4>
@@ -500,6 +519,7 @@ export function ProjectRegistersPage() {
           </div>
         )}
       </Modal>
+      <ImagePreviewOverlay image={previewImage} onClose={() => setPreviewImage(null)} />
     </section>
   )
 }
