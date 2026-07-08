@@ -184,7 +184,7 @@
 | `PUT /automation-rules/:id` `POST /automation-rules/:id/run` | `automations.update` |
 | `DELETE /automation-rules/:id` | `automations.delete` |
 | 自动化状态/进度/执行人变更触发的通知/评论/添加标签/指派执行人/Webhook | 通知、评论、添加标签和指派执行人由已启用规则在任务写事务内执行，Webhook 在事务提交后投递；触发人仍需通过任务接口原有权限与可见范围校验，不额外要求 `comments.create`、`notifications.update`、`tags.update` 或 `tasks.update`；指派动作会让新增执行人获得该任务可见性，Webhook 会调用外部地址，配置与手动运行受 `automations.create/update` 控制 |
-| `POST /ai/project-weekly-report` `POST /ai/project-risk-summary` `POST /ai/task-breakdown` | `ai.read`；项目上下文额外要求 `projects.read` 并校验项目可见范围，任务上下文额外要求 `tasks.read`，评论/活动流额外要求 `comments.read`，登记册上下文额外要求 `registers.read`；AI 助理只返回草稿，不写项目/任务 |
+| `POST /ai/project-weekly-report` `POST /ai/project-risk-summary` `POST /ai/register-image-description` `POST /ai/task-breakdown` | `ai.read`；项目上下文额外要求 `projects.read` 并校验项目可见范围，任务上下文额外要求 `tasks.read`，评论/活动流额外要求 `comments.read`，登记册上下文额外要求 `registers.read`；AI 助理只返回草稿，不写项目/任务 |
 | `GET /stats/dashboard` `GET /stats/project-health` `GET /stats/member-workload` | `stats.read`；普通用户按任务和项目可见范围聚合，成员负载按执行人周容量标记过载，关键路径逾期、未关闭高风险登记项和未解决问题会影响项目健康度 |
 | `GET /notifications` `GET /notifications/unread-count` | `notifications.read` |
 | `PATCH /notifications/:id/read` `PATCH /notifications/read-all` | `notifications.update` |

@@ -27,8 +27,9 @@ const (
 
 // Message is a single turn in a chat completion request.
 type Message struct {
-	Role    Role
-	Content string
+	Role      Role
+	Content   string
+	ImageURLs []string
 }
 
 // Client talks to an LLM gateway. Implementations must be safe for concurrent

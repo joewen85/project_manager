@@ -221,6 +221,8 @@ paths:
     $ref: '#/paths/~1ai~1project-risk-summary'
   /insights/ai/project-risk-summary/stream:
     $ref: '#/paths/~1ai~1project-risk-summary~1stream'
+  /insights/ai/register-image-description:
+    $ref: '#/paths/~1ai~1register-image-description'
   /insights/ai/task-breakdown:
     $ref: '#/paths/~1ai~1task-breakdown'
   /insights/ai/task-breakdown/stream:
@@ -2811,6 +2813,28 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: postAIProjectRiskSummaryStream
+  /ai/register-image-description:
+    post:
+      summary: AI 登记册图片说明
+      description: 为已上传的登记册图片生成一条只读简要说明；接口只返回备注草稿，不保存登记项。需要 ai.read；按 projectId 或 registerId 校验项目/登记册可见范围。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIRegisterImageDescriptionRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIRegisterImageDescriptionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: postAIRegisterImageDescription
   /ai/task-breakdown:
     post:
       summary: AI 任务拆解建议
@@ -3093,6 +3117,15 @@ components:
           format: int64
         mimeType:
           type: string
+    ProjectRegisterImage:
+      allOf:
+      - $ref: '#/components/schemas/Attachment'
+      - type: object
+        properties:
+          remark:
+            type: string
+            maxLength: 500
+            description: 图片备注，可由用户填写或由 AI 生成后人工确认。
     ContractAttachment:
       allOf:
       - $ref: '#/components/schemas/Attachment'
@@ -4074,9 +4107,9 @@ components:
           type: string
         images:
           type: array
-          description: 登记项图片，单张不超过 50M，mimeType 必须为 image/*
+          description: 登记项图片，单张不超过 50M，mimeType 必须为 image/*，remark 不超过 500 字。
           items:
-            $ref: '#/components/schemas/Attachment'
+            $ref: '#/components/schemas/ProjectRegisterImage'
         dueAt:
           type: string
           format: date-time
@@ -4169,9 +4202,9 @@ components:
           type: string
         images:
           type: array
-          description: 登记项图片，单张不超过 50M，mimeType 必须为 image/*
+          description: 登记项图片，单张不超过 50M，mimeType 必须为 image/*，remark 不超过 500 字。
           items:
-            $ref: '#/components/schemas/Attachment'
+            $ref: '#/components/schemas/ProjectRegisterImage'
         dueAt:
           type: string
           format: date-time
@@ -5457,6 +5490,30 @@ components:
           type: string
           format: date-time
           description: 周报结束时间，可空。
+    AIRegisterImageDescriptionRequest:
+      type: object
+      required:
+      - image
+      properties:
+        projectId:
+          type: integer
+          description: 新增登记项时传项目 ID；需要当前用户可见。
+        registerId:
+          type: integer
+          description: 已有登记项 ID；传入时按登记册可见范围校验。
+        image:
+          $ref: '#/components/schemas/ProjectRegisterImage'
+    AIRegisterImageDescriptionResponse:
+      type: object
+      properties:
+        remark:
+          type: string
+        requiresConfirmation:
+          type: boolean
+          description: AI 输出必须人工确认后再保存。
+        generatedAt:
+          type: string
+          format: date-time
     AITaskBreakdownRequest:
       type: object
       properties:

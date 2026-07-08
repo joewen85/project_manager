@@ -1985,6 +1985,24 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
   color: var(--color-text-muted);
   font-size: 11px;
 }
+.image-remark-input {
+  width: calc(100% - 16px);
+  margin: 0 8px 8px;
+  min-height: 58px;
+  resize: vertical;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.image-ai-btn {
+  margin: 0 8px 8px;
+  width: calc(100% - 16px);
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+}
 .image-remove-btn {
   position: absolute;
   top: 6px;
@@ -2006,11 +2024,24 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .register-image-gallery {
   margin-top: 10px;
 }
+.register-image-gallery-item {
+  min-width: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
 .register-image-gallery button {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
   background: var(--color-surface);
+}
+.register-image-gallery figcaption {
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
 }
 .image-preview-overlay {
   position: fixed;
@@ -2053,12 +2084,23 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
 .image-preview-caption {
   justify-self: center;
   max-width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
   color: #fff;
   font-size: 13px;
   text-align: center;
+}
+.image-preview-caption span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.image-preview-caption p {
+  max-width: min(760px, 90vw);
+  margin: 6px 0 0;
+  color: rgba(255, 255, 255, 0.86);
+  line-height: 1.5;
+  white-space: normal;
+  word-break: break-word;
 }
 .detail-grid {
   display: grid;

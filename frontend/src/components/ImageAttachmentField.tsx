@@ -1,15 +1,19 @@
 import { ChangeEvent, DragEvent, useRef, useState } from 'react'
-import { ImagePlus, Trash2, UploadCloud } from 'lucide-react'
+import { ImagePlus, Sparkles, Trash2, UploadCloud } from 'lucide-react'
 import { ImagePreviewOverlay } from './ImagePreviewOverlay'
-import { readApiError, uploadAttachments } from '../services/api'
+import { api, readApiError, uploadAttachments } from '../services/api'
 import type { UploadSourceFile } from '../services/api'
-import type { UploadAttachment } from '../types'
+import type { ProjectRegisterImage, UploadAttachment } from '../types'
 
 interface ImageAttachmentFieldProps {
   inputId?: string
-  value: UploadAttachment[]
-  onChange: (value: UploadAttachment[]) => void
+  value: ProjectRegisterImage[]
+  onChange: (value: ProjectRegisterImage[]) => void
   disabled?: boolean
+  uploadDisabled?: boolean
+  projectId?: string | number
+  registerId?: number
+  canGenerateDescription?: boolean
 }
 
 const maxImageSize = 50 * 1024 * 1024
@@ -21,13 +25,15 @@ const formatFileSize = (size: number) => {
   return `${(size / (1024 * 1024)).toFixed(2)} MB`
 }
 
-const mergeImages = (origin: UploadAttachment[], incoming: UploadAttachment[]) => {
-  const map = new Map<string, UploadAttachment>()
+const mergeImages = (origin: ProjectRegisterImage[], incoming: UploadAttachment[]) => {
+  const map = new Map<string, ProjectRegisterImage>()
   origin.forEach((item) => {
     if (item.filePath) map.set(item.filePath, item)
   })
   incoming.forEach((item) => {
-    if (item.filePath) map.set(item.filePath, item)
+    if (!item.filePath) return
+    const current = map.get(item.filePath)
+    map.set(item.filePath, { ...item, remark: current?.remark || '' })
   })
   return Array.from(map.values())
 }
@@ -45,15 +51,26 @@ const imageValidationError = (files: UploadSourceFile[]) => {
   return ''
 }
 
-export function ImageAttachmentField({ inputId, value, onChange, disabled = false }: ImageAttachmentFieldProps) {
+export function ImageAttachmentField({
+  inputId,
+  value,
+  onChange,
+  disabled = false,
+  uploadDisabled = disabled,
+  projectId,
+  registerId,
+  canGenerateDescription = false
+}: ImageAttachmentFieldProps) {
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState('')
-  const [previewImage, setPreviewImage] = useState<UploadAttachment | null>(null)
+  const [previewImage, setPreviewImage] = useState<ProjectRegisterImage | null>(null)
+  const [generatingPath, setGeneratingPath] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const uploadBlocked = disabled || uploadDisabled
 
   const uploadImages = async (files: UploadSourceFile[]) => {
-    if (disabled || files.length === 0) return
+    if (uploadBlocked || files.length === 0) return
     const validationError = imageValidationError(files)
     if (validationError) {
       setError(validationError)
@@ -78,23 +95,53 @@ export function ImageAttachmentField({ inputId, value, onChange, disabled = fals
     event.target.value = ''
   }
 
-  const removeImage = (target: UploadAttachment) => {
+  const removeImage = (target: ProjectRegisterImage) => {
     if (disabled) return
     onChange(value.filter((item) => item.filePath !== target.filePath))
+  }
+
+  const updateImageRemark = (target: ProjectRegisterImage, remark: string) => {
+    if (disabled) return
+    onChange(value.map((item) => item.filePath === target.filePath ? { ...item, remark } : item))
+  }
+
+  const generateImageRemark = async (target: ProjectRegisterImage) => {
+    if (disabled || !canGenerateDescription) return
+    if (!projectId && !registerId) {
+      setError('请先选择项目，再生成图片说明')
+      return
+    }
+    try {
+      setGeneratingPath(target.filePath)
+      setError('')
+      const res = await api.post<{ remark: string }>('/ai/register-image-description', {
+        projectId: projectId ? Number(projectId) : undefined,
+        registerId,
+        image: target
+      })
+      const remark = (res.data.remark || '').trim()
+      if (remark) {
+        updateImageRemark(target, remark)
+      }
+    } catch (generateError) {
+      setError(readApiError(generateError, 'AI 图片说明生成失败'))
+    } finally {
+      setGeneratingPath('')
+    }
   }
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     setDragging(false)
-    if (disabled) return
+    if (uploadBlocked) return
     void uploadImages(toSourceFiles(event.dataTransfer.files))
   }
 
   return (
     <div className="image-attachment-field">
-      <input id={inputId} ref={fileInputRef} className="sr-only" type="file" accept="image/*" multiple onChange={(event) => { void handleFileInputChange(event) }} disabled={disabled || uploading} />
+      <input id={inputId} ref={fileInputRef} className="sr-only" type="file" accept="image/*" multiple onChange={(event) => { void handleFileInputChange(event) }} disabled={uploadBlocked || uploading} />
       <div className="image-attachment-toolbar">
-        <button type="button" className="btn secondary image-upload-btn" onClick={() => fileInputRef.current?.click()} disabled={disabled || uploading}>
+        <button type="button" className="btn secondary image-upload-btn" onClick={() => fileInputRef.current?.click()} disabled={uploadBlocked || uploading}>
           <ImagePlus size={16} aria-hidden="true" />
           {uploading ? '上传中...' : '上传图片'}
         </button>
@@ -102,13 +149,13 @@ export function ImageAttachmentField({ inputId, value, onChange, disabled = fals
       </div>
       <div
         className={`image-dropzone${dragging ? ' active' : ''}`}
-        onDragEnter={(event) => { event.preventDefault(); if (!disabled) setDragging(true) }}
-        onDragOver={(event) => { event.preventDefault(); if (!disabled) setDragging(true) }}
+        onDragEnter={(event) => { event.preventDefault(); if (!uploadBlocked) setDragging(true) }}
+        onDragOver={(event) => { event.preventDefault(); if (!uploadBlocked) setDragging(true) }}
         onDragLeave={(event) => { event.preventDefault(); setDragging(false) }}
         onDrop={handleDrop}
       >
         <UploadCloud size={18} aria-hidden="true" />
-        <span>{disabled ? '当前账号无上传权限' : (uploading ? '正在上传，请稍候...' : '拖放图片到这里')}</span>
+        <span>{uploadDisabled ? '当前账号无上传权限' : (disabled ? '当前不可上传' : (uploading ? '正在上传，请稍候...' : '拖放图片到这里'))}</span>
       </div>
       {value.length > 0 && (
         <div className="image-attachment-grid">
@@ -121,6 +168,27 @@ export function ImageAttachmentField({ inputId, value, onChange, disabled = fals
                 <span>{item.relativePath || item.fileName || '图片'}</span>
                 <small>{formatFileSize(item.fileSize)}</small>
               </figcaption>
+              <textarea
+                className="image-remark-input"
+                rows={2}
+                maxLength={500}
+                value={item.remark || ''}
+                placeholder="图片备注"
+                onChange={(event) => updateImageRemark(item, event.target.value)}
+                disabled={disabled}
+                aria-label={`${item.relativePath || item.fileName || '图片'}备注`}
+              />
+              {canGenerateDescription && (
+                <button
+                  type="button"
+                  className="btn secondary image-ai-btn"
+                  onClick={() => { void generateImageRemark(item) }}
+                  disabled={disabled || generatingPath === item.filePath || (!projectId && !registerId)}
+                >
+                  <Sparkles size={14} aria-hidden="true" />
+                  {generatingPath === item.filePath ? '生成中...' : 'AI生成'}
+                </button>
+              )}
               <button type="button" className="image-remove-btn" onClick={() => removeImage(item)} disabled={disabled} aria-label={`移除${item.relativePath || item.fileName || '图片'}`}>
                 <Trash2 size={14} aria-hidden="true" />
               </button>

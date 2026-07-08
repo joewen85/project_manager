@@ -716,7 +716,7 @@ export interface ProjectRegister {
   decisionDetail?: string
   background?: string
   impactScope?: string
-  images?: UploadAttachment[]
+  images?: ProjectRegisterImage[]
   dueAt?: string
   ownerId?: number
   owner?: User
@@ -747,6 +747,10 @@ export interface UploadAttachment {
   relativePath?: string
   fileSize: number
   mimeType: string
+}
+
+export interface ProjectRegisterImage extends UploadAttachment {
+  remark?: string
 }
 
 export interface ContractAttachment extends UploadAttachment {

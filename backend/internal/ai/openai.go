@@ -44,7 +44,17 @@ type chatCompletionRequest struct {
 
 type chatMessagePayload struct {
 	Role    string `json:"role"`
-	Content string `json:"content"`
+	Content any    `json:"content"`
+}
+
+type chatContentPart struct {
+	Type     string        `json:"type"`
+	Text     string        `json:"text,omitempty"`
+	ImageURL *chatImageURL `json:"image_url,omitempty"`
+}
+
+type chatImageURL struct {
+	URL string `json:"url"`
 }
 
 type chatCompletionResponse struct {
@@ -75,9 +85,27 @@ type chatCompletionStreamResponse struct {
 func (c *openAIClient) newChatRequest(ctx context.Context, messages []Message, stream bool) (*http.Request, error) {
 	payload := chatCompletionRequest{Model: c.model, Stream: stream}
 	for _, msg := range messages {
+		content := any(msg.Content)
+		if len(msg.ImageURLs) > 0 {
+			parts := make([]chatContentPart, 0, len(msg.ImageURLs)+1)
+			if strings.TrimSpace(msg.Content) != "" {
+				parts = append(parts, chatContentPart{Type: "text", Text: msg.Content})
+			}
+			for _, imageURL := range msg.ImageURLs {
+				imageURL = strings.TrimSpace(imageURL)
+				if imageURL == "" {
+					continue
+				}
+				parts = append(parts, chatContentPart{
+					Type:     "image_url",
+					ImageURL: &chatImageURL{URL: imageURL},
+				})
+			}
+			content = parts
+		}
 		payload.Messages = append(payload.Messages, chatMessagePayload{
 			Role:    string(msg.Role),
-			Content: msg.Content,
+			Content: content,
 		})
 	}
 	body, err := json.Marshal(payload)

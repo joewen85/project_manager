@@ -291,6 +291,15 @@ const (
 	ProjectRegisterProbabilityHigh   ProjectRegisterProbability = "high"
 )
 
+type ProjectRegisterImage struct {
+	FileName     string `json:"fileName"`
+	FilePath     string `json:"filePath"`
+	RelativePath string `json:"relativePath"`
+	FileSize     int64  `json:"fileSize"`
+	MimeType     string `json:"mimeType"`
+	Remark       string `json:"remark"`
+}
+
 type SavedReportFilters struct {
 	ProjectID    uint     `json:"projectId,omitempty"`
 	DepartmentID uint     `json:"departmentId,omitempty"`
@@ -352,7 +361,7 @@ type ProjectRegister struct {
 	DecisionDetail string                     `gorm:"type:text" json:"decisionDetail"`
 	Background     string                     `gorm:"type:text" json:"background"`
 	ImpactScope    string                     `gorm:"type:text" json:"impactScope"`
-	Images         []Attachment               `gorm:"serializer:json" json:"images"`
+	Images         []ProjectRegisterImage     `gorm:"serializer:json" json:"images"`
 	DueAt          *time.Time                 `gorm:"index" json:"dueAt,omitempty"`
 	OwnerID        *uint                      `gorm:"index" json:"ownerId,omitempty"`
 	Owner          *User                      `json:"owner,omitempty"`

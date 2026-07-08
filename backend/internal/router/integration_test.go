@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -195,6 +197,30 @@ func (streamingAIClient) ChatStream(_ context.Context, _ []ai.Message, onDelta f
 		}
 	}
 	return "流式正文", nil
+}
+
+type recordingAIClient struct {
+	reply    string
+	messages *[]ai.Message
+}
+
+func (c recordingAIClient) Chat(_ context.Context, messages []ai.Message) (string, error) {
+	if c.messages != nil {
+		*c.messages = messages
+	}
+	return c.reply, nil
+}
+
+func (c recordingAIClient) ChatStream(_ context.Context, messages []ai.Message, onDelta func(string) error) (string, error) {
+	if c.messages != nil {
+		*c.messages = messages
+	}
+	if onDelta != nil {
+		if err := onDelta(c.reply); err != nil {
+			return "", err
+		}
+	}
+	return c.reply, nil
 }
 
 func requestMultipartFiles(t *testing.T, method, url, token, fieldName string, files []multipartUploadFile) (*http.Response, map[string]any) {
@@ -1596,6 +1622,62 @@ func TestAIAssistantPermissionsScopeAndReadOnlyDrafts(t *testing.T) {
 	}
 }
 
+func TestAIProjectRegisterImageDescriptionUsesUploadedImage(t *testing.T) {
+	var messages []ai.Message
+	imageContent := []byte("fake png bytes")
+	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
+		imageDir := filepath.Join(h.Cfg.UploadDir, "2026", "07", "07")
+		if err := os.MkdirAll(imageDir, 0o755); err != nil {
+			t.Fatalf("create test image dir failed: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(imageDir, "ai-risk.png"), imageContent, 0o644); err != nil {
+			t.Fatalf("write test image failed: %v", err)
+		}
+		h.AIClient = recordingAIClient{
+			reply:    "图片显示交付延期风险的红色预警看板",
+			messages: &messages,
+		}
+	})
+	defer ts.Close()
+
+	token := loginAndToken(t, ts.URL)
+	projectResp, projectBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/projects", token, map[string]any{
+		"code":        "AI-IMG",
+		"name":        "AI Image Project",
+		"description": "image description test",
+	})
+	if projectResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create ai image project expected 201 got %d, body=%v", projectResp.StatusCode, projectBody)
+	}
+	projectID := int(projectBody["id"].(float64))
+
+	resp, body := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/ai/register-image-description", token, map[string]any{
+		"projectId": projectID,
+		"image": map[string]any{
+			"fileName":     "ai-risk.png",
+			"filePath":     "/static/uploads/2026/07/07/ai-risk.png",
+			"relativePath": "ai-risk.png",
+			"fileSize":     len(imageContent),
+			"mimeType":     "image/png",
+		},
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("ai image description expected 200 got %d, body=%v", resp.StatusCode, body)
+	}
+	if body["remark"] != "图片显示交付延期风险的红色预警看板" || body["requiresConfirmation"] != true {
+		t.Fatalf("ai image description should return confirmable remark got %v", body)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("ai image description should send system and user messages got %#v", messages)
+	}
+	if len(messages[1].ImageURLs) != 1 || !strings.HasPrefix(messages[1].ImageURLs[0], "data:image/png;base64,") {
+		t.Fatalf("ai image description should send image data URL got %#v", messages[1].ImageURLs)
+	}
+	if !strings.Contains(messages[1].Content, "AI Image Project") {
+		t.Fatalf("ai image description should include project context got %q", messages[1].Content)
+	}
+}
+
 func TestAIAssistantStreamEmitsModelDeltas(t *testing.T) {
 	ts := setupTestRouterWithHandler(t, func(h *handler.Handler) {
 		h.AIClient = streamingAIClient{}
@@ -2089,6 +2171,7 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 			"relativePath": "delay-risk.png",
 			"fileSize":     1024,
 			"mimeType":     "image/png",
+			"remark":       "供应商交付风险现场截图",
 		},
 	}
 	riskPayload := map[string]any{
@@ -2115,6 +2198,10 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 	riskImages, _ := riskBody["images"].([]any)
 	if len(riskImages) != 1 {
 		t.Fatalf("risk register images should be saved got %v", riskBody["images"])
+	}
+	riskImage, _ := riskImages[0].(map[string]any)
+	if riskImage["remark"] != "供应商交付风险现场截图" {
+		t.Fatalf("risk register image remark should be saved got %v", riskImage)
 	}
 
 	invalidImageResp, invalidImageBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-registers", userToken, map[string]any{
@@ -2150,6 +2237,24 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 	})
 	if oversizeImageResp.StatusCode != http.StatusBadRequest || oversizeImageBody["code"] != "INVALID_REGISTER_IMAGES" {
 		t.Fatalf("oversize register image expected 400 INVALID_REGISTER_IMAGES got %d, body=%v", oversizeImageResp.StatusCode, oversizeImageBody)
+	}
+	longRemarkImageResp, longRemarkImageBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-registers", userToken, map[string]any{
+		"type":      "risk",
+		"projectId": visibleProjectID,
+		"title":     "备注过长图片风险",
+		"status":    "open",
+		"severity":  "medium",
+		"images": []map[string]any{{
+			"fileName":     "remark-too-long.png",
+			"filePath":     "/static/uploads/2026/07/07/remark-too-long.png",
+			"relativePath": "remark-too-long.png",
+			"fileSize":     1024,
+			"mimeType":     "image/png",
+			"remark":       strings.Repeat("长", 501),
+		}},
+	})
+	if longRemarkImageResp.StatusCode != http.StatusBadRequest || longRemarkImageBody["code"] != "INVALID_REGISTER_IMAGES" {
+		t.Fatalf("long image remark expected 400 INVALID_REGISTER_IMAGES got %d, body=%v", longRemarkImageResp.StatusCode, longRemarkImageBody)
 	}
 
 	issueResp, issueBody := requestJSON(t, http.MethodPost, ts.URL+"/api/v1/project-registers", userToken, map[string]any{
@@ -2226,6 +2331,10 @@ func TestProjectRegistersCRUDScopeAndHealth(t *testing.T) {
 	updatedImages, _ := updateBody["images"].([]any)
 	if len(updatedImages) != 1 {
 		t.Fatalf("updated register should keep images got %v", updateBody["images"])
+	}
+	updatedImage, _ := updatedImages[0].(map[string]any)
+	if updatedImage["remark"] != "供应商交付风险现场截图" {
+		t.Fatalf("updated register should keep image remark got %v", updatedImage)
 	}
 
 	activityResp, activityBody := requestJSON(t, http.MethodGet, ts.URL+"/api/v1/project-registers/"+strconv.Itoa(riskID)+"/activities", userToken, nil)

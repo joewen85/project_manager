@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"project-manager/backend/internal/model"
 
@@ -14,28 +15,38 @@ import (
 )
 
 type projectRegisterRequest struct {
-	Type           string               `json:"type" binding:"required"`
-	ProjectID      uint                 `json:"projectId" binding:"required"`
-	TaskID         *uint                `json:"taskId"`
-	Title          string               `json:"title" binding:"required"`
-	Description    string               `json:"description"`
-	Status         string               `json:"status"`
-	Severity       string               `json:"severity"`
-	Probability    string               `json:"probability"`
-	Impact         string               `json:"impact"`
-	Source         string               `json:"source"`
-	ResponsePlan   string               `json:"responsePlan"`
-	Resolution     string               `json:"resolution"`
-	DecisionDetail string               `json:"decisionDetail"`
-	Background     string               `json:"background"`
-	ImpactScope    string               `json:"impactScope"`
-	DueAt          string               `json:"dueAt"`
-	Images         *[]attachmentRequest `json:"images"`
-	OwnerID        *uint                `json:"ownerId"`
-	ParticipantIDs []uint               `json:"participantIds"`
+	Type           string                         `json:"type" binding:"required"`
+	ProjectID      uint                           `json:"projectId" binding:"required"`
+	TaskID         *uint                          `json:"taskId"`
+	Title          string                         `json:"title" binding:"required"`
+	Description    string                         `json:"description"`
+	Status         string                         `json:"status"`
+	Severity       string                         `json:"severity"`
+	Probability    string                         `json:"probability"`
+	Impact         string                         `json:"impact"`
+	Source         string                         `json:"source"`
+	ResponsePlan   string                         `json:"responsePlan"`
+	Resolution     string                         `json:"resolution"`
+	DecisionDetail string                         `json:"decisionDetail"`
+	Background     string                         `json:"background"`
+	ImpactScope    string                         `json:"impactScope"`
+	DueAt          string                         `json:"dueAt"`
+	Images         *[]projectRegisterImageRequest `json:"images"`
+	OwnerID        *uint                          `json:"ownerId"`
+	ParticipantIDs []uint                         `json:"participantIds"`
+}
+
+type projectRegisterImageRequest struct {
+	FileName     string `json:"fileName"`
+	FilePath     string `json:"filePath"`
+	RelativePath string `json:"relativePath"`
+	FileSize     int64  `json:"fileSize"`
+	MimeType     string `json:"mimeType"`
+	Remark       string `json:"remark"`
 }
 
 const maxProjectRegisterImageSize = 50 * 1024 * 1024
+const maxProjectRegisterImageRemarkLength = 500
 
 func normalizeProjectRegisterType(value string) (model.ProjectRegisterType, bool) {
 	switch model.ProjectRegisterType(strings.TrimSpace(value)) {
@@ -124,12 +135,30 @@ func parseProjectRegisterSeverities(value string) []string {
 	return out
 }
 
-func validateProjectRegisterImages(items []attachmentRequest, publicBase string) error {
-	if err := validateAttachments(items, publicBase); err != nil {
+func projectRegisterImageAttachment(item projectRegisterImageRequest) attachmentRequest {
+	return attachmentRequest{
+		FileName:     item.FileName,
+		FilePath:     item.FilePath,
+		RelativePath: item.RelativePath,
+		FileSize:     item.FileSize,
+		MimeType:     item.MimeType,
+	}
+}
+
+func validateProjectRegisterImages(items []projectRegisterImageRequest, publicBase string) error {
+	attachments := make([]attachmentRequest, 0, len(items))
+	for _, item := range items {
+		attachments = append(attachments, projectRegisterImageAttachment(item))
+	}
+	if err := validateAttachments(attachments, publicBase); err != nil {
 		return err
 	}
 	for _, item := range items {
-		if isAttachmentEmpty(item) {
+		attachment := projectRegisterImageAttachment(item)
+		if isAttachmentEmpty(attachment) {
+			if strings.TrimSpace(item.Remark) != "" {
+				return errors.New("图片路径不能为空")
+			}
 			continue
 		}
 		if item.FileSize > maxProjectRegisterImageSize {
@@ -138,8 +167,33 @@ func validateProjectRegisterImages(items []attachmentRequest, publicBase string)
 		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(item.MimeType)), "image/") {
 			return errors.New("登记项图片只支持图片文件")
 		}
+		if utf8.RuneCountInString(strings.TrimSpace(item.Remark)) > maxProjectRegisterImageRemarkLength {
+			return errors.New("图片备注不能超过500字")
+		}
 	}
 	return nil
+}
+
+func toProjectRegisterImages(items []projectRegisterImageRequest) []model.ProjectRegisterImage {
+	if len(items) == 0 {
+		return []model.ProjectRegisterImage{}
+	}
+	result := make([]model.ProjectRegisterImage, 0, len(items))
+	for _, item := range items {
+		attachment := projectRegisterImageAttachment(item)
+		if isAttachmentEmpty(attachment) {
+			continue
+		}
+		result = append(result, model.ProjectRegisterImage{
+			FileName:     strings.TrimSpace(item.FileName),
+			FilePath:     normalizeAttachmentPath(item.FilePath),
+			RelativePath: normalizeRelativeUploadPath(item.RelativePath),
+			FileSize:     item.FileSize,
+			MimeType:     strings.TrimSpace(item.MimeType),
+			Remark:       strings.TrimSpace(item.Remark),
+		})
+	}
+	return result
 }
 
 func projectRegisterTypeLabel(value model.ProjectRegisterType) string {
@@ -306,7 +360,7 @@ func (h *Handler) normalizeProjectRegisterRequest(c *gin.Context, req projectReg
 		respondError(c, http.StatusBadRequest, "INVALID_REGISTER_DUE_AT", "截止时间必须是 RFC3339 格式")
 		return model.ProjectRegister{}, false
 	}
-	images := []attachmentRequest{}
+	images := []projectRegisterImageRequest{}
 	if req.Images != nil {
 		images = *req.Images
 	}
@@ -330,7 +384,7 @@ func (h *Handler) normalizeProjectRegisterRequest(c *gin.Context, req projectReg
 		DecisionDetail: strings.TrimSpace(req.DecisionDetail),
 		Background:     strings.TrimSpace(req.Background),
 		ImpactScope:    strings.TrimSpace(req.ImpactScope),
-		Images:         toModelAttachments(images),
+		Images:         toProjectRegisterImages(images),
 		DueAt:          dueAt,
 		OwnerID:        req.OwnerID,
 		ParticipantIDs: participantIDs,

@@ -66,6 +66,48 @@ func TestChatSuccess(t *testing.T) {
 	}
 }
 
+func TestChatSendsImageContentParts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload chatCompletionRequest
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if len(payload.Messages) != 1 {
+			t.Fatalf("expected one message, got %+v", payload.Messages)
+		}
+		parts, ok := payload.Messages[0].Content.([]any)
+		if !ok || len(parts) != 2 {
+			t.Fatalf("expected text and image content parts, got %#v", payload.Messages[0].Content)
+		}
+		textPart, _ := parts[0].(map[string]any)
+		if textPart["type"] != "text" || textPart["text"] != "描述图片" {
+			t.Fatalf("unexpected text part: %#v", textPart)
+		}
+		imagePart, _ := parts[1].(map[string]any)
+		imageURL, _ := imagePart["image_url"].(map[string]any)
+		if imagePart["type"] != "image_url" || imageURL["url"] != "data:image/png;base64,abc" {
+			t.Fatalf("unexpected image part: %#v", imagePart)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"choices":[{"message":{"content":"图片说明"}}]}`)
+	}))
+	defer server.Close()
+
+	client := newOpenAIClient(config.Config{AIBaseURL: server.URL, AIAPIKey: "sk-test", AIModel: "gpt-4o-mini"})
+	out, err := client.Chat(context.Background(), []Message{{
+		Role:      RoleUser,
+		Content:   "描述图片",
+		ImageURLs: []string{"data:image/png;base64,abc"},
+	}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "图片说明" {
+		t.Fatalf("expected image description, got %q", out)
+	}
+}
+
 func TestChatStreamSuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Accept"); got != "text/event-stream" {

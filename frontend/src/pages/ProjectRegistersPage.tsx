@@ -13,7 +13,7 @@ import { SearchField } from '../components/SearchField'
 import { SearchableMultiSelect } from '../components/SearchableMultiSelect'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { formatDateTime } from '../utils/datetime'
-import { ProjectRegister, ProjectRegisterActivity, ProjectRegisterProbability, ProjectRegisterSeverity, ProjectRegisterStatus, ProjectRegisterType, UploadAttachment, User, emptyUploadAttachments } from '../types'
+import { ProjectRegister, ProjectRegisterActivity, ProjectRegisterImage, ProjectRegisterProbability, ProjectRegisterSeverity, ProjectRegisterStatus, ProjectRegisterType, User, emptyUploadAttachments } from '../types'
 import { usePermissions } from '../hooks/usePermissions'
 
 interface RegisterForm {
@@ -33,7 +33,7 @@ interface RegisterForm {
   decisionDetail: string
   background: string
   impactScope: string
-  images: UploadAttachment[]
+  images: ProjectRegisterImage[]
   dueAt: string
   ownerId: string
   participantIds: string[]
@@ -141,6 +141,7 @@ export function ProjectRegistersPage() {
   const canCreate = hasPermission('registers.create', permissions)
   const canUpdate = hasPermission('registers.update', permissions)
   const canDelete = hasPermission('registers.delete', permissions)
+  const canUseAI = hasPermission('ai.read', permissions)
   const canUploadAttachment = hasPermission('uploads.create', permissions)
   const canReadUsers = hasPermission('system.users.read', permissions)
   const [items, setItems] = useState<ProjectRegister[]>([])
@@ -166,7 +167,7 @@ export function ProjectRegistersPage() {
   const [activities, setActivities] = useState<ProjectRegisterActivity[]>([])
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityError, setActivityError] = useState('')
-  const [previewImage, setPreviewImage] = useState<UploadAttachment | null>(null)
+  const [previewImage, setPreviewImage] = useState<ProjectRegisterImage | null>(null)
 
   const userOptions = useMemo(() => users.map((user) => ({
     value: String(user.id),
@@ -447,7 +448,16 @@ export function ProjectRegistersPage() {
           <label htmlFor="register-impact-scope">影响范围</label>
           <textarea id="register-impact-scope" rows={3} value={form.impactScope} onChange={(event) => setForm((prev) => ({ ...prev, impactScope: event.target.value }))} />
           <label htmlFor="register-images">图片</label>
-          <ImageAttachmentField inputId="register-images" value={form.images} disabled={!canUploadAttachment} onChange={(images) => setForm((prev) => ({ ...prev, images }))} />
+          <ImageAttachmentField
+            inputId="register-images"
+            value={form.images}
+            disabled={submitting}
+            uploadDisabled={!canUploadAttachment}
+            projectId={form.projectId}
+            registerId={form.id}
+            canGenerateDescription={canUseAI}
+            onChange={(images) => setForm((prev) => ({ ...prev, images }))}
+          />
           <label htmlFor="register-due-at">截止时间</label>
           <DateTimeQuickField inputId="register-due-at" value={form.dueAt} onChange={(value) => setForm((prev) => ({ ...prev, dueAt: value }))} />
           <label htmlFor="register-owner">负责人</label>
@@ -490,9 +500,12 @@ export function ProjectRegistersPage() {
               {Boolean(activeItem.images?.length) && (
                 <div className="register-image-gallery">
                   {activeItem.images?.map((image) => (
-                    <button key={image.filePath} type="button" onClick={() => setPreviewImage(image)} aria-label={`预览${image.relativePath || image.fileName || '登记项图片'}`}>
-                      <img src={image.filePath} alt={image.relativePath || image.fileName || '登记项图片'} />
-                    </button>
+                    <figure key={image.filePath} className="register-image-gallery-item">
+                      <button type="button" onClick={() => setPreviewImage(image)} aria-label={`预览${image.relativePath || image.fileName || '登记项图片'}`}>
+                        <img src={image.filePath} alt={image.remark || image.relativePath || image.fileName || '登记项图片'} />
+                      </button>
+                      {image.remark && <figcaption>{image.remark}</figcaption>}
+                    </figure>
                   ))}
                 </div>
               )}
