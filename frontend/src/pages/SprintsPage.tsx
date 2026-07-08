@@ -374,6 +374,7 @@ export function SprintsPage() {
                 <div className="sprint-task-add-grid">
                   <SearchableMultiSelect
                     className="sprint-task-picker"
+                    inlineMenu
                     ariaLabel="选择加入迭代的任务"
                     values={selectedTaskIds}
                     options={availableTaskOptions}

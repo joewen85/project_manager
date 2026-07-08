@@ -241,6 +241,8 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			ai.POST("/project-risk-summary", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRiskSummary)
 			ai.POST("/project-risk-summary/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRiskSummaryStream)
 			ai.POST("/register-image-description", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRegisterImageDescription)
+			ai.POST("/register-analysis", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRegisterAnalysis)
+			ai.POST("/register-analysis/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRegisterAnalysisStream)
 			ai.POST("/task-breakdown", middleware.RequirePermission(h.DB, "ai.read"), h.AITaskBreakdown)
 			ai.POST("/task-breakdown/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AITaskBreakdownStream)
 		}
@@ -396,6 +398,8 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 				insightAI.POST("/project-risk-summary", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRiskSummary)
 				insightAI.POST("/project-risk-summary/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRiskSummaryStream)
 				insightAI.POST("/register-image-description", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRegisterImageDescription)
+				insightAI.POST("/register-analysis", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRegisterAnalysis)
+				insightAI.POST("/register-analysis/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AIProjectRegisterAnalysisStream)
 				insightAI.POST("/task-breakdown", middleware.RequirePermission(h.DB, "ai.read"), h.AITaskBreakdown)
 				insightAI.POST("/task-breakdown/stream", middleware.RequirePermission(h.DB, "ai.read"), h.AITaskBreakdownStream)
 			}

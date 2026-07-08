@@ -223,6 +223,10 @@ paths:
     $ref: '#/paths/~1ai~1project-risk-summary~1stream'
   /insights/ai/register-image-description:
     $ref: '#/paths/~1ai~1register-image-description'
+  /insights/ai/register-analysis:
+    $ref: '#/paths/~1ai~1register-analysis'
+  /insights/ai/register-analysis/stream:
+    $ref: '#/paths/~1ai~1register-analysis~1stream'
   /insights/ai/task-breakdown:
     $ref: '#/paths/~1ai~1task-breakdown'
   /insights/ai/task-breakdown/stream:
@@ -2837,6 +2841,54 @@ paths:
         '503':
           description: AI gateway not configured
       operationId: postAIRegisterImageDescription
+  /ai/register-analysis:
+    post:
+      summary: AI 登记项应对策略/影响范围生成
+      description: 根据登记项当前内容（含表单未保存的编辑）生成应对策略或影响范围草稿；只返回文本草稿，不保存登记项。需要 ai.read；按 projectId 或 registerId 校验项目/登记册可见范围。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIRegisterAnalysisRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIRegisterAnalysisResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          description: AI gateway not configured
+      operationId: postAIRegisterAnalysis
+  /ai/register-analysis/stream:
+    post:
+      summary: AI 登记项应对策略/影响范围生成（SSE 流式）
+      description: 与 /ai/register-analysis 相同的输入，但以 text/event-stream 流式返回，事件包括 status、delta、result、done、error。推荐交互式使用，避免慢响应被代理超时中断。
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIRegisterAnalysisRequest'
+      responses:
+        '200':
+          description: SSE 流（text/event-stream）
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          description: AI gateway not configured
+      operationId: postAIRegisterAnalysisStream
   /ai/task-breakdown:
     post:
       summary: AI 任务拆解建议
@@ -5517,6 +5569,73 @@ components:
           type: string
           maxLength: 500
           description: AI 生成的图片简要说明，前端回填后仍需用户保存登记项。
+        requiresConfirmation:
+          type: boolean
+          description: AI 输出必须人工确认后再保存。
+        generatedAt:
+          type: string
+          format: date-time
+    AIRegisterAnalysisRequest:
+      type: object
+      description: projectId 和 registerId 至少传一个；已有登记项优先传 registerId，新建登记项传 projectId。其余字段为登记项当前（可能未保存）内容，用于生成上下文。
+      required:
+      - field
+      properties:
+        field:
+          type: string
+          enum:
+          - responsePlan
+          - impactScope
+          description: 要生成的字段：应对策略或影响范围。
+        projectId:
+          type: integer
+          description: 新增登记项时传项目 ID；需要当前用户可见。
+        registerId:
+          type: integer
+          description: 已有登记项 ID；传入时按登记册可见范围校验。
+        type:
+          type: string
+          enum:
+          - risk
+          - issue
+          - decision
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+        probability:
+          type: string
+        impact:
+          type: string
+        source:
+          type: string
+        background:
+          type: string
+        decisionDetail:
+          type: string
+        responsePlan:
+          type: string
+        impactScope:
+          type: string
+    AIRegisterAnalysisResponse:
+      type: object
+      required:
+      - field
+      - content
+      - requiresConfirmation
+      - generatedAt
+      properties:
+        field:
+          type: string
+          enum:
+          - responsePlan
+          - impactScope
+        content:
+          type: string
+          maxLength: 1200
+          description: AI 生成的文本草稿，前端回填后仍需用户保存登记项。
         requiresConfirmation:
           type: boolean
           description: AI 输出必须人工确认后再保存。

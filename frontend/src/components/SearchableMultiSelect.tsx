@@ -8,6 +8,20 @@ export interface SearchableMultiSelectOption {
   keywords?: string[]
 }
 
+// Nearest scrollable/clipping ancestor. The floating menu is clipped by it, so
+// placement is measured against its visible box rather than the whole viewport.
+function getClipParent(el: HTMLElement | null): HTMLElement | null {
+  let node = el?.parentElement ?? null
+  while (node) {
+    const overflowY = getComputedStyle(node).overflowY
+    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden') {
+      return node
+    }
+    node = node.parentElement
+  }
+  return null
+}
+
 interface SearchableMultiSelectProps {
   values: string[]
   options: SearchableMultiSelectOption[]
@@ -18,6 +32,11 @@ interface SearchableMultiSelectProps {
   summaryNoun?: string
   className?: string
   onSearchChange?: (query: string) => void
+  /**
+   * Menu renders inline in the document flow (position: static) rather than as a
+   * floating overlay. Disables the flip / height-clamp placement logic.
+   */
+  inlineMenu?: boolean
 }
 
 export function SearchableMultiSelect({
@@ -29,14 +48,21 @@ export function SearchableMultiSelect({
   noResultsText = '没有匹配项',
   summaryNoun = '项',
   className = '',
-  onSearchChange
+  onSearchChange,
+  inlineMenu = false
 }: SearchableMultiSelectProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const listId = useId()
   const statusId = useId()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  // Whether the menu should open upward and how tall the scrollable list may be,
+  // so the menu stays on screen (and off the sticky save button) when the field
+  // sits near the bottom of a modal.
+  const [dropUp, setDropUp] = useState(false)
+  const [listMaxHeight, setListMaxHeight] = useState<number | null>(null)
 
   const selectedSet = useMemo(() => new Set(values), [values])
   const selectedOptions = useMemo(
@@ -67,6 +93,27 @@ export function SearchableMultiSelect({
     onSearchChange?.(nextQuery)
   }, [onSearchChange])
 
+  const updatePlacement = useCallback(() => {
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const rect = trigger.getBoundingClientRect()
+    const margin = 12
+    // Bound placement by the clipping container's visible box (e.g. the modal
+    // body), so the whole menu stays on screen without scrolling the container.
+    const clip = getClipParent(trigger)?.getBoundingClientRect()
+    const boundsTop = Math.max(clip?.top ?? 0, 0)
+    const boundsBottom = Math.min(clip?.bottom ?? window.innerHeight, window.innerHeight)
+    const spaceBelow = boundsBottom - rect.bottom - margin
+    const spaceAbove = rect.top - boundsTop - margin
+    // Search box + actions row that sit above the scrollable list.
+    const chrome = 104
+    // Room for ~3 rows of options below before we flip the menu upward.
+    const shouldDropUp = spaceBelow - chrome < 132 && spaceAbove > spaceBelow
+    const available = shouldDropUp ? spaceAbove : spaceBelow
+    setDropUp(shouldDropUp)
+    setListMaxHeight(Math.max(120, Math.min(360, available - chrome)))
+  }, [])
+
   useEffect(() => {
     if (!open) return
     const handleOutside = (event: MouseEvent) => {
@@ -91,6 +138,18 @@ export function SearchableMultiSelect({
   }, [open, updateQuery])
 
   useEffect(() => {
+    if (!open || inlineMenu) return
+    updatePlacement()
+    const handleReposition = () => updatePlacement()
+    window.addEventListener('scroll', handleReposition, true)
+    window.addEventListener('resize', handleReposition)
+    return () => {
+      window.removeEventListener('scroll', handleReposition, true)
+      window.removeEventListener('resize', handleReposition)
+    }
+  }, [open, inlineMenu, updatePlacement])
+
+  useEffect(() => {
     if (!open) return
     window.requestAnimationFrame(() => searchInputRef.current?.focus())
   }, [open])
@@ -111,6 +170,7 @@ export function SearchableMultiSelect({
     <div className={`combo-wrap searchable-multi-select${className ? ` ${className}` : ''}`} ref={wrapRef}>
       <button
         type="button"
+        ref={triggerRef}
         className={`searchable-multi-select-trigger${open ? ' open' : ''}`}
         aria-label={ariaLabel}
         aria-expanded={open}
@@ -146,7 +206,13 @@ export function SearchableMultiSelect({
       )}
 
       {open && (
-        <div id={listId} className="combo-menu searchable-multi-select-menu" role="listbox" aria-multiselectable="true" aria-describedby={statusId}>
+        <div
+          id={listId}
+          className={`combo-menu searchable-multi-select-menu${dropUp ? ' drop-up' : ''}`}
+          role="listbox"
+          aria-multiselectable="true"
+          aria-describedby={statusId}
+        >
           <div className="searchable-multi-select-search">
             <SearchField
               ref={searchInputRef}
@@ -167,7 +233,10 @@ export function SearchableMultiSelect({
               清空
             </button>
           </div>
-          <div className="multi-checklist compact searchable-multi-select-list">
+          <div
+            className="multi-checklist compact searchable-multi-select-list"
+            style={listMaxHeight ? { maxHeight: listMaxHeight } : undefined}
+          >
             {visibleOptions.map((option) => (
               <label key={option.value} className="multi-check-item" role="option" aria-selected={selectedSet.has(option.value)}>
                 <input

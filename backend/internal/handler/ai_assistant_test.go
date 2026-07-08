@@ -99,7 +99,9 @@ func TestLoadAIPromptsDefaultsWhenNoDir(t *testing.T) {
 	set := loadAIPrompts("")
 	if set.weeklyReport != defaultAIWeeklyReportSystemPrompt ||
 		set.riskSummary != defaultAIRiskSummarySystemPrompt ||
-		set.taskBreakdown != defaultAITaskBreakdownSystemPrompt {
+		set.taskBreakdown != defaultAITaskBreakdownSystemPrompt ||
+		set.registerResponsePlan != defaultAIRegisterResponsePlanSystemPrompt ||
+		set.registerImpactScope != defaultAIRegisterImpactScopeSystemPrompt {
 		t.Fatal("expected built-in defaults when no prompt dir is given")
 	}
 }
@@ -116,6 +118,23 @@ func TestLoadAIPromptsFileOverridesDefault(t *testing.T) {
 	// Untouched files keep the built-in default.
 	if set.riskSummary != defaultAIRiskSummarySystemPrompt {
 		t.Errorf("expected default risk summary when file absent")
+	}
+}
+
+func TestLoadAIPromptsRegisterFileOverrides(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, aiRegisterResponsePlanPromptFile), []byte("  custom response plan  "), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, aiRegisterImpactScopePromptFile), []byte("custom impact scope"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	set := loadAIPrompts(dir)
+	if set.registerResponsePlan != "custom response plan" {
+		t.Errorf("expected trimmed response plan override, got %q", set.registerResponsePlan)
+	}
+	if set.registerImpactScope != "custom impact scope" {
+		t.Errorf("expected impact scope override, got %q", set.registerImpactScope)
 	}
 }
 

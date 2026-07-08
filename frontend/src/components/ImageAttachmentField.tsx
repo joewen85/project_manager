@@ -118,7 +118,7 @@ export function ImageAttachmentField({
         projectId: projectId ? Number(projectId) : undefined,
         registerId,
         image: target
-      })
+      }, { timeout: 60000 })
       const remark = (res.data.remark || '').trim()
       if (remark) {
         updateImageRemark(target, remark)

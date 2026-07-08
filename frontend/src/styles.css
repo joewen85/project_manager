@@ -2003,6 +2003,20 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
   gap: 6px;
   font-size: 12px;
 }
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.field-ai-btn {
+  min-height: 30px;
+  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
 .image-remove-btn {
   position: absolute;
   top: 6px;
@@ -2854,6 +2868,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--c
   border-radius: 10px;
   box-shadow: var(--shadow-sm);
   padding: 4px;
+}
+.combo-menu.drop-up {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 .combo-option {
   width: 100%;

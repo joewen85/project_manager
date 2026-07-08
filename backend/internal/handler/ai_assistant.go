@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -179,6 +180,30 @@ type aiTaskBreakdownResponse struct {
 
 type aiRegisterImageDescriptionResponse struct {
 	Remark               string    `json:"remark"`
+	RequiresConfirmation bool      `json:"requiresConfirmation"`
+	GeneratedAt          time.Time `json:"generatedAt"`
+}
+
+type aiRegisterAnalysisRequest struct {
+	ProjectID      uint   `json:"projectId"`
+	RegisterID     uint   `json:"registerId"`
+	Field          string `json:"field"`
+	Type           string `json:"type"`
+	Title          string `json:"title"`
+	Description    string `json:"description"`
+	Severity       string `json:"severity"`
+	Probability    string `json:"probability"`
+	Impact         string `json:"impact"`
+	Source         string `json:"source"`
+	Background     string `json:"background"`
+	DecisionDetail string `json:"decisionDetail"`
+	ResponsePlan   string `json:"responsePlan"`
+	ImpactScope    string `json:"impactScope"`
+}
+
+type aiRegisterAnalysisResponse struct {
+	Field                string    `json:"field"`
+	Content              string    `json:"content"`
 	RequiresConfirmation bool      `json:"requiresConfirmation"`
 	GeneratedAt          time.Time `json:"generatedAt"`
 }
@@ -520,7 +545,8 @@ func (h *Handler) AIProjectRegisterImageDescription(c *gin.Context) {
 		},
 	})
 	if err != nil {
-		respondError(c, http.StatusBadGateway, "AI_IMAGE_DESCRIPTION_FAILED", "AI 图片说明生成失败")
+		log.Printf("ai register image description failed: %v", err)
+		respondError(c, http.StatusBadGateway, "AI_IMAGE_DESCRIPTION_FAILED", "AI 图片说明生成失败："+err.Error())
 		return
 	}
 	remark := trimAIRemark(out, maxProjectRegisterImageRemarkLength)
@@ -533,6 +559,234 @@ func (h *Handler) AIProjectRegisterImageDescription(c *gin.Context) {
 		RequiresConfirmation: true,
 		GeneratedAt:          time.Now(),
 	})
+}
+
+const (
+	aiRegisterFieldResponsePlan = "responsePlan"
+	aiRegisterFieldImpactScope  = "impactScope"
+	maxAIRegisterAnalysisLength = 1200
+)
+
+func aiRegisterSeverityText(value string) string {
+	switch model.ProjectRegisterSeverity(strings.TrimSpace(value)) {
+	case model.ProjectRegisterSeverityLow:
+		return "低"
+	case model.ProjectRegisterSeverityHigh:
+		return "高"
+	case model.ProjectRegisterSeverityCritical:
+		return "严重"
+	case model.ProjectRegisterSeverityMedium:
+		return "中"
+	default:
+		return ""
+	}
+}
+
+func aiRegisterProbabilityText(value string) string {
+	switch model.ProjectRegisterProbability(strings.TrimSpace(value)) {
+	case model.ProjectRegisterProbabilityLow:
+		return "低"
+	case model.ProjectRegisterProbabilityHigh:
+		return "高"
+	case model.ProjectRegisterProbabilityMedium:
+		return "中"
+	default:
+		return ""
+	}
+}
+
+// trimAIRegisterAnalysis normalizes the model output while preserving line
+// breaks (response plans / impact scopes are multi-line), strips a wrapping
+// code fence, and caps the length.
+func trimAIRegisterAnalysis(value string, limit int) string {
+	trimmed := strings.ReplaceAll(value, "\r\n", "\n")
+	trimmed = strings.TrimSpace(trimmed)
+	if strings.HasPrefix(trimmed, "```") {
+		trimmed = strings.TrimPrefix(trimmed, "```")
+		if idx := strings.LastIndex(trimmed, "```"); idx >= 0 {
+			trimmed = trimmed[:idx]
+		}
+		trimmed = strings.TrimSpace(trimmed)
+	}
+	if limit > 0 {
+		if runes := []rune(trimmed); len(runes) > limit {
+			trimmed = string(runes[:limit])
+		}
+	}
+	return trimmed
+}
+
+// buildAIRegisterAnalysis validates the request, enforces project/register
+// visibility, and assembles the system prompt + read-only context used to
+// generate a 应对策略 (responsePlan) or 影响范围 (impactScope). The content is
+// supplied by the client so it reflects unsaved edits in the form. On failure
+// it writes the HTTP error and returns ok=false. It must be called before any
+// SSE stream is opened, because it may respond with a non-200 status.
+func (h *Handler) buildAIRegisterAnalysis(c *gin.Context) (field, systemPrompt, contextData string, ok bool) {
+	var req aiRegisterAnalysisRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondValidationError(c, err)
+		return "", "", "", false
+	}
+	field = strings.TrimSpace(req.Field)
+	if field != aiRegisterFieldResponsePlan && field != aiRegisterFieldImpactScope {
+		respondError(c, http.StatusBadRequest, "AI_REGISTER_FIELD_INVALID", "field 仅支持 responsePlan 或 impactScope")
+		return "", "", "", false
+	}
+	title := strings.TrimSpace(req.Title)
+	description := strings.TrimSpace(req.Description)
+	background := strings.TrimSpace(req.Background)
+	decisionDetail := strings.TrimSpace(req.DecisionDetail)
+	source := strings.TrimSpace(req.Source)
+	if title == "" && description == "" && background == "" && decisionDetail == "" && source == "" {
+		respondError(c, http.StatusBadRequest, "AI_REGISTER_INPUT_REQUIRED", "请先填写标题、说明或背景等内容，再让 AI 生成")
+		return "", "", "", false
+	}
+
+	projectLabel := ""
+	if req.RegisterID > 0 {
+		if !h.canReadAIRegisterSource(c) {
+			respondError(c, http.StatusForbidden, "AI_SOURCE_PERMISSION_REQUIRED", "AI 助理读取登记册上下文需要 registers.read 权限")
+			return "", "", "", false
+		}
+		item, visible := h.ensureProjectRegisterVisible(c, strconv.FormatUint(uint64(req.RegisterID), 10), true)
+		if !visible {
+			return "", "", "", false
+		}
+		projectLabel = strings.TrimSpace(item.Project.Code + " " + item.Project.Name)
+	} else {
+		project, projectOK := h.aiProject(c, req.ProjectID)
+		if !projectOK {
+			return "", "", "", false
+		}
+		projectLabel = strings.TrimSpace(project.Code + " " + project.Name)
+	}
+
+	registerType := model.ProjectRegisterType(strings.TrimSpace(req.Type))
+	var b strings.Builder
+	b.WriteString("登记类型：" + projectRegisterTypeLabel(registerType) + "\n")
+	if projectLabel != "" {
+		b.WriteString("所属项目：" + projectLabel + "\n")
+	}
+	if title != "" {
+		b.WriteString("标题：" + title + "\n")
+	}
+	if description != "" {
+		b.WriteString("说明：" + description + "\n")
+	}
+	if sev := aiRegisterSeverityText(req.Severity); sev != "" {
+		b.WriteString("等级：" + sev + "\n")
+	}
+	if registerType == model.ProjectRegisterRisk {
+		if prob := aiRegisterProbabilityText(req.Probability); prob != "" {
+			b.WriteString("发生概率：" + prob + "\n")
+		}
+		if imp := aiRegisterSeverityText(req.Impact); imp != "" {
+			b.WriteString("影响程度：" + imp + "\n")
+		}
+	}
+	if source != "" {
+		b.WriteString("问题来源：" + source + "\n")
+	}
+	if background != "" {
+		b.WriteString("背景：" + background + "\n")
+	}
+	if decisionDetail != "" {
+		b.WriteString("决策内容：" + decisionDetail + "\n")
+	}
+	if field == aiRegisterFieldResponsePlan {
+		if scope := strings.TrimSpace(req.ImpactScope); scope != "" {
+			b.WriteString("已知影响范围：" + scope + "\n")
+		}
+	} else if plan := strings.TrimSpace(req.ResponsePlan); plan != "" {
+		b.WriteString("已有应对策略：" + plan + "\n")
+	}
+	contextData = "<context>\n" + b.String() + "</context>"
+
+	systemPrompt = h.aiPrompts.registerResponsePlan
+	if field == aiRegisterFieldImpactScope {
+		systemPrompt = h.aiPrompts.registerImpactScope
+	}
+	return field, systemPrompt, contextData, true
+}
+
+// AIProjectRegisterAnalysis generates a suggested 应对策略 / 影响范围 in a single
+// non-streaming JSON response. Prefer the /stream variant for interactive use.
+func (h *Handler) AIProjectRegisterAnalysis(c *gin.Context) {
+	field, systemPrompt, contextData, ok := h.buildAIRegisterAnalysis(c)
+	if !ok {
+		return
+	}
+	if h.AIClient == nil {
+		respondError(c, http.StatusServiceUnavailable, "AI_NOT_CONFIGURED", "AI 网关未配置，无法生成内容")
+		return
+	}
+	out, err := h.AIClient.Chat(c.Request.Context(), []ai.Message{
+		{Role: ai.RoleSystem, Content: systemPrompt},
+		{Role: ai.RoleUser, Content: contextData},
+	})
+	if err != nil {
+		log.Printf("ai register analysis (%s) failed: %v", field, err)
+		respondError(c, http.StatusBadGateway, "AI_REGISTER_ANALYSIS_FAILED", "AI 生成失败："+err.Error())
+		return
+	}
+	content := trimAIRegisterAnalysis(out, maxAIRegisterAnalysisLength)
+	if content == "" {
+		respondError(c, http.StatusBadGateway, "AI_REGISTER_ANALYSIS_EMPTY", "AI 生成内容为空")
+		return
+	}
+	c.JSON(http.StatusOK, aiRegisterAnalysisResponse{
+		Field:                field,
+		Content:              content,
+		RequiresConfirmation: true,
+		GeneratedAt:          time.Now(),
+	})
+}
+
+// AIProjectRegisterAnalysisStream is the SSE variant: it streams the model
+// output token-by-token (event contract status/delta/result/done/error), which
+// keeps the connection alive and avoids proxy timeouts on slow completions.
+func (h *Handler) AIProjectRegisterAnalysisStream(c *gin.Context) {
+	field, systemPrompt, contextData, ok := h.buildAIRegisterAnalysis(c)
+	if !ok {
+		return
+	}
+	if h.AIClient == nil {
+		respondError(c, http.StatusServiceUnavailable, "AI_NOT_CONFIGURED", "AI 网关未配置，无法生成内容")
+		return
+	}
+	writer, ok := newAIAssistantSSEWriter(c)
+	if !ok {
+		return
+	}
+	writer.send("status", aiAssistantStreamStatus{Message: "已读取登记项内容"})
+	writer.send("status", aiAssistantStreamStatus{Message: "正在调用 AI 模型"})
+	out, err := h.AIClient.ChatStream(c.Request.Context(), []ai.Message{
+		{Role: ai.RoleSystem, Content: systemPrompt},
+		{Role: ai.RoleUser, Content: contextData},
+	}, func(delta string) error {
+		if delta != "" {
+			writer.send("delta", aiAssistantStreamDelta{Text: delta})
+		}
+		return nil
+	})
+	if err != nil {
+		log.Printf("ai register analysis stream (%s) failed: %v", field, err)
+		writer.send("error", aiAssistantStreamError{Code: "AI_REGISTER_ANALYSIS_FAILED", Message: "AI 生成失败：" + err.Error()})
+		return
+	}
+	content := trimAIRegisterAnalysis(out, maxAIRegisterAnalysisLength)
+	if content == "" {
+		writer.send("error", aiAssistantStreamError{Code: "AI_REGISTER_ANALYSIS_EMPTY", Message: "AI 生成内容为空"})
+		return
+	}
+	writer.send("result", aiRegisterAnalysisResponse{
+		Field:                field,
+		Content:              content,
+		RequiresConfirmation: true,
+		GeneratedAt:          time.Now(),
+	})
+	writer.send("done", aiAssistantStreamStatus{Message: "生成完成"})
 }
 
 func (h *Handler) aiVisibleProjectTasks(c *gin.Context, projectID uint) ([]model.Task, error) {

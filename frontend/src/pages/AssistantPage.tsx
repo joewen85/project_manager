@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { readApiError } from '../services/api'
+import { postAIStream } from '../services/aiStream'
 import { DateTimeQuickField } from '../components/DateTimeQuickField'
 import { RemoteProjectSelect } from '../components/RemoteProjectSelect'
 import { MarkdownView } from '../components/MarkdownView'
@@ -48,12 +49,6 @@ const modeMeta: Record<AssistantMode, { label: string; hint: string }> = {
 }
 
 const modeOrder: AssistantMode[] = ['weekly_report', 'risk_summary', 'task_breakdown']
-const defaultAIAssistantTimeoutMs = 35000
-const configuredAIAssistantTimeoutMs = Number(import.meta.env.VITE_AI_ASSISTANT_TIMEOUT_MS)
-const aiAssistantRequestTimeoutMs = Number.isFinite(configuredAIAssistantTimeoutMs) && configuredAIAssistantTimeoutMs > 0
-  ? configuredAIAssistantTimeoutMs
-  : defaultAIAssistantTimeoutMs
-const apiBaseURL = String(import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/+$/, '')
 
 const priorityMeta: Record<TaskPriority, { label: string; className: string }> = {
   high: { label: '高', className: 'priority-high' },
@@ -89,103 +84,6 @@ const formatGeneratedAt = (value?: string) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleString('zh-CN', { hour12: false })
-}
-
-const buildAIStreamURL = (path: string) => `${apiBaseURL}${path}/stream`
-
-const parseSSEBlock = (block: string) => {
-  let event = 'message'
-  const dataLines: string[] = []
-  for (const rawLine of block.split('\n')) {
-    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
-    if (line.startsWith('event:')) {
-      event = line.slice('event:'.length).trim()
-    } else if (line.startsWith('data:')) {
-      dataLines.push(line.slice('data:'.length).trimStart())
-    }
-  }
-  const dataText = dataLines.join('\n').trim()
-  return { event, data: dataText ? JSON.parse(dataText) as unknown : null }
-}
-
-const postAIStream = async <T,>(
-  path: string,
-  payload: Record<string, unknown>,
-  onStatus: (message: string) => void,
-  onDelta?: (text: string) => void
-): Promise<T> => {
-  const controller = new AbortController()
-  let timeoutID: number | undefined
-  const refreshTimeout = () => {
-    if (timeoutID !== undefined) window.clearTimeout(timeoutID)
-    timeoutID = window.setTimeout(() => controller.abort(), aiAssistantRequestTimeoutMs)
-  }
-  refreshTimeout()
-  try {
-    const token = localStorage.getItem('token') || ''
-    const headers: Record<string, string> = {
-      Accept: 'text/event-stream',
-      'Content-Type': 'application/json'
-    }
-    if (token) headers.Authorization = `Bearer ${token}`
-
-    const response = await fetch(buildAIStreamURL(path), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    })
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => null) as { message?: string } | null
-      throw new Error(errorBody?.message || `请求失败（${response.status}）`)
-    }
-    if (!response.body) {
-      throw new Error('浏览器不支持流式响应')
-    }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let result: T | null = null
-    let done = false
-    while (!done) {
-      const chunk = await reader.read()
-      if (chunk.done) break
-      refreshTimeout()
-      buffer += decoder.decode(chunk.value, { stream: true })
-      let boundary = buffer.indexOf('\n\n')
-      while (boundary >= 0) {
-        const block = buffer.slice(0, boundary).trim()
-        buffer = buffer.slice(boundary + 2)
-        if (block) {
-          const message = parseSSEBlock(block)
-          if (message.event === 'status' && message.data && typeof message.data === 'object' && 'message' in message.data) {
-            onStatus(String((message.data as { message?: string }).message || ''))
-          }
-          if (message.event === 'delta' && message.data && typeof message.data === 'object' && 'text' in message.data) {
-            onDelta?.(String((message.data as { text?: string }).text || ''))
-          }
-          if (message.event === 'error' && message.data && typeof message.data === 'object' && 'message' in message.data) {
-            throw new Error(String((message.data as { message?: string }).message || 'AI 助理生成失败'))
-          }
-          if (message.event === 'result') {
-            result = message.data as T
-          }
-          if (message.event === 'done') {
-            done = true
-            break
-          }
-        }
-        boundary = buffer.indexOf('\n\n')
-      }
-    }
-    if (!result) {
-      throw new Error('AI 助理没有返回结果')
-    }
-    return result
-  } finally {
-    if (timeoutID !== undefined) window.clearTimeout(timeoutID)
-  }
 }
 
 function SourceList({ sources }: { sources: AISourceRef[] }) {

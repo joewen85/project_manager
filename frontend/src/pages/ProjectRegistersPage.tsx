@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { Sparkles } from 'lucide-react'
 import { api, fetchData, fetchPage, hasPermission, readApiError } from '../services/api'
+import { postAIStream } from '../services/aiStream'
 import { DataState } from '../components/DataState'
 import { DateTimeQuickField } from '../components/DateTimeQuickField'
 import { FilterPanel } from '../components/FilterPanel'
@@ -168,6 +170,8 @@ export function ProjectRegistersPage() {
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityError, setActivityError] = useState('')
   const [previewImage, setPreviewImage] = useState<ProjectRegisterImage | null>(null)
+  const [aiGenerating, setAiGenerating] = useState<'' | 'responsePlan' | 'impactScope'>('')
+  const [aiError, setAiError] = useState<{ field: string; message: string } | null>(null)
 
   const userOptions = useMemo(() => users.map((user) => ({
     value: String(user.id),
@@ -226,6 +230,7 @@ export function ProjectRegistersPage() {
     if (!canCreate) return
     setForm({ ...initialForm, projectId: projectFilter, images: emptyUploadAttachments() })
     setFormError('')
+    setAiError(null)
     setModalOpen(true)
   }
 
@@ -233,6 +238,7 @@ export function ProjectRegistersPage() {
     if (!canUpdate) return
     setForm(normalizeForm(item))
     setFormError('')
+    setAiError(null)
     setModalOpen(true)
   }
 
@@ -263,6 +269,52 @@ export function ProjectRegistersPage() {
       })
       .catch(() => setOpenedRegisterId(registerId))
   }, [searchParams, openedRegisterId])
+
+  const generateRegisterField = async (field: 'responsePlan' | 'impactScope') => {
+    if (!canUseAI || aiGenerating) return
+    if (!form.projectId) {
+      setAiError({ field, message: '请先选择项目，再让 AI 生成' })
+      return
+    }
+    try {
+      setAiGenerating(field)
+      setAiError(null)
+      // Stream tokens live into the field so slow completions stay responsive
+      // and avoid proxy timeouts (the plain POST could be cut off with a 502).
+      setForm((prev) => ({ ...prev, [field]: '' }))
+      let streamed = ''
+      const result = await postAIStream<{ content?: string }>(
+        '/ai/register-analysis',
+        {
+          projectId: Number(form.projectId),
+          registerId: form.id,
+          field,
+          type: form.type,
+          title: form.title.trim(),
+          description: form.description.trim(),
+          severity: form.severity,
+          probability: form.probability || undefined,
+          impact: form.impact || undefined,
+          source: form.source.trim(),
+          background: form.background.trim(),
+          decisionDetail: form.decisionDetail.trim(),
+          responsePlan: form.responsePlan.trim(),
+          impactScope: form.impactScope.trim()
+        },
+        () => {},
+        (text) => {
+          streamed += text
+          setForm((prev) => ({ ...prev, [field]: streamed }))
+        }
+      )
+      const content = (result?.content || streamed).trim()
+      setForm((prev) => ({ ...prev, [field]: content }))
+    } catch (generateError) {
+      setAiError({ field, message: readApiError(generateError, 'AI 生成失败') })
+    } finally {
+      setAiGenerating('')
+    }
+  }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -425,8 +477,22 @@ export function ProjectRegistersPage() {
                 <option value="">未设置</option>
                 {Object.entries(registerSeverityLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
-              <label htmlFor="register-response-plan">应对策略</label>
+              <div className="field-label-row">
+                <label htmlFor="register-response-plan">应对策略</label>
+                {canUseAI && Boolean(form.id) && (
+                  <button
+                    type="button"
+                    className="btn secondary field-ai-btn"
+                    onClick={() => { void generateRegisterField('responsePlan') }}
+                    disabled={submitting || aiGenerating !== '' || !form.projectId}
+                  >
+                    <Sparkles size={14} aria-hidden="true" />
+                    {aiGenerating === 'responsePlan' ? '生成中...' : 'AI生成'}
+                  </button>
+                )}
+              </div>
               <textarea id="register-response-plan" rows={3} value={form.responsePlan} onChange={(event) => setForm((prev) => ({ ...prev, responsePlan: event.target.value }))} />
+              {aiError?.field === 'responsePlan' && <p className="error">{aiError.message}</p>}
             </>
           )}
           {form.type === 'issue' && (
@@ -445,8 +511,22 @@ export function ProjectRegistersPage() {
               <textarea id="register-decision-detail" rows={3} value={form.decisionDetail} onChange={(event) => setForm((prev) => ({ ...prev, decisionDetail: event.target.value }))} />
             </>
           )}
-          <label htmlFor="register-impact-scope">影响范围</label>
+          <div className="field-label-row">
+            <label htmlFor="register-impact-scope">影响范围</label>
+            {canUseAI && Boolean(form.id) && (
+              <button
+                type="button"
+                className="btn secondary field-ai-btn"
+                onClick={() => { void generateRegisterField('impactScope') }}
+                disabled={submitting || aiGenerating !== '' || !form.projectId}
+              >
+                <Sparkles size={14} aria-hidden="true" />
+                {aiGenerating === 'impactScope' ? '生成中...' : 'AI生成'}
+              </button>
+            )}
+          </div>
           <textarea id="register-impact-scope" rows={3} value={form.impactScope} onChange={(event) => setForm((prev) => ({ ...prev, impactScope: event.target.value }))} />
+          {aiError?.field === 'impactScope' && <p className="error">{aiError.message}</p>}
           <label htmlFor="register-images">图片</label>
           <ImageAttachmentField
             inputId="register-images"
