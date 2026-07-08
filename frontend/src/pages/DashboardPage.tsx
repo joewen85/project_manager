@@ -9,6 +9,8 @@ import type {
   DashboardHealthChartItem,
   DashboardProgressItem,
   DashboardProjectProgressItem,
+  DashboardRegisterSeverityItem,
+  DashboardRegisterStatusItem,
   DashboardRiskChartItem,
   DashboardTrendItem,
   DashboardWorkloadChartItem,
@@ -55,6 +57,39 @@ interface MemberWorkloadResponse {
   members?: MemberWorkloadItem[]
 }
 
+interface RegisterTypeStatusRaw {
+  type?: string
+  status?: string
+  count?: number
+}
+
+interface RegisterTypeSeverityRaw {
+  type?: string
+  severity?: string
+  count?: number
+}
+
+interface RegisterOverviewResponse {
+  byTypeStatus?: RegisterTypeStatusRaw[]
+  byTypeSeverity?: RegisterTypeSeverityRaw[]
+}
+
+const registerTypeLabel: Record<string, string> = {
+  risk: '风险',
+  issue: '问题',
+  decision: '决策'
+}
+
+const registerSeverityLabel: Record<string, string> = {
+  low: '低',
+  medium: '中',
+  high: '高',
+  critical: '严重'
+}
+
+const registerTypeOrder = ['risk', 'issue', 'decision'] as const
+const registerSeverityOrder = ['low', 'medium', 'high', 'critical'] as const
+
 const healthLabel: Record<ProjectHealth['health'], string> = {
   green: '健康',
   yellow: '关注',
@@ -91,6 +126,7 @@ export function DashboardPage() {
   const [workloadSort, setWorkloadSort] = useState<WorkloadSortKey>('utilization')
   const [highRiskRegisterCount, setHighRiskRegisterCount] = useState(0)
   const [unresolvedIssueCount, setUnresolvedIssueCount] = useState(0)
+  const [registerOverview, setRegisterOverview] = useState<RegisterOverviewResponse>({ byTypeStatus: [], byTypeSeverity: [] })
   const [registerError, setRegisterError] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -105,7 +141,7 @@ export function DashboardPage() {
       setProjectHealthError('')
       setMemberWorkloadError('')
       setRegisterError('')
-      const [statsData, raw, healthData, workloadData, highRiskData, unresolvedIssueData] = await Promise.all([
+      const [statsData, raw, healthData, workloadData, highRiskData, unresolvedIssueData, registerOverviewData] = await Promise.all([
         fetchData<DashboardStats>('/insights/stats/dashboard'),
         fetchArray<DashboardProgressRaw>('/delivery/tasks/progress-list', undefined, { silent: true }).catch((progressLoadError) => {
           setProgressError(readApiError(progressLoadError, '任务状态分布加载失败'))
@@ -130,12 +166,22 @@ export function DashboardPage() {
             setRegisterError(readApiError(registerLoadError, '登记册摘要加载失败'))
             return { list: [] as ProjectRegister[], total: 0, page: 1, pageSize: 1 }
           })
-          : Promise.resolve({ list: [] as ProjectRegister[], total: 0, page: 1, pageSize: 1 })
+          : Promise.resolve({ list: [] as ProjectRegister[], total: 0, page: 1, pageSize: 1 }),
+        canReadRegisters
+          ? fetchData<RegisterOverviewResponse>('/insights/stats/register-overview', undefined, { silent: true }).catch((registerLoadError) => {
+            setRegisterError(readApiError(registerLoadError, '登记册摘要加载失败'))
+            return { byTypeStatus: [], byTypeSeverity: [] } as RegisterOverviewResponse
+          })
+          : Promise.resolve({ byTypeStatus: [], byTypeSeverity: [] } as RegisterOverviewResponse)
       ])
       setStats(statsData)
       setProjectHealth(Array.isArray(healthData.projects) ? healthData.projects : [])
       setHighRiskRegisterCount(highRiskData.total)
       setUnresolvedIssueCount(unresolvedIssueData.total)
+      setRegisterOverview({
+        byTypeStatus: Array.isArray(registerOverviewData.byTypeStatus) ? registerOverviewData.byTypeStatus : [],
+        byTypeSeverity: Array.isArray(registerOverviewData.byTypeSeverity) ? registerOverviewData.byTypeSeverity : []
+      })
       setMemberWorkload({
         weekStart: workloadData.weekStart,
         weekEnd: workloadData.weekEnd,
@@ -166,6 +212,7 @@ export function DashboardPage() {
       setMemberWorkload({ members: [] })
       setHighRiskRegisterCount(0)
       setUnresolvedIssueCount(0)
+      setRegisterOverview({ byTypeStatus: [], byTypeSeverity: [] })
     } finally {
       setLoading(false)
     }
@@ -236,6 +283,40 @@ export function DashboardPage() {
     ]
   }, [projectHealth])
 
+  const registerStatusChart = useMemo<DashboardRegisterStatusItem[]>(() => {
+    const rows = registerOverview.byTypeStatus || []
+    return registerTypeOrder
+      .map((type) => {
+        const forType = rows.filter((row) => row.type === type)
+        const pick = (status: string) => Number(forType.find((row) => row.status === status)?.count ?? 0)
+        return {
+          type,
+          typeLabel: registerTypeLabel[type] || type,
+          open: pick('open'),
+          in_progress: pick('in_progress'),
+          resolved: pick('resolved'),
+          closed: pick('closed')
+        }
+      })
+      .filter((item) => item.open + item.in_progress + item.resolved + item.closed > 0)
+  }, [registerOverview.byTypeStatus])
+
+  const registerSeverityChart = useMemo<DashboardRegisterSeverityItem[]>(() => {
+    const rows = registerOverview.byTypeSeverity || []
+    return registerSeverityOrder
+      .map((severity) => {
+        const forSeverity = rows.filter((row) => row.severity === severity)
+        const pick = (type: string) => Number(forSeverity.find((row) => row.type === type)?.count ?? 0)
+        return {
+          severity,
+          severityLabel: registerSeverityLabel[severity] || severity,
+          risk: pick('risk'),
+          issue: pick('issue')
+        }
+      })
+      .filter((item) => item.risk + item.issue > 0)
+  }, [registerOverview.byTypeSeverity])
+
   const trendChart = useMemo<DashboardTrendItem[]>(() => {
     let cumulative = 0
     return progress.map((item) => {
@@ -291,6 +372,9 @@ export function DashboardPage() {
             onWorkloadSortChange={setWorkloadSort}
             trend={trendChart}
             delivery={deliveryChart}
+            canReadRegisters={canReadRegisters}
+            registerStatus={registerStatusChart}
+            registerSeverity={registerSeverityChart}
           />
         </Suspense>
       )}

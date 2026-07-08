@@ -46,6 +46,22 @@ export interface DashboardDeliveryItem {
   fill: string
 }
 
+export interface DashboardRegisterStatusItem {
+  type: string
+  typeLabel: string
+  open: number
+  in_progress: number
+  resolved: number
+  closed: number
+}
+
+export interface DashboardRegisterSeverityItem {
+  severity: string
+  severityLabel: string
+  risk: number
+  issue: number
+}
+
 export type WorkloadSortKey = 'utilization' | 'taskCount'
 
 interface DashboardChartsProps {
@@ -61,6 +77,9 @@ interface DashboardChartsProps {
   onWorkloadSortChange: (key: WorkloadSortKey) => void
   trend: DashboardTrendItem[]
   delivery: DashboardDeliveryItem[]
+  canReadRegisters: boolean
+  registerStatus: DashboardRegisterStatusItem[]
+  registerSeverity: DashboardRegisterSeverityItem[]
 }
 
 // Fixed accent colors for secondary series, kept in sync with the design tokens.
@@ -68,6 +87,20 @@ const ACCENT_SCORE = '#94a3b8'
 const ACCENT_TASKCOUNT = '#f59e0b'
 const ACCENT_TREND_CUMULATIVE = '#2563eb'
 const ACCENT_TREND_COUNT = '#22c55e'
+
+// Register status / severity series — colors reuse the dashboard palette so the
+// risk-issue-decision charts stay visually consistent with health and workload views.
+const REGISTER_STATUS_SERIES = [
+  { key: 'open', label: '未关闭', color: '#ef4444' },
+  { key: 'in_progress', label: '处理中', color: '#f59e0b' },
+  { key: 'resolved', label: '已解决', color: '#22c55e' },
+  { key: 'closed', label: '已关闭', color: '#94a3b8' }
+] as const
+
+const REGISTER_TYPE_SERIES = [
+  { key: 'risk', label: '风险', color: '#dc2626' },
+  { key: 'issue', label: '问题', color: '#7c3aed' }
+] as const
 
 const sanitize = (color: string) => color.replace(/[^a-zA-Z0-9]/g, '')
 const gradientId = (color: string) => `bar-grad-${sanitize(color)}`
@@ -135,7 +168,10 @@ export function DashboardCharts({
   workloadSort,
   onWorkloadSortChange,
   trend,
-  delivery
+  delivery,
+  canReadRegisters,
+  registerStatus,
+  registerSeverity
 }: DashboardChartsProps) {
   const gaugeData = [{ name: '完成率', value: completionRate, fill: 'url(#gauge-grad)' }]
 
@@ -365,6 +401,54 @@ export function DashboardCharts({
           </div>
         </div>
       </div>
+
+      {canReadRegisters && (
+        <div className="dashboard-split-row">
+          <div className="card chart-card data-viz-card">
+            <div className="chart-card-header">
+              <h3>风险问题决策状态</h3>
+              <span>按类型的处理进度</span>
+            </div>
+            <div className="data-viz-surface">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={registerStatus} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                  <BarGradients colors={REGISTER_STATUS_SERIES.map((series) => series.color)} />
+                  <CartesianGrid vertical={false} strokeDasharray="4 4" />
+                  <XAxis dataKey="typeLabel" {...axisProps} />
+                  <YAxis allowDecimals={false} {...axisProps} />
+                  <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
+                  <Legend iconType="circle" />
+                  {REGISTER_STATUS_SERIES.map((series) => (
+                    <Bar key={series.key} dataKey={series.key} name={series.label} stackId="register-status" fill={`url(#${gradientId(series.color)})`} maxBarSize={64} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="card chart-card data-viz-card">
+            <div className="chart-card-header">
+              <h3>风险与问题严重度</h3>
+              <span>按严重度对比</span>
+            </div>
+            <div className="data-viz-surface">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={registerSeverity} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                  <BarGradients colors={REGISTER_TYPE_SERIES.map((series) => series.color)} />
+                  <CartesianGrid vertical={false} strokeDasharray="4 4" />
+                  <XAxis dataKey="severityLabel" {...axisProps} />
+                  <YAxis allowDecimals={false} {...axisProps} />
+                  <Tooltip {...tooltipCommon} content={<ChartTooltip />} />
+                  <Legend iconType="circle" />
+                  {REGISTER_TYPE_SERIES.map((series) => (
+                    <Bar key={series.key} dataKey={series.key} name={series.label} fill={`url(#${gradientId(series.color)})`} radius={[8, 8, 0, 0]} maxBarSize={36} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

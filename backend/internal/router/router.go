@@ -375,6 +375,7 @@ func New(cfg config.Config, h *handler.Handler) *gin.Engine {
 			insights.GET("/stats/dashboard", middleware.RequirePermission(h.DB, "stats.read"), h.DashboardStats)
 			insights.GET("/stats/project-health", middleware.RequirePermission(h.DB, "stats.read"), h.ProjectHealth)
 			insights.GET("/stats/member-workload", middleware.RequirePermission(h.DB, "stats.read"), h.MemberWorkload)
+			insights.GET("/stats/register-overview", middleware.RequirePermission(h.DB, "registers.read"), h.RegisterOverview)
 
 			insightReports := insights.Group("/reports")
 			{

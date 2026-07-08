@@ -375,6 +375,46 @@ func (h *Handler) projectRegisterHealthCounts(c *gin.Context) (map[uint]projectR
 	return out, nil
 }
 
+type registerTypeStatusRow struct {
+	Type   string `json:"type"`
+	Status string `json:"status"`
+	Count  int64  `json:"count"`
+}
+
+type registerTypeSeverityRow struct {
+	Type     string `json:"type"`
+	Severity string `json:"severity"`
+	Count    int64  `json:"count"`
+}
+
+// RegisterOverview aggregates project registers (risk / issue / decision) for the
+// dashboard: counts grouped by type × status and by type × severity, scoped to the
+// projects the current user can see. The frontend shapes these rows into charts.
+func (h *Handler) RegisterOverview(c *gin.Context) {
+	var statusRows []registerTypeStatusRow
+	statusQuery := h.scopeProjectRegistersQuery(c, h.DB.Model(&model.ProjectRegister{})).
+		Select("project_registers.type AS type, project_registers.status AS status, COUNT(*) AS count").
+		Group("project_registers.type, project_registers.status")
+	if err := statusQuery.Scan(&statusRows).Error; err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_REGISTER_OVERVIEW_STATUS_FAILED", err)
+		return
+	}
+
+	var severityRows []registerTypeSeverityRow
+	severityQuery := h.scopeProjectRegistersQuery(c, h.DB.Model(&model.ProjectRegister{})).
+		Select("project_registers.type AS type, project_registers.severity AS severity, COUNT(*) AS count").
+		Group("project_registers.type, project_registers.severity")
+	if err := severityQuery.Scan(&severityRows).Error; err != nil {
+		respondDBError(c, http.StatusInternalServerError, "QUERY_REGISTER_OVERVIEW_SEVERITY_FAILED", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"byTypeStatus":   statusRows,
+		"byTypeSeverity": severityRows,
+	})
+}
+
 func (h *Handler) ProjectHealth(c *gin.Context) {
 	now := time.Now()
 	taskQuery := h.scopeTasksQuery(c, h.DB.Model(&model.Task{})).

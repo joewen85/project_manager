@@ -209,6 +209,8 @@ paths:
     $ref: '#/paths/~1stats~1project-health'
   /insights/stats/member-workload:
     $ref: '#/paths/~1stats~1member-workload'
+  /insights/stats/register-overview:
+    $ref: '#/paths/~1stats~1register-overview'
   /insights/reports:
     $ref: '#/paths/~1reports'
   /insights/reports/{id}:
@@ -2980,6 +2982,22 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       operationId: getStatsMemberWorkload
+  /stats/register-overview:
+    get:
+      summary: 风险问题决策概览
+      description: 基于当前用户可见项目登记册，按类型（风险/问题/决策）分别聚合状态分布和严重度分布，用于仪表盘图表。需要 registers.read 权限。
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterOverviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      operationId: getStatsRegisterOverview
   /notifications:
     get:
       summary: 通知列表
@@ -5916,6 +5934,41 @@ components:
           format: double
         overloaded:
           type: boolean
+    RegisterOverviewResponse:
+      type: object
+      properties:
+        byTypeStatus:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegisterTypeStatusItem'
+        byTypeSeverity:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegisterTypeSeverityItem'
+    RegisterTypeStatusItem:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [risk, issue, decision]
+        status:
+          type: string
+          enum: [open, in_progress, resolved, closed]
+        count:
+          type: integer
+          format: int64
+    RegisterTypeSeverityItem:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [risk, issue, decision]
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        count:
+          type: integer
+          format: int64
     Notification:
       type: object
       properties:
