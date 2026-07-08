@@ -2834,6 +2834,8 @@ paths:
                 $ref: '#/components/schemas/AIRegisterImageDescriptionResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '503':
+          description: AI gateway not configured
       operationId: postAIRegisterImageDescription
   /ai/task-breakdown:
     post:
@@ -5492,6 +5494,7 @@ components:
           description: 周报结束时间，可空。
     AIRegisterImageDescriptionRequest:
       type: object
+      description: projectId 和 registerId 至少传一个；已有登记项优先传 registerId，新建登记项传 projectId。
       required:
       - image
       properties:
@@ -5505,9 +5508,15 @@ components:
           $ref: '#/components/schemas/ProjectRegisterImage'
     AIRegisterImageDescriptionResponse:
       type: object
+      required:
+      - remark
+      - requiresConfirmation
+      - generatedAt
       properties:
         remark:
           type: string
+          maxLength: 500
+          description: AI 生成的图片简要说明，前端回填后仍需用户保存登记项。
         requiresConfirmation:
           type: boolean
           description: AI 输出必须人工确认后再保存。
