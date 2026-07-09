@@ -31,6 +31,7 @@ interface SearchableMultiSelectProps {
   noResultsText?: string
   summaryNoun?: string
   className?: string
+  disabled?: boolean
   onSearchChange?: (query: string) => void
   /**
    * Menu renders inline in the document flow (position: static) rather than as a
@@ -48,6 +49,7 @@ export function SearchableMultiSelect({
   noResultsText = '没有匹配项',
   summaryNoun = '项',
   className = '',
+  disabled = false,
   onSearchChange,
   inlineMenu = false
 }: SearchableMultiSelectProps) {
@@ -154,6 +156,10 @@ export function SearchableMultiSelect({
     window.requestAnimationFrame(() => searchInputRef.current?.focus())
   }, [open])
 
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
+
   const toggleValue = (nextValue: string) => {
     if (selectedSet.has(nextValue)) {
       onChange(values.filter((value) => value !== nextValue))
@@ -176,7 +182,9 @@ export function SearchableMultiSelect({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={listId}
+        disabled={disabled}
         onClick={() => {
+          if (disabled) return
           setOpen((prev) => !prev)
           if (open) updateQuery('')
         }}
@@ -196,6 +204,7 @@ export function SearchableMultiSelect({
               key={option.value}
               type="button"
               className="searchable-multi-select-tag"
+              disabled={disabled}
               onClick={() => toggleValue(option.value)}
             >
               <span>{option.label}</span>

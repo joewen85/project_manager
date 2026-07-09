@@ -1,10 +1,11 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Sparkles } from 'lucide-react'
+import { Settings2, Sparkles } from 'lucide-react'
 import { api, fetchData, fetchPage, hasPermission, readApiError } from '../services/api'
 import { postAIStream } from '../services/aiStream'
 import { DataState } from '../components/DataState'
 import { DateTimeQuickField } from '../components/DateTimeQuickField'
+import { FieldSettingItem, FieldSettingsModal } from '../components/FieldSettingsModal'
 import { FilterPanel } from '../components/FilterPanel'
 import { ImageAttachmentField } from '../components/ImageAttachmentField'
 import { ImagePreviewOverlay } from '../components/ImagePreviewOverlay'
@@ -72,6 +73,66 @@ const activityTypeLabel: Record<string, string> = {
   'register.updated': '更新'
 }
 
+type RegisterColumnKey =
+  | 'type' | 'title' | 'projectName' | 'status' | 'severity' | 'probability' | 'impact'
+  | 'owner' | 'participants' | 'source' | 'description' | 'responsePlan' | 'resolution'
+  | 'decisionDetail' | 'background' | 'impactScope' | 'dueAt' | 'lastActivityAt' | 'createdAt' | 'updatedAt'
+
+interface RegisterFieldSetting extends FieldSettingItem {
+  key: RegisterColumnKey
+}
+
+const registerFieldSettingsStorageKey = 'project_registers_field_settings'
+
+// The register API searches title/description/source and filters by type/status/severity/project;
+// there is no server-side sort, so no column is marked sortable.
+const registerDefaultFieldSettings: RegisterFieldSetting[] = [
+  { key: 'type', label: '类型', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
+  { key: 'title', label: '标题', visible: true, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
+  { key: 'description', label: '说明', visible: true, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
+  { key: 'projectName', label: '项目', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
+  { key: 'status', label: '状态', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
+  { key: 'severity', label: '等级', visible: true, editable: true, sortable: false, searchable: false, filterable: true, custom: false },
+  { key: 'probability', label: '概率', visible: false, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'impact', label: '影响', visible: false, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'owner', label: '负责人', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'participants', label: '参与人', visible: false, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'source', label: '来源', visible: false, editable: true, sortable: false, searchable: true, filterable: false, custom: false },
+  { key: 'responsePlan', label: '应对策略', visible: false, editable: true, sortable: false, searchable: false, filterable: false, custom: true },
+  { key: 'resolution', label: '解决方案', visible: false, editable: true, sortable: false, searchable: false, filterable: false, custom: true },
+  { key: 'decisionDetail', label: '决策内容', visible: false, editable: true, sortable: false, searchable: false, filterable: false, custom: true },
+  { key: 'background', label: '背景', visible: false, editable: true, sortable: false, searchable: false, filterable: false, custom: true },
+  { key: 'impactScope', label: '影响范围', visible: false, editable: true, sortable: false, searchable: false, filterable: false, custom: true },
+  { key: 'dueAt', label: '截止时间', visible: true, editable: true, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'lastActivityAt', label: '最近动态', visible: false, editable: false, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'createdAt', label: '创建时间', visible: false, editable: false, sortable: false, searchable: false, filterable: false, custom: false },
+  { key: 'updatedAt', label: '更新时间', visible: false, editable: false, sortable: false, searchable: false, filterable: false, custom: false }
+]
+
+const normalizeRegisterFieldSettings = (raw: unknown): RegisterFieldSetting[] => {
+  const fallbackMap = new Map(registerDefaultFieldSettings.map((field) => [field.key, field]))
+  if (!Array.isArray(raw)) return registerDefaultFieldSettings
+
+  const parsed = raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const key = String((item as { key?: string }).key || '') as RegisterColumnKey
+      const base = fallbackMap.get(key)
+      if (!base) return null
+      return {
+        ...base,
+        ...item,
+        key: base.key,
+        label: base.label
+      } as RegisterFieldSetting
+    })
+    .filter(Boolean) as RegisterFieldSetting[]
+
+  const seen = new Set(parsed.map((item) => item.key))
+  const missing = registerDefaultFieldSettings.filter((item) => !seen.has(item.key))
+  return [...parsed, ...missing]
+}
+
 const initialForm: RegisterForm = {
   type: 'risk',
   projectId: '',
@@ -98,6 +159,11 @@ const formatUserName = (user?: User) => {
   if (!user) return '-'
   if (user.name && user.username) return `${user.name}（${user.username}）`
   return user.name || user.username || `用户 ${user.id}`
+}
+
+const truncateText = (value: string, max = 40) => {
+  const text = value.trim()
+  return text.length > max ? `${text.slice(0, max)}...` : text
 }
 
 const toLocalDateTimeInput = (value?: string) => {
@@ -172,6 +238,24 @@ export function ProjectRegistersPage() {
   const [previewImage, setPreviewImage] = useState<ProjectRegisterImage | null>(null)
   const [aiGenerating, setAiGenerating] = useState<'' | 'responsePlan' | 'impactScope'>('')
   const [aiError, setAiError] = useState<{ field: string; message: string } | null>(null)
+  const [fieldSettingsOpen, setFieldSettingsOpen] = useState(false)
+  const [fieldSettings, setFieldSettings] = useState<RegisterFieldSetting[]>(() => {
+    try {
+      return normalizeRegisterFieldSettings(JSON.parse(localStorage.getItem(registerFieldSettingsStorageKey) || '[]'))
+    } catch {
+      return registerDefaultFieldSettings
+    }
+  })
+
+  const fieldSettingsMap = useMemo(() => new Map(fieldSettings.map((field) => [field.key, field])), [fieldSettings])
+  const visibleColumns = useMemo(() => fieldSettings.filter((field) => field.visible).map((field) => field.key), [fieldSettings])
+  const searchableFields = useMemo(() => fieldSettings.filter((field) => field.searchable).map((field) => field.key), [fieldSettings])
+  const isSearchEnabled = searchableFields.length > 0
+  const isTypeFilterEnabled = fieldSettingsMap.get('type')?.filterable ?? true
+  const isStatusFilterEnabled = fieldSettingsMap.get('status')?.filterable ?? true
+  const isSeverityFilterEnabled = fieldSettingsMap.get('severity')?.filterable ?? true
+  const isProjectFilterEnabled = fieldSettingsMap.get('projectName')?.filterable ?? true
+  const isRegisterFieldEditable = (key: RegisterColumnKey) => fieldSettingsMap.get(key)?.editable ?? true
 
   const userOptions = useMemo(() => users.map((user) => ({
     value: String(user.id),
@@ -182,7 +266,12 @@ export function ProjectRegistersPage() {
   const typeOptions = useMemo(() => Object.entries(registerTypeLabel).map(([value, label]) => ({ value, label })), [])
   const statusOptions = useMemo(() => Object.entries(registerStatusLabel).map(([value, label]) => ({ value, label })), [])
   const severityOptions = useMemo(() => Object.entries(registerSeverityLabel).map(([value, label]) => ({ value, label })), [])
-  const activeFilterCount = Number(Boolean(keyword)) + Number(Boolean(typeFilter)) + Number(Boolean(statusFilter)) + Number(Boolean(severityFilter)) + Number(Boolean(projectFilter))
+  const activeFilterCount =
+    Number(Boolean(keyword) && isSearchEnabled) +
+    Number(Boolean(typeFilter) && isTypeFilterEnabled) +
+    Number(Boolean(statusFilter) && isStatusFilterEnabled) +
+    Number(Boolean(severityFilter) && isSeverityFilterEnabled) +
+    Number(Boolean(projectFilter) && isProjectFilterEnabled)
 
   const load = async () => {
     try {
@@ -190,7 +279,15 @@ export function ProjectRegistersPage() {
       setError('')
       const data = await fetchPage<ProjectRegister>(
         '/project-registers',
-        { page, pageSize, keyword, type: typeFilter, status: statusFilter, severity: severityFilter, projectId: projectFilter },
+        {
+          page,
+          pageSize,
+          keyword: isSearchEnabled ? keyword : '',
+          type: isTypeFilterEnabled ? typeFilter : '',
+          status: isStatusFilterEnabled ? statusFilter : '',
+          severity: isSeverityFilterEnabled ? severityFilter : '',
+          projectId: isProjectFilterEnabled ? projectFilter : ''
+        },
         { page, pageSize }
       )
       setItems(data.list)
@@ -204,7 +301,11 @@ export function ProjectRegistersPage() {
     }
   }
 
-  useEffect(() => { void load() }, [page, pageSize, keyword, typeFilter, statusFilter, severityFilter, projectFilter])
+  useEffect(() => { void load() }, [page, pageSize, keyword, typeFilter, statusFilter, severityFilter, projectFilter, isSearchEnabled, isTypeFilterEnabled, isStatusFilterEnabled, isSeverityFilterEnabled, isProjectFilterEnabled])
+
+  useEffect(() => {
+    localStorage.setItem(registerFieldSettingsStorageKey, JSON.stringify(fieldSettings))
+  }, [fieldSettings])
 
   useEffect(() => {
     const next = new URLSearchParams()
@@ -380,6 +481,63 @@ export function ProjectRegistersPage() {
     }
   }
 
+  const renderRegisterHeaderCell = (key: RegisterColumnKey) => {
+    const label = fieldSettingsMap.get(key)?.label || key
+    return <th key={key}>{label}</th>
+  }
+
+  const renderTextCell = (key: RegisterColumnKey, label: string, value?: string) => {
+    const text = (value || '').trim()
+    return <td key={key} data-label={label} title={text || undefined}>{text ? truncateText(text) : '-'}</td>
+  }
+
+  const renderRegisterCell = (item: ProjectRegister, key: RegisterColumnKey): ReactNode => {
+    switch (key) {
+      case 'type':
+        return <td key={key} data-label="类型">{registerTypeLabel[item.type]}</td>
+      case 'title':
+        return <td key={key} data-label="标题"><span className="register-title-text">{item.title}</span></td>
+      case 'projectName':
+        return <td key={key} data-label="项目">{item.project ? `${item.project.code} - ${item.project.name}` : `#${item.projectId}`}</td>
+      case 'status':
+        return <td key={key} data-label="状态">{registerStatusLabel[item.status]}</td>
+      case 'severity':
+        return <td key={key} data-label="等级">{registerSeverityLabel[item.severity]}</td>
+      case 'probability':
+        return <td key={key} data-label="概率">{item.probability ? registerProbabilityLabel[item.probability] : '-'}</td>
+      case 'impact':
+        return <td key={key} data-label="影响">{item.impact ? registerSeverityLabel[item.impact] : '-'}</td>
+      case 'owner':
+        return <td key={key} data-label="负责人">{formatUserName(item.owner)}</td>
+      case 'participants':
+        return <td key={key} data-label="参与人">{(item.participantIds?.length || 0) > 0 ? `${item.participantIds?.length} 人` : '-'}</td>
+      case 'source':
+        return renderTextCell(key, '来源', item.source)
+      case 'description':
+        return renderTextCell(key, '说明', item.description)
+      case 'responsePlan':
+        return renderTextCell(key, '应对策略', item.responsePlan)
+      case 'resolution':
+        return renderTextCell(key, '解决方案', item.resolution)
+      case 'decisionDetail':
+        return renderTextCell(key, '决策内容', item.decisionDetail)
+      case 'background':
+        return renderTextCell(key, '背景', item.background)
+      case 'impactScope':
+        return renderTextCell(key, '影响范围', item.impactScope)
+      case 'dueAt':
+        return <td key={key} data-label="截止时间">{formatDateTime(item.dueAt)}</td>
+      case 'lastActivityAt':
+        return <td key={key} data-label="最近动态">{formatDateTime(item.lastActivityAt)}</td>
+      case 'createdAt':
+        return <td key={key} data-label="创建时间">{formatDateTime(item.createdAt)}</td>
+      case 'updatedAt':
+        return <td key={key} data-label="更新时间">{formatDateTime(item.updatedAt)}</td>
+      default:
+        return null
+    }
+  }
+
   return (
     <section className="page-section">
       <FilterPanel
@@ -388,49 +546,50 @@ export function ProjectRegistersPage() {
         actions={canCreate ? <button className="btn" onClick={openCreate}>新增登记项</button> : undefined}
         bodyClassName="toolbar-grid"
       >
-        <SearchField
-          className="toolbar-search-field"
-          aria-label="登记册关键词搜索"
-          value={keywordInput}
-          placeholder="搜索标题/说明/来源"
-          onChange={setKeywordInput}
-          onClear={() => { setKeywordInput(''); setKeyword(''); setPage(1) }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              setKeyword(keywordInput.trim())
-              setPage(1)
-            }
-          }}
-        />
-        <SearchableSelect ariaLabel="登记类型筛选" value={typeFilter} options={typeOptions} defaultOptionLabel="全部类型" placeholder="搜索类型" noResultsText="没有匹配类型" onChange={(value) => { setTypeFilter(value); setPage(1) }} />
-        <SearchableSelect ariaLabel="登记状态筛选" value={statusFilter} options={statusOptions} defaultOptionLabel="全部状态" placeholder="搜索状态" noResultsText="没有匹配状态" onChange={(value) => { setStatusFilter(value); setPage(1) }} />
-        <SearchableSelect ariaLabel="登记等级筛选" value={severityFilter} options={severityOptions} defaultOptionLabel="全部等级" placeholder="搜索等级" noResultsText="没有匹配等级" onChange={(value) => { setSeverityFilter(value); setPage(1) }} />
-        <RemoteProjectSelect ariaLabel="登记册项目筛选" value={projectFilter} defaultOptionLabel="全部项目" placeholder="搜索项目" onChange={(value) => { setProjectFilter(value); setPage(1) }} />
-        <div className="row-actions">
-          <button className="btn" onClick={() => { setKeyword(keywordInput.trim()); setPage(1) }}>查询</button>
-        </div>
+        {isSearchEnabled && (
+          <SearchField
+            className="toolbar-search-field"
+            aria-label="登记册关键词搜索"
+            value={keywordInput}
+            placeholder="搜索标题/说明/来源"
+            onChange={setKeywordInput}
+            onClear={() => { setKeywordInput(''); setKeyword(''); setPage(1) }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                setKeyword(keywordInput.trim())
+                setPage(1)
+              }
+            }}
+          />
+        )}
+        {isTypeFilterEnabled && <SearchableSelect ariaLabel="登记类型筛选" value={typeFilter} options={typeOptions} defaultOptionLabel="全部类型" placeholder="搜索类型" noResultsText="没有匹配类型" onChange={(value) => { setTypeFilter(value); setPage(1) }} />}
+        {isStatusFilterEnabled && <SearchableSelect ariaLabel="登记状态筛选" value={statusFilter} options={statusOptions} defaultOptionLabel="全部状态" placeholder="搜索状态" noResultsText="没有匹配状态" onChange={(value) => { setStatusFilter(value); setPage(1) }} />}
+        {isSeverityFilterEnabled && <SearchableSelect ariaLabel="登记等级筛选" value={severityFilter} options={severityOptions} defaultOptionLabel="全部等级" placeholder="搜索等级" noResultsText="没有匹配等级" onChange={(value) => { setSeverityFilter(value); setPage(1) }} />}
+        {isProjectFilterEnabled && <RemoteProjectSelect ariaLabel="登记册项目筛选" value={projectFilter} defaultOptionLabel="全部项目" placeholder="搜索项目" onChange={(value) => { setProjectFilter(value); setPage(1) }} />}
+        {isSearchEnabled && (
+          <div className="row-actions">
+            <button className="btn" onClick={() => { setKeyword(keywordInput.trim()); setPage(1) }}>查询</button>
+          </div>
+        )}
       </FilterPanel>
 
       <div className="card">
         <DataState loading={loading} error={error} empty={!loading && !error && items.length === 0} emptyText="暂无登记项" onRetry={() => { void load() }} />
         {!loading && !error && items.length > 0 && (
           <table className="responsive-table"><thead><tr>
-            <th>类型</th><th>标题</th><th>项目</th><th>状态</th><th>等级</th><th>负责人</th><th>截止时间</th><th>操作</th>
+            {visibleColumns.map((columnKey) => renderRegisterHeaderCell(columnKey))}
+            <th className="field-settings-header-cell">
+              <span className="field-settings-header-inline">
+                <span>操作</span>
+                <button type="button" className="field-settings-icon-btn" aria-label="登记册字段设置" onClick={() => setFieldSettingsOpen(true)}>
+                  <Settings2 size={16} />
+                </button>
+              </span>
+            </th>
           </tr></thead><tbody>
             {items.map((item) => (
               <tr key={item.id}>
-                <td data-label="类型">{registerTypeLabel[item.type]}</td>
-                <td data-label="标题">
-                  <div className="register-title-cell">
-                    <strong>{item.title}</strong>
-                    <small>{item.description || item.source || '-'}</small>
-                  </div>
-                </td>
-                <td data-label="项目">{item.project ? `${item.project.code} - ${item.project.name}` : `#${item.projectId}`}</td>
-                <td data-label="状态">{registerStatusLabel[item.status]}</td>
-                <td data-label="等级">{registerSeverityLabel[item.severity]}</td>
-                <td data-label="负责人">{formatUserName(item.owner)}</td>
-                <td data-label="截止时间">{formatDateTime(item.dueAt)}</td>
+                {visibleColumns.map((columnKey) => renderRegisterCell(item, columnKey))}
                 <td data-label="操作">
                   <div className="table-actions">
                     <button className="btn secondary" onClick={() => { void openDetail(item) }}>查看</button>
@@ -445,35 +604,47 @@ export function ProjectRegistersPage() {
       </div>
       {!loading && !error && total > 0 && <Pagination total={total} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />}
 
+      <FieldSettingsModal
+        open={fieldSettingsOpen}
+        title="登记册字段设置"
+        fields={fieldSettings}
+        defaultFields={registerDefaultFieldSettings}
+        onClose={() => setFieldSettingsOpen(false)}
+        onSave={(fields) => {
+          setFieldSettings(fields)
+          setFieldSettingsOpen(false)
+        }}
+      />
+
       <Modal open={modalOpen} title={form.id ? '编辑登记项' : '新增登记项'} onClose={() => setModalOpen(false)}>
         <form className="form-grid" onSubmit={submit}>
           <label htmlFor="register-type">类型</label>
-          <select id="register-type" value={form.type} onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value as ProjectRegisterType }))}>
+          <select id="register-type" value={form.type} disabled={!isRegisterFieldEditable('type')} onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value as ProjectRegisterType }))}>
             {Object.entries(registerTypeLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
           <label className="required-label" htmlFor="register-project">项目</label>
-          <RemoteProjectSelect ariaLabel="登记项项目" value={form.projectId} defaultOptionLabel="请选择项目" placeholder="搜索项目" onChange={(value) => setForm((prev) => ({ ...prev, projectId: value }))} />
+          <RemoteProjectSelect ariaLabel="登记项项目" value={form.projectId} defaultOptionLabel="请选择项目" placeholder="搜索项目" disabled={!isRegisterFieldEditable('projectName')} onChange={(value) => setForm((prev) => ({ ...prev, projectId: value }))} />
           <label className="required-label" htmlFor="register-title">标题</label>
-          <input id="register-title" value={form.title} onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))} required />
+          <input id="register-title" value={form.title} disabled={!isRegisterFieldEditable('title')} onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))} required />
           <label htmlFor="register-description">说明</label>
-          <textarea id="register-description" rows={3} value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
+          <textarea id="register-description" rows={3} value={form.description} disabled={!isRegisterFieldEditable('description')} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
           <label htmlFor="register-status">状态</label>
-          <select id="register-status" value={form.status} onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value as ProjectRegisterStatus }))}>
+          <select id="register-status" value={form.status} disabled={!isRegisterFieldEditable('status')} onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value as ProjectRegisterStatus }))}>
             {Object.entries(registerStatusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
           <label htmlFor="register-severity">等级</label>
-          <select id="register-severity" value={form.severity} onChange={(event) => setForm((prev) => ({ ...prev, severity: event.target.value as ProjectRegisterSeverity }))}>
+          <select id="register-severity" value={form.severity} disabled={!isRegisterFieldEditable('severity')} onChange={(event) => setForm((prev) => ({ ...prev, severity: event.target.value as ProjectRegisterSeverity }))}>
             {Object.entries(registerSeverityLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
           {form.type === 'risk' && (
             <>
               <label htmlFor="register-probability">概率</label>
-              <select id="register-probability" value={form.probability} onChange={(event) => setForm((prev) => ({ ...prev, probability: event.target.value as RegisterForm['probability'] }))}>
+              <select id="register-probability" value={form.probability} disabled={!isRegisterFieldEditable('probability')} onChange={(event) => setForm((prev) => ({ ...prev, probability: event.target.value as RegisterForm['probability'] }))}>
                 <option value="">未设置</option>
                 {Object.entries(registerProbabilityLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
               <label htmlFor="register-impact">影响</label>
-              <select id="register-impact" value={form.impact} onChange={(event) => setForm((prev) => ({ ...prev, impact: event.target.value as RegisterForm['impact'] }))}>
+              <select id="register-impact" value={form.impact} disabled={!isRegisterFieldEditable('impact')} onChange={(event) => setForm((prev) => ({ ...prev, impact: event.target.value as RegisterForm['impact'] }))}>
                 <option value="">未设置</option>
                 {Object.entries(registerSeverityLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
@@ -484,31 +655,31 @@ export function ProjectRegistersPage() {
                     type="button"
                     className="btn secondary field-ai-btn"
                     onClick={() => { void generateRegisterField('responsePlan') }}
-                    disabled={submitting || aiGenerating !== '' || !form.projectId}
+                    disabled={submitting || aiGenerating !== '' || !form.projectId || !isRegisterFieldEditable('responsePlan')}
                   >
                     <Sparkles size={14} aria-hidden="true" />
                     {aiGenerating === 'responsePlan' ? '生成中...' : 'AI生成'}
                   </button>
                 )}
               </div>
-              <textarea id="register-response-plan" rows={3} value={form.responsePlan} onChange={(event) => setForm((prev) => ({ ...prev, responsePlan: event.target.value }))} />
+              <textarea id="register-response-plan" rows={3} value={form.responsePlan} disabled={!isRegisterFieldEditable('responsePlan')} onChange={(event) => setForm((prev) => ({ ...prev, responsePlan: event.target.value }))} />
               {aiError?.field === 'responsePlan' && <p className="error">{aiError.message}</p>}
             </>
           )}
           {form.type === 'issue' && (
             <>
               <label htmlFor="register-source">问题来源</label>
-              <input id="register-source" value={form.source} onChange={(event) => setForm((prev) => ({ ...prev, source: event.target.value }))} />
+              <input id="register-source" value={form.source} disabled={!isRegisterFieldEditable('source')} onChange={(event) => setForm((prev) => ({ ...prev, source: event.target.value }))} />
               <label htmlFor="register-resolution">解决方案</label>
-              <textarea id="register-resolution" rows={3} value={form.resolution} onChange={(event) => setForm((prev) => ({ ...prev, resolution: event.target.value }))} />
+              <textarea id="register-resolution" rows={3} value={form.resolution} disabled={!isRegisterFieldEditable('resolution')} onChange={(event) => setForm((prev) => ({ ...prev, resolution: event.target.value }))} />
             </>
           )}
           {form.type === 'decision' && (
             <>
               <label htmlFor="register-background">背景</label>
-              <textarea id="register-background" rows={3} value={form.background} onChange={(event) => setForm((prev) => ({ ...prev, background: event.target.value }))} />
+              <textarea id="register-background" rows={3} value={form.background} disabled={!isRegisterFieldEditable('background')} onChange={(event) => setForm((prev) => ({ ...prev, background: event.target.value }))} />
               <label htmlFor="register-decision-detail">决策内容</label>
-              <textarea id="register-decision-detail" rows={3} value={form.decisionDetail} onChange={(event) => setForm((prev) => ({ ...prev, decisionDetail: event.target.value }))} />
+              <textarea id="register-decision-detail" rows={3} value={form.decisionDetail} disabled={!isRegisterFieldEditable('decisionDetail')} onChange={(event) => setForm((prev) => ({ ...prev, decisionDetail: event.target.value }))} />
             </>
           )}
           <div className="field-label-row">
@@ -518,14 +689,14 @@ export function ProjectRegistersPage() {
                 type="button"
                 className="btn secondary field-ai-btn"
                 onClick={() => { void generateRegisterField('impactScope') }}
-                disabled={submitting || aiGenerating !== '' || !form.projectId}
+                disabled={submitting || aiGenerating !== '' || !form.projectId || !isRegisterFieldEditable('impactScope')}
               >
                 <Sparkles size={14} aria-hidden="true" />
                 {aiGenerating === 'impactScope' ? '生成中...' : 'AI生成'}
               </button>
             )}
           </div>
-          <textarea id="register-impact-scope" rows={3} value={form.impactScope} onChange={(event) => setForm((prev) => ({ ...prev, impactScope: event.target.value }))} />
+          <textarea id="register-impact-scope" rows={3} value={form.impactScope} disabled={!isRegisterFieldEditable('impactScope')} onChange={(event) => setForm((prev) => ({ ...prev, impactScope: event.target.value }))} />
           {aiError?.field === 'impactScope' && <p className="error">{aiError.message}</p>}
           <label htmlFor="register-images">图片</label>
           <ImageAttachmentField
@@ -539,9 +710,9 @@ export function ProjectRegistersPage() {
             onChange={(images) => setForm((prev) => ({ ...prev, images }))}
           />
           <label htmlFor="register-due-at">截止时间</label>
-          <DateTimeQuickField inputId="register-due-at" value={form.dueAt} onChange={(value) => setForm((prev) => ({ ...prev, dueAt: value }))} />
+          <DateTimeQuickField inputId="register-due-at" value={form.dueAt} disabled={!isRegisterFieldEditable('dueAt')} onChange={(value) => setForm((prev) => ({ ...prev, dueAt: value }))} />
           <label htmlFor="register-owner">负责人</label>
-          <select id="register-owner" value={form.ownerId} onChange={(event) => setForm((prev) => ({ ...prev, ownerId: event.target.value }))}>
+          <select id="register-owner" value={form.ownerId} disabled={!isRegisterFieldEditable('owner')} onChange={(event) => setForm((prev) => ({ ...prev, ownerId: event.target.value }))}>
             <option value="">未设置</option>
             {users.map((user) => <option key={user.id} value={user.id}>{formatUserName(user)}</option>)}
           </select>
@@ -553,6 +724,7 @@ export function ProjectRegistersPage() {
             summaryNoun="参与人"
             placeholder="搜索参与人"
             noResultsText="没有匹配的参与人"
+            disabled={!isRegisterFieldEditable('participants')}
             onChange={(values) => setForm((prev) => ({ ...prev, participantIds: values }))}
           />
           {!canReadUsers && <p className="inline-tip">当前账号无用户查看权限，负责人和参与人只能保持为空。</p>}

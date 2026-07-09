@@ -2965,13 +2965,9 @@ td .btn + .btn { margin-left: 3px; }
   color: var(--color-text-muted);
   font-size: 12px;
 }
-.register-title-cell {
-  display: grid;
-  gap: 3px;
-}
-.register-title-cell small {
-  color: var(--color-text-muted);
-  font-size: 12px;
+.register-title-text {
+  font-size: 14px;
+  font-weight: 600;
 }
 .register-detail {
   display: grid;
