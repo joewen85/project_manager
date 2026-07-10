@@ -1,5 +1,7 @@
 # Project Manager (SME)
 
+![Project Manager 产品海报](docs/assets/project-manager-poster.svg)
+
 基于中小企业项目管理场景的前后端分离系统：
 - 后端：Go + Gin + GORM + JWT + MySQL
 - 前端：Vite + React + TypeScript

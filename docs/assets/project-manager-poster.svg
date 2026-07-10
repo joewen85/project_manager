@@ -1,0 +1,374 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Project Manager product poster</title>
+  <desc id="desc">A product poster for Project Manager highlighting portfolio visibility, task delivery, Gantt planning, critical path, risks, reports, reviews, notifications, and automation.</desc>
+  <defs>
+    <linearGradient id="posterBg" x1="34" y1="52" x2="1514" y2="860" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#020617"/>
+      <stop offset="0.5" stop-color="#08245B"/>
+      <stop offset="1" stop-color="#03122F"/>
+    </linearGradient>
+    <linearGradient id="brandBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#38BDF8"/>
+      <stop offset="0.48" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="headlineBlue" x1="70" y1="0" x2="470" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="panelBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#0B4CCB"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
+    </linearGradient>
+    <linearGradient id="ganttFill" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+    <radialGradient id="cyanGlow" cx="0" cy="0" r="1" gradientTransform="translate(1120 360) rotate(90) scale(520 670)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0EA5E9" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#0EA5E9" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="techGrid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#60A5FA" stroke-opacity="0.08"/>
+    </pattern>
+    <filter id="screenShadow" x="-20%" y="-20%" width="150%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="30" stdDeviation="26" flood-color="#020617" flood-opacity="0.58"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#38BDF8" flood-opacity="0.18"/>
+    </filter>
+    <filter id="floatShadow" x="-25%" y="-25%" width="160%" height="170%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#020617" flood-opacity="0.42"/>
+    </filter>
+    <filter id="blueGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <clipPath id="mainScreenClip">
+      <rect x="620" y="58" width="900" height="490" rx="22"/>
+    </clipPath>
+  </defs>
+  <style>text { font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif !important; }</style>
+
+  <rect width="1600" height="900" fill="url(#posterBg)"/>
+  <rect width="1600" height="900" fill="url(#techGrid)"/>
+  <rect width="1600" height="900" fill="url(#cyanGlow)"/>
+  <path d="M0 728C200 672 310 756 500 700C704 640 836 758 1018 686C1226 604 1386 654 1600 566" fill="none" stroke="#38BDF8" stroke-opacity="0.26" stroke-width="2"/>
+  <path d="M0 762C216 704 354 824 548 744C724 672 876 792 1094 698C1272 622 1428 660 1600 612" fill="none" stroke="#2563EB" stroke-opacity="0.24" stroke-width="1.5"/>
+  <g opacity="0.8">
+    <circle cx="94" cy="730" r="4" fill="#38BDF8"/>
+    <circle cx="264" cy="695" r="4" fill="#2563EB"/>
+    <circle cx="492" cy="702" r="5" fill="#38BDF8"/>
+    <circle cx="724" cy="680" r="4" fill="#F97316"/>
+    <circle cx="1042" cy="676" r="5" fill="#38BDF8"/>
+    <circle cx="1356" cy="640" r="4" fill="#2563EB"/>
+  </g>
+
+  <!-- Brand -->
+  <g transform="translate(70 58)">
+    <rect width="62" height="62" rx="18" fill="url(#brandBlue)"/>
+    <rect x="15" y="17" width="27" height="6" rx="3" fill="#FFFFFF"/>
+    <rect x="15" y="29" width="36" height="6" rx="3" fill="#FFFFFF" fill-opacity="0.9"/>
+    <rect x="15" y="41" width="22" height="6" rx="3" fill="#FFFFFF" fill-opacity="0.72"/>
+    <circle cx="48" cy="44" r="5" fill="#FBBF24"/>
+  </g>
+  <text x="151" y="86" fill="#FFFFFF" font-family="Inter, PingFang SC, Arial, sans-serif" font-size="24" font-weight="800">项目管理</text>
+  <text x="151" y="113" fill="#60A5FA" font-family="Inter, PingFang SC, Arial, sans-serif" font-size="24" font-weight="800">平台</text>
+  <rect x="273" y="76" width="76" height="28" rx="14" fill="#1E3A8A" stroke="#3B82F6" stroke-opacity="0.5"/>
+  <text x="311" y="95" text-anchor="middle" fill="#BFDBFE" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="700">中小企业</text>
+
+  <!-- Poster headline -->
+  <text x="70" y="220" fill="#FFFFFF" font-family="Inter, PingFang SC, Arial, sans-serif" font-size="67" font-weight="900" letter-spacing="1">项目管理</text>
+  <text x="70" y="296" fill="url(#headlineBlue)" font-family="Inter, PingFang SC, Arial, sans-serif" font-size="76" font-weight="900" letter-spacing="0.5">协同平台</text>
+  <rect x="70" y="322" width="392" height="3" rx="1.5" fill="url(#headlineBlue)"/>
+  <text x="70" y="358" fill="#DBEAFE" font-family="Inter, PingFang SC, Arial, sans-serif" font-size="19" font-weight="700" letter-spacing="4">从项目组合到高效交付</text>
+  <text x="70" y="396" fill="#93C5FD" font-family="Inter, PingFang SC, Arial, sans-serif" font-size="15">让项目、任务、排期、风险与自动化能力</text>
+  <text x="70" y="420" fill="#93C5FD" font-family="Inter, PingFang SC, Arial, sans-serif" font-size="15">在统一工作空间中协同运转。</text>
+
+  <!-- Real product capabilities -->
+  <g font-family="Inter, PingFang SC, Arial, sans-serif">
+    <g transform="translate(70 464)">
+      <rect width="232" height="76" rx="14" fill="#071B43" stroke="#1D4ED8" stroke-opacity="0.65"/>
+      <rect x="14" y="16" width="38" height="38" rx="11" fill="#0B2F70"/>
+      <path d="M24 27H42V43H24Z" fill="none" stroke="#38BDF8" stroke-width="2"/>
+      <path d="M28 27V23H38V27" stroke="#38BDF8" stroke-width="2"/>
+      <text x="64" y="31" fill="#FFFFFF" font-size="13" font-weight="800">项目组合</text>
+      <text x="64" y="50" fill="#93C5FD" font-size="10">项目健康度与全局可见</text>
+    </g>
+    <g transform="translate(320 464)">
+      <rect width="232" height="76" rx="14" fill="#071B43" stroke="#1D4ED8" stroke-opacity="0.65"/>
+      <rect x="14" y="16" width="38" height="38" rx="11" fill="#0B2F70"/>
+      <path d="M24 27H42M24 34H42M24 41H36" stroke="#38BDF8" stroke-width="2.2" stroke-linecap="round"/>
+      <text x="64" y="31" fill="#FFFFFF" font-size="13" font-weight="800">任务与审核</text>
+      <text x="64" y="50" fill="#93C5FD" font-size="10">执行、进度与多审核人</text>
+    </g>
+    <g transform="translate(70 554)">
+      <rect width="232" height="76" rx="14" fill="#071B43" stroke="#1D4ED8" stroke-opacity="0.65"/>
+      <rect x="14" y="16" width="38" height="38" rx="11" fill="#0B2F70"/>
+      <path d="M22 28H39M27 35H46M22 42H35" stroke="#38BDF8" stroke-width="2.4" stroke-linecap="round"/>
+      <text x="64" y="31" fill="#FFFFFF" font-size="13" font-weight="800">甘特与关键路径</text>
+      <text x="64" y="50" fill="#93C5FD" font-size="10">基线、依赖与关键路径</text>
+    </g>
+    <g transform="translate(320 554)">
+      <rect width="232" height="76" rx="14" fill="#071B43" stroke="#1D4ED8" stroke-opacity="0.65"/>
+      <rect x="14" y="16" width="38" height="38" rx="11" fill="#0B2F70"/>
+      <path d="M33 23L44 44H22L33 23Z" fill="none" stroke="#F97316" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M33 30V35" stroke="#F97316" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="33" cy="39" r="1.4" fill="#F97316"/>
+      <text x="64" y="31" fill="#FFFFFF" font-size="13" font-weight="800">项目治理</text>
+      <text x="64" y="50" fill="#93C5FD" font-size="10">风险、问题与决策</text>
+    </g>
+    <g transform="translate(70 644)">
+      <rect width="232" height="76" rx="14" fill="#071B43" stroke="#1D4ED8" stroke-opacity="0.65"/>
+      <rect x="14" y="16" width="38" height="38" rx="11" fill="#0B2F70"/>
+      <path d="M23 41V32M31 41V25M39 41V29M47 41V21" stroke="#38BDF8" stroke-width="2.2" stroke-linecap="round"/>
+      <text x="64" y="31" fill="#FFFFFF" font-size="13" font-weight="800">报表洞察</text>
+      <text x="64" y="50" fill="#93C5FD" font-size="10">健康度与成员负载</text>
+    </g>
+    <g transform="translate(320 644)">
+      <rect width="232" height="76" rx="14" fill="#071B43" stroke="#1D4ED8" stroke-opacity="0.65"/>
+      <rect x="14" y="16" width="38" height="38" rx="11" fill="#0B2F70"/>
+      <circle cx="25" cy="35" r="4" fill="none" stroke="#38BDF8" stroke-width="2"/>
+      <circle cx="42" cy="27" r="4" fill="none" stroke="#38BDF8" stroke-width="2"/>
+      <circle cx="43" cy="45" r="4" fill="none" stroke="#22C55E" stroke-width="2"/>
+      <path d="M29 33L38 29M29 37L39 43" stroke="#60A5FA" stroke-width="2"/>
+      <text x="64" y="31" fill="#FFFFFF" font-size="13" font-weight="800">自动化</text>
+      <text x="64" y="50" fill="#93C5FD" font-size="10">规则、通知与回调</text>
+    </g>
+  </g>
+
+  <!-- Main product screen -->
+  <g filter="url(#screenShadow)" transform="rotate(-1 1070 303)">
+    <rect x="620" y="58" width="900" height="490" rx="22" fill="#FFFFFF" stroke="#38BDF8" stroke-width="1.5"/>
+    <g clip-path="url(#mainScreenClip)">
+      <rect x="620" y="58" width="142" height="490" fill="#07152F"/>
+      <rect x="762" y="58" width="758" height="490" fill="#F8FAFC"/>
+      <g transform="translate(642 82)">
+        <rect width="30" height="30" rx="9" fill="url(#brandBlue)"/>
+        <rect x="8" y="8" width="13" height="3" rx="1.5" fill="#FFFFFF"/>
+        <rect x="8" y="14" width="17" height="3" rx="1.5" fill="#FFFFFF"/>
+        <rect x="8" y="20" width="10" height="3" rx="1.5" fill="#FFFFFF"/>
+        <text x="39" y="13" fill="#FFFFFF" font-family="Inter, Arial, sans-serif" font-size="9" font-weight="800">项目管理</text>
+        <text x="39" y="25" fill="#60A5FA" font-family="Inter, Arial, sans-serif" font-size="9" font-weight="800">平台</text>
+      </g>
+      <g font-family="Inter, Arial, sans-serif" font-size="10" font-weight="700">
+        <rect x="632" y="132" width="118" height="36" rx="9" fill="#1D4ED8"/>
+        <text x="654" y="155" fill="#FFFFFF">项目组合</text>
+        <text x="654" y="205" fill="#94A3B8">任务列表</text>
+        <text x="654" y="248" fill="#94A3B8">甘特模块</text>
+        <text x="654" y="291" fill="#94A3B8">基线关键路径</text>
+        <text x="654" y="334" fill="#94A3B8">风险问题决策</text>
+        <text x="654" y="377" fill="#94A3B8">报表中心</text>
+        <text x="654" y="420" fill="#94A3B8">自动化规则</text>
+      </g>
+      <rect x="762" y="58" width="758" height="68" fill="#FFFFFF"/>
+      <path d="M762 126H1520" stroke="#E2E8F0"/>
+      <text x="788" y="91" fill="#0F172A" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">项目组合</text>
+      <text x="788" y="110" fill="#64748B" font-family="Inter, Arial, sans-serif" font-size="9">项目健康度、进度与交付状态</text>
+      <g transform="translate(1445 75)">
+        <rect width="38" height="38" rx="11" fill="#DBEAFE"/>
+        <text x="19" y="24" text-anchor="middle" fill="#1D4ED8" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="800">项</text>
+      </g>
+
+      <g font-family="Inter, Arial, sans-serif">
+        <g transform="translate(786 148)">
+          <rect width="164" height="70" rx="13" fill="#FFFFFF" stroke="#E2E8F0"/>
+          <rect x="14" y="15" width="32" height="32" rx="9" fill="#DBEAFE"/>
+          <path d="M23 24H37V37H23Z" fill="none" stroke="#2563EB" stroke-width="2"/>
+          <text x="57" y="27" fill="#64748B" font-size="8" font-weight="700">项目数量</text>
+          <text x="57" y="47" fill="#0F172A" font-size="20" font-weight="800">12</text>
+        </g>
+        <g transform="translate(962 148)">
+          <rect width="164" height="70" rx="13" fill="#FFFFFF" stroke="#E2E8F0"/>
+          <circle cx="30" cy="31" r="15" fill="#E0F2FE"/>
+          <path d="M30 19A12 12 0 1 1 20 24" fill="none" stroke="#0EA5E9" stroke-width="4" stroke-linecap="round"/>
+          <text x="57" y="27" fill="#64748B" font-size="8" font-weight="700">整体进度</text>
+          <text x="57" y="47" fill="#0F172A" font-size="20" font-weight="800">68%</text>
+        </g>
+        <g transform="translate(1138 148)">
+          <rect width="164" height="70" rx="13" fill="#FFFFFF" stroke="#E2E8F0"/>
+          <rect x="14" y="15" width="32" height="32" rx="9" fill="#FFF7ED"/>
+          <path d="M22 31L27 36L39 23" fill="none" stroke="#F97316" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="57" y="27" fill="#64748B" font-size="8" font-weight="700">待审核</text>
+          <text x="57" y="47" fill="#0F172A" font-size="20" font-weight="800">7</text>
+        </g>
+        <g transform="translate(1314 148)">
+          <rect width="178" height="70" rx="13" fill="#FFFFFF" stroke="#E2E8F0"/>
+          <rect x="14" y="15" width="32" height="32" rx="9" fill="#FEE2E2"/>
+          <path d="M30 21L40 40H20L30 21Z" fill="none" stroke="#EF4444" stroke-width="2"/>
+          <text x="57" y="27" fill="#64748B" font-size="8" font-weight="700">未关闭风险</text>
+          <text x="57" y="47" fill="#0F172A" font-size="20" font-weight="800">3</text>
+        </g>
+      </g>
+
+      <rect x="786" y="236" width="706" height="282" rx="14" fill="#FFFFFF" stroke="#E2E8F0"/>
+      <text x="808" y="266" fill="#0F172A" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="800">项目健康度</text>
+      <g font-family="Inter, Arial, sans-serif">
+        <text x="808" y="294" fill="#94A3B8" font-size="8" font-weight="700">项目</text>
+        <text x="1080" y="294" fill="#94A3B8" font-size="8" font-weight="700">健康度</text>
+        <text x="1212" y="294" fill="#94A3B8" font-size="8" font-weight="700">进度</text>
+        <text x="1400" y="294" fill="#94A3B8" font-size="8" font-weight="700">状态</text>
+        <path d="M808 305H1470" stroke="#E2E8F0"/>
+        <g transform="translate(808 322)">
+          <circle cx="10" cy="14" r="8" fill="#DBEAFE"/>
+          <text x="10" y="17" text-anchor="middle" fill="#2563EB" font-size="7" font-weight="800">一</text>
+          <text x="27" y="12" fill="#334155" font-size="10" font-weight="700">项目一</text>
+          <text x="27" y="25" fill="#94A3B8" font-size="7">项目交付</text>
+          <circle cx="282" cy="14" r="5" fill="#22C55E"/>
+          <text x="292" y="17" fill="#475569" font-size="8">良好</text>
+          <rect x="404" y="10" width="128" height="8" rx="4" fill="#E2E8F0"/>
+          <rect x="404" y="10" width="104" height="8" rx="4" fill="url(#ganttFill)"/>
+          <text x="543" y="17" fill="#475569" font-size="8" font-weight="700">81%</text>
+          <rect x="592" y="3" width="62" height="22" rx="11" fill="#DCFCE7"/>
+          <text x="623" y="17" text-anchor="middle" fill="#15803D" font-size="7" font-weight="700">正常</text>
+        </g>
+        <path d="M808 365H1470" stroke="#F1F5F9"/>
+        <g transform="translate(808 382)">
+          <circle cx="10" cy="14" r="8" fill="#FFEDD5"/>
+          <text x="10" y="17" text-anchor="middle" fill="#EA580C" font-size="7" font-weight="800">二</text>
+          <text x="27" y="12" fill="#334155" font-size="10" font-weight="700">项目二</text>
+          <text x="27" y="25" fill="#94A3B8" font-size="7">项目交付</text>
+          <circle cx="282" cy="14" r="5" fill="#F59E0B"/>
+          <text x="292" y="17" fill="#475569" font-size="8">有风险</text>
+          <rect x="404" y="10" width="128" height="8" rx="4" fill="#E2E8F0"/>
+          <rect x="404" y="10" width="73" height="8" rx="4" fill="#F59E0B"/>
+          <text x="543" y="17" fill="#475569" font-size="8" font-weight="700">57%</text>
+          <rect x="592" y="3" width="62" height="22" rx="11" fill="#FEF3C7"/>
+          <text x="623" y="17" text-anchor="middle" fill="#B45309" font-size="7" font-weight="700">需关注</text>
+        </g>
+        <path d="M808 425H1470" stroke="#F1F5F9"/>
+        <g transform="translate(808 442)">
+          <circle cx="10" cy="14" r="8" fill="#E0F2FE"/>
+          <text x="10" y="17" text-anchor="middle" fill="#0284C7" font-size="7" font-weight="800">三</text>
+          <text x="27" y="12" fill="#334155" font-size="10" font-weight="700">项目三</text>
+          <text x="27" y="25" fill="#94A3B8" font-size="7">项目交付</text>
+          <circle cx="282" cy="14" r="5" fill="#38BDF8"/>
+          <text x="292" y="17" fill="#475569" font-size="8">交付中</text>
+          <rect x="404" y="10" width="128" height="8" rx="4" fill="#E2E8F0"/>
+          <rect x="404" y="10" width="84" height="8" rx="4" fill="#38BDF8"/>
+          <text x="543" y="17" fill="#475569" font-size="8" font-weight="700">66%</text>
+          <rect x="592" y="3" width="62" height="22" rx="11" fill="#E0F2FE"/>
+          <text x="623" y="17" text-anchor="middle" fill="#0369A1" font-size="7" font-weight="700">交付中</text>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <!-- Floating task board -->
+  <g filter="url(#floatShadow)" transform="rotate(-1.5 837 648)">
+    <rect x="640" y="530" width="400" height="236" rx="17" fill="#FFFFFF" stroke="#BFDBFE"/>
+    <text x="662" y="560" fill="#0F172A" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="800">任务交付</text>
+    <text x="662" y="578" fill="#94A3B8" font-family="Inter, Arial, sans-serif" font-size="8">执行进度与审核流程</text>
+    <g font-family="Inter, Arial, sans-serif">
+      <rect x="662" y="596" width="106" height="28" rx="8" fill="#EFF6FF"/>
+      <rect x="778" y="596" width="118" height="28" rx="8" fill="#FFF7ED"/>
+      <rect x="906" y="596" width="110" height="28" rx="8" fill="#F0FDF4"/>
+      <text x="715" y="614" text-anchor="middle" fill="#2563EB" font-size="8" font-weight="800">进行中</text>
+      <text x="837" y="614" text-anchor="middle" fill="#EA580C" font-size="8" font-weight="800">待审核</text>
+      <text x="961" y="614" text-anchor="middle" fill="#16A34A" font-size="8" font-weight="800">已完成</text>
+      <g transform="translate(662 638)">
+        <rect width="106" height="92" rx="10" fill="#F8FAFC" stroke="#E2E8F0"/>
+        <text x="10" y="20" fill="#334155" font-size="9" font-weight="700">任务规划</text>
+        <text x="10" y="34" fill="#94A3B8" font-size="7">项目一</text>
+        <rect x="10" y="52" width="80" height="6" rx="3" fill="#E2E8F0"/>
+        <rect x="10" y="52" width="54" height="6" rx="3" fill="#2563EB"/>
+        <text x="10" y="76" fill="#64748B" font-size="7">进度 67%</text>
+      </g>
+      <g transform="translate(778 638)">
+        <rect width="118" height="92" rx="10" fill="#FFFBEB" stroke="#FED7AA"/>
+        <text x="10" y="20" fill="#334155" font-size="9" font-weight="700">验收审核</text>
+        <text x="10" y="34" fill="#94A3B8" font-size="7">多审核人</text>
+        <rect x="10" y="50" width="82" height="18" rx="9" fill="#FFEDD5"/>
+        <text x="51" y="62" text-anchor="middle" fill="#C2410C" font-size="6.5" font-weight="800">待审核</text>
+        <circle cx="92" cy="78" r="7" fill="#DBEAFE"/>
+        <circle cx="104" cy="78" r="7" fill="#E0F2FE" stroke="#FFFFFF" stroke-width="2"/>
+      </g>
+      <g transform="translate(906 638)">
+        <rect width="110" height="92" rx="10" fill="#F0FDF4" stroke="#BBF7D0"/>
+        <text x="10" y="20" fill="#334155" font-size="9" font-weight="700">发布里程碑</text>
+        <text x="10" y="34" fill="#94A3B8" font-size="7">项目三</text>
+        <rect x="10" y="52" width="84" height="6" rx="3" fill="#DCFCE7"/>
+        <rect x="10" y="52" width="84" height="6" rx="3" fill="#22C55E"/>
+        <text x="10" y="76" fill="#15803D" font-size="7" font-weight="700">完成 100%</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Floating Gantt / critical path -->
+  <g filter="url(#floatShadow)" transform="rotate(1.2 1288 634)">
+    <rect x="1028" y="478" width="514" height="302" rx="18" fill="#FFFFFF" stroke="#BFDBFE"/>
+    <text x="1052" y="510" fill="#0F172A" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="800">甘特、基线与关键路径</text>
+    <text x="1052" y="528" fill="#94A3B8" font-family="Inter, Arial, sans-serif" font-size="8">里程碑、任务依赖与计划偏差</text>
+    <g font-family="Inter, Arial, sans-serif" font-size="7.5">
+      <text x="1220" y="552" fill="#94A3B8">第1周</text>
+      <text x="1290" y="552" fill="#94A3B8">第2周</text>
+      <text x="1360" y="552" fill="#94A3B8">第3周</text>
+      <text x="1430" y="552" fill="#94A3B8">第4周</text>
+      <path d="M1204 560V742M1274 560V742M1344 560V742M1414 560V742M1484 560V742" stroke="#E2E8F0"/>
+      <text x="1052" y="585" fill="#475569" font-size="9" font-weight="700">规划</text>
+      <text x="1052" y="626" fill="#475569" font-size="9" font-weight="700">开发</text>
+      <text x="1052" y="667" fill="#475569" font-size="9" font-weight="700">审核</text>
+      <text x="1052" y="708" fill="#475569" font-size="9" font-weight="700">发布</text>
+      <rect x="1204" y="574" width="146" height="16" rx="8" fill="#DBEAFE"/>
+      <rect x="1204" y="574" width="111" height="16" rx="8" fill="url(#ganttFill)"/>
+      <rect x="1252" y="615" width="178" height="16" rx="8" fill="#DBEAFE"/>
+      <rect x="1252" y="615" width="105" height="16" rx="8" fill="url(#ganttFill)"/>
+      <rect x="1322" y="656" width="150" height="16" rx="8" fill="#FFEDD5"/>
+      <rect x="1322" y="656" width="98" height="16" rx="8" fill="#F97316"/>
+      <rect x="1392" y="697" width="82" height="16" rx="8" fill="#DCFCE7"/>
+      <rect x="1392" y="697" width="82" height="16" rx="8" fill="#22C55E"/>
+      <path d="M1350 582H1370V623H1252" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M1430 623H1450V664H1322" fill="none" stroke="#F97316" stroke-width="1.7" stroke-linejoin="round"/>
+      <rect x="1466" y="658" width="10" height="10" transform="rotate(45 1471 663)" fill="#F59E0B"/>
+      <path d="M1204 730H1478" stroke="#CBD5E1" stroke-width="2" stroke-dasharray="5 5"/>
+      <rect x="1052" y="746" width="8" height="8" rx="2" fill="#CBD5E1"/>
+      <text x="1065" y="753" fill="#64748B">基线</text>
+      <rect x="1120" y="746" width="8" height="8" rx="2" fill="#F97316"/>
+      <text x="1133" y="753" fill="#64748B">关键路径</text>
+      <rect x="1210" y="746" width="8" height="8" transform="rotate(45 1214 750)" fill="#F59E0B"/>
+      <text x="1226" y="753" fill="#64748B">里程碑</text>
+    </g>
+  </g>
+
+  <!-- Bottom product pillars -->
+  <g>
+    <rect x="0" y="808" width="1600" height="92" fill="#020C20" fill-opacity="0.94"/>
+    <path d="M0 808H1600" stroke="#1D4ED8" stroke-width="1.5"/>
+    <g font-family="Inter, PingFang SC, Arial, sans-serif">
+      <g transform="translate(86 831)">
+        <rect width="36" height="36" rx="10" fill="#0B2F70"/>
+        <path d="M9 13H27V27H9Z" fill="none" stroke="#38BDF8" stroke-width="2"/>
+        <text x="49" y="15" fill="#60A5FA" font-size="12" font-weight="800">项目组合</text>
+        <text x="49" y="32" fill="#CBD5E1" font-size="9">项目清晰，健康可见</text>
+      </g>
+      <path d="M335 825V882" stroke="#1E3A5F"/>
+      <g transform="translate(374 831)">
+        <rect width="36" height="36" rx="10" fill="#0B2F70"/>
+        <path d="M10 13H26M10 19H26M10 25H21" stroke="#38BDF8" stroke-width="2" stroke-linecap="round"/>
+        <text x="49" y="15" fill="#60A5FA" font-size="12" font-weight="800">执行交付</text>
+        <text x="49" y="32" fill="#CBD5E1" font-size="9">任务、进度与审核</text>
+      </g>
+      <path d="M624 825V882" stroke="#1E3A5F"/>
+      <g transform="translate(662 831)">
+        <rect width="36" height="36" rx="10" fill="#0B2F70"/>
+        <path d="M9 14H24M14 20H29M9 26H20" stroke="#38BDF8" stroke-width="2" stroke-linecap="round"/>
+        <text x="49" y="15" fill="#60A5FA" font-size="12" font-weight="800">计划排期</text>
+        <text x="49" y="32" fill="#CBD5E1" font-size="9">甘特、基线与关键路径</text>
+      </g>
+      <path d="M912 825V882" stroke="#1E3A5F"/>
+      <g transform="translate(950 831)">
+        <rect width="36" height="36" rx="10" fill="#0B2F70"/>
+        <path d="M18 9L27 13V20C27 26 23 30 18 32C13 30 9 26 9 20V13L18 9Z" fill="none" stroke="#38BDF8" stroke-width="2"/>
+        <text x="49" y="15" fill="#60A5FA" font-size="12" font-weight="800">项目治理</text>
+        <text x="49" y="32" fill="#CBD5E1" font-size="9">风险、问题与决策</text>
+      </g>
+      <path d="M1200 825V882" stroke="#1E3A5F"/>
+      <g transform="translate(1238 831)">
+        <rect width="36" height="36" rx="10" fill="#0B2F70"/>
+        <circle cx="12" cy="18" r="4" fill="none" stroke="#38BDF8" stroke-width="2"/>
+        <circle cx="25" cy="12" r="4" fill="none" stroke="#38BDF8" stroke-width="2"/>
+        <circle cx="25" cy="26" r="4" fill="none" stroke="#22C55E" stroke-width="2"/>
+        <path d="M16 16L21 14M16 20L21 24" stroke="#60A5FA" stroke-width="2"/>
+        <text x="49" y="15" fill="#60A5FA" font-size="12" font-weight="800">自动化</text>
+        <text x="49" y="32" fill="#CBD5E1" font-size="9">规则、通知与回调</text>
+      </g>
+    </g>
+  </g>
+</svg>
