@@ -257,7 +257,7 @@ export function RbacPage() {
               setRoleForm((prev) => ({ ...prev, permissionIds: selected }))
             }}
           >
-            {permissions.map((permission) => <option key={permission.id} value={permission.id}>{permission.code}</option>)}
+            {permissions.map((permission) => <option key={permission.id} value={permission.id}>{permission.name}（{permission.code}）</option>)}
           </select>
           <div className="row-actions">
             <button type="submit" className="btn" disabled={submittingRole || (roleForm.id ? !canUpdateRBAC : !canCreateRBAC)}>{submittingRole ? '保存中...' : '保存角色'}</button>

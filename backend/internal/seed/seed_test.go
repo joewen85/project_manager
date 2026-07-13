@@ -57,6 +57,48 @@ func userPermissionCodes(user model.User) []string {
 	return codes
 }
 
+func TestRunSeedsProjectRegisterCRUDPermissions(t *testing.T) {
+	db := openSeedTestDB(t)
+
+	stalePermission := model.Permission{
+		Code:        "registers.read",
+		Name:        "登记册-查看",
+		Description: "旧权限说明",
+	}
+	if err := db.Create(&stalePermission).Error; err != nil {
+		t.Fatalf("create stale project register permission failed: %v", err)
+	}
+
+	if err := Run(db); err != nil {
+		t.Fatalf("seed run failed: %v", err)
+	}
+
+	expected := map[string]permissionSeed{
+		"registers.create": {Code: "registers.create", Name: "风险问题决策-创建", Description: "创建风险、问题或决策登记项"},
+		"registers.read":   {Code: "registers.read", Name: "风险问题决策-查看", Description: "查看风险、问题与决策登记册"},
+		"registers.update": {Code: "registers.update", Name: "风险问题决策-更新", Description: "更新风险、问题或决策登记项"},
+		"registers.delete": {Code: "registers.delete", Name: "风险问题决策-删除", Description: "删除风险、问题或决策登记项"},
+	}
+	codes := make([]string, 0, len(expected))
+	for code := range expected {
+		codes = append(codes, code)
+	}
+
+	var permissions []model.Permission
+	if err := db.Where("code IN ?", codes).Find(&permissions).Error; err != nil {
+		t.Fatalf("load project register permissions failed: %v", err)
+	}
+	if len(permissions) != len(expected) {
+		t.Fatalf("expected %d project register permissions, got %d", len(expected), len(permissions))
+	}
+	for _, permission := range permissions {
+		want := expected[permission.Code]
+		if permission.Name != want.Name || permission.Description != want.Description {
+			t.Fatalf("unexpected %s metadata: got name=%q description=%q", permission.Code, permission.Name, permission.Description)
+		}
+	}
+}
+
 func TestRunMigratesSystemManagementPermissions(t *testing.T) {
 	db := openSeedTestDB(t)
 

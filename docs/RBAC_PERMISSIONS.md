@@ -103,6 +103,21 @@
 | `system.audit.read` | 查看审计日志 |
 | `uploads.create` | 上传附件 |
 
+### 3.1 风险问题决策 CRUD 权限
+
+“风险问题决策”统一使用 `registers` 权限模块。四个权限彼此独立，`read` 不会自动包含创建、更新或删除能力；需要进入该页面的角色至少应分配 `registers.read`。
+
+| 权限码 | RBAC 显示名称 | 页面能力 | 主要接口 |
+|---|---|---|---|
+| `registers.create` | 风险问题决策-创建 | 显示并使用“新增登记项”入口 | `POST /project-registers` |
+| `registers.read` | 风险问题决策-查看 | 进入页面，查看列表、详情、动态和概览 | `GET /project-registers`、`GET /project-registers/:id`、`GET /project-registers/:id/activities`、`GET /stats/register-overview` |
+| `registers.update` | 风险问题决策-更新 | 编辑风险、问题或决策登记项 | `PUT /project-registers/:id` |
+| `registers.delete` | 风险问题决策-删除 | 删除风险、问题或决策登记项 | `DELETE /project-registers/:id` |
+
+推荐分配方式：只读角色仅分配 `registers.read`；登记项维护角色分配 `registers.create/read/update`；确需清理数据的管理角色再增加 `registers.delete`。
+
+已有数据库升级时，后端启动会执行 `seed.Run`，按权限码自动新增缺失项并更新名称和描述。`admin` 角色会自动同步全部权限；其他已有角色不会被自动授予这四项，需要在“系统管理 > RBAC 权限”中按职责手工分配。
+
 ## 4. 接口权限映射（后端已生效）
 
 分类 API 别名与旧路由复用相同权限和处理逻辑；例如 `/portfolio/projects` 等价于 `/projects`，`/delivery/tasks` 等价于 `/tasks`，`/integrations/webhooks` 等价于 `/webhooks`。

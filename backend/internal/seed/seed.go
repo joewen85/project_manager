@@ -47,10 +47,10 @@ var permissionCatalog = []permissionSeed{
 	{Code: "baselines.read", Name: "基线-查看", Description: "查看项目基线与关键路径"},
 	{Code: "baselines.delete", Name: "基线-删除", Description: "删除项目基线"},
 
-	{Code: "registers.create", Name: "登记册-创建", Description: "创建风险、问题与决策登记项"},
-	{Code: "registers.read", Name: "登记册-查看", Description: "查看风险、问题与决策登记册"},
-	{Code: "registers.update", Name: "登记册-更新", Description: "更新风险、问题与决策登记项"},
-	{Code: "registers.delete", Name: "登记册-删除", Description: "删除风险、问题与决策登记项"},
+	{Code: "registers.create", Name: "风险问题决策-创建", Description: "创建风险、问题或决策登记项"},
+	{Code: "registers.read", Name: "风险问题决策-查看", Description: "查看风险、问题与决策登记册"},
+	{Code: "registers.update", Name: "风险问题决策-更新", Description: "更新风险、问题或决策登记项"},
+	{Code: "registers.delete", Name: "风险问题决策-删除", Description: "删除风险、问题或决策登记项"},
 
 	{Code: "tasks.create", Name: "任务-创建", Description: "创建任务"},
 	{Code: "tasks.read", Name: "任务-查看", Description: "查看任务"},
